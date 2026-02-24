@@ -90,6 +90,8 @@ class Quote(Base):
     # Rates
     labor_rate = Column(Float, default=125.00)          # Fallback if no process rate
     waste_factor = Column(Float, default=0.05)          # 5% material waste default
+    material_markup_pct = Column(Float, default=15.0)   # 10-20% material markup (sourcing/overhead)
+    stainless_multiplier = Column(Float, default=1.0)   # 1.3-1.5x for stainless food-grade work
     contingency_pct = Column(Float, default=0.0)        # 0-25%
     profit_margin_pct = Column(Float, default=20.0)     # Internal margin (not shown on client quote)
     markup = Column(Float, default=1.0)                 # Legacy field — keep for compat

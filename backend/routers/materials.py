@@ -9,6 +9,7 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 # Default material prices (per lb) — update via API as market prices change
 DEFAULT_PRICES = {
     # Prices derived from real Osario + Wexler quotes (Chicago, 2023-2025)
+    # NOTE: These are RAW supplier costs. The app applies material_markup on top.
     models.MaterialType.MILD_STEEL: {"price_per_lb": 0.67, "notes": "A36 HR sheet/plate — Wexler/Osario avg"},
     models.MaterialType.STAINLESS_304: {"price_per_lb": 3.28, "notes": "304 2B sheet — Osario 1/2025"},
     models.MaterialType.STAINLESS_316: {"price_per_lb": 4.20, "notes": "316 — estimated ~28% over 304"},
@@ -19,6 +20,7 @@ DEFAULT_PRICES = {
     models.MaterialType.ANGLE_IRON: {"price_per_lb": 0.75, "notes": "A36 angle 2\"x2\"x3/16\" — Osario 1/2025"},
     models.MaterialType.FLAT_BAR: {"price_per_lb": 0.96, "notes": "A36 flat bar — Wexler/Osario avg 2023-2025"},
     models.MaterialType.PLATE: {"price_per_lb": 0.56, "notes": "3/8\" HR plate — Wexler 6/2024"},
+    models.MaterialType.CHANNEL: {"price_per_lb": 0.80, "notes": "A36 channel — Osario avg"},
 }
 
 @router.get("/seed")

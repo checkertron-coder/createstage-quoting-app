@@ -58,11 +58,15 @@ def calculate_totals(quote: models.Quote, db: Session):
             else:
                 rate = get_process_rate(item.process_type, db, fallback_rate=quote.labor_rate or 125.0)
 
-            item.labor_cost = round(item.labor_hours * rate, 2)
+            # Apply stainless multiplier to labor hours
+            stainless_mult = quote.stainless_multiplier or 1.0
+            effective_hours = item.labor_hours * stainless_mult
+            item.labor_cost = round(effective_hours * rate, 2)
 
-            # Material with waste factor
+            # Material with waste factor + material markup (sourcing overhead, delivery, small qty premium)
             item_waste = item.waste_factor if item.waste_factor is not None else quote_waste
-            effective_material = item.material_cost * (1 + item_waste)
+            material_markup = (quote.material_markup_pct or 15.0) / 100.0
+            effective_material = item.material_cost * (1 + item_waste) * (1 + material_markup)
 
             item.line_total = round((effective_material + item.labor_cost) * item.quantity, 2)
 
@@ -110,6 +114,8 @@ class QuoteCreate(BaseModel):
     notes: Optional[str] = None
     labor_rate: float = 125.0
     waste_factor: float = 0.05
+    material_markup_pct: float = 15.0       # 10-20% standard — sourcing overhead
+    stainless_multiplier: float = 1.0       # 1.3-1.5x for stainless/food-grade jobs
     contingency_pct: float = 0.0
     profit_margin_pct: float = 20.0
     valid_days: int = 30
@@ -143,6 +149,8 @@ def create_quote(quote: QuoteCreate, db: Session = Depends(get_db)):
         notes=quote.notes,
         labor_rate=quote.labor_rate,
         waste_factor=quote.waste_factor,
+        material_markup_pct=quote.material_markup_pct,
+        stainless_multiplier=quote.stainless_multiplier,
         contingency_pct=quote.contingency_pct,
         profit_margin_pct=quote.profit_margin_pct,
         valid_days=quote.valid_days,
@@ -241,6 +249,8 @@ def _quote_to_dict(q: models.Quote) -> dict:
         "notes": q.notes,
         "labor_rate": q.labor_rate,
         "waste_factor": q.waste_factor,
+        "material_markup_pct": q.material_markup_pct,
+        "stainless_multiplier": q.stainless_multiplier,
         "contingency_pct": q.contingency_pct,
         "profit_margin_pct": q.profit_margin_pct,
         "subtotal": q.subtotal,
