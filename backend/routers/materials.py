@@ -8,16 +8,17 @@ router = APIRouter(prefix="/materials", tags=["materials"])
 
 # Default material prices (per lb) — update via API as market prices change
 DEFAULT_PRICES = {
-    models.MaterialType.MILD_STEEL: {"price_per_lb": 0.65, "notes": "A36 hot rolled"},
-    models.MaterialType.STAINLESS_304: {"price_per_lb": 2.20, "notes": "304 HR sheet"},
-    models.MaterialType.STAINLESS_316: {"price_per_lb": 3.10, "notes": "316 HR sheet"},
-    models.MaterialType.ALUMINUM_6061: {"price_per_lb": 1.85, "notes": "6061-T6"},
-    models.MaterialType.ALUMINUM_5052: {"price_per_lb": 1.70, "notes": "5052-H32"},
-    models.MaterialType.DOM_TUBING: {"price_per_lb": 1.10, "notes": "DOM mechanical tubing"},
-    models.MaterialType.SQUARE_TUBING: {"price_per_lb": 0.70, "notes": "HSS square tubing"},
-    models.MaterialType.ANGLE_IRON: {"price_per_lb": 0.60, "notes": "A36 angle"},
-    models.MaterialType.FLAT_BAR: {"price_per_lb": 0.65, "notes": "A36 flat bar"},
-    models.MaterialType.PLATE: {"price_per_lb": 0.75, "notes": "A36 plate"},
+    # Prices derived from real Osario + Wexler quotes (Chicago, 2023-2025)
+    models.MaterialType.MILD_STEEL: {"price_per_lb": 0.67, "notes": "A36 HR sheet/plate — Wexler/Osario avg"},
+    models.MaterialType.STAINLESS_304: {"price_per_lb": 3.28, "notes": "304 2B sheet — Osario 1/2025"},
+    models.MaterialType.STAINLESS_316: {"price_per_lb": 4.20, "notes": "316 — estimated ~28% over 304"},
+    models.MaterialType.ALUMINUM_6061: {"price_per_lb": 1.85, "notes": "6061-T6 — market estimate"},
+    models.MaterialType.ALUMINUM_5052: {"price_per_lb": 1.70, "notes": "5052-H32 — market estimate"},
+    models.MaterialType.DOM_TUBING: {"price_per_lb": 2.60, "notes": "1.5\" OD 11G DOM round tube — Wexler 1/2025 ~$4.65/ft"},
+    models.MaterialType.SQUARE_TUBING: {"price_per_lb": 0.82, "notes": "HSS square tubing 11ga — Osario/Wexler avg 2023-2025"},
+    models.MaterialType.ANGLE_IRON: {"price_per_lb": 0.75, "notes": "A36 angle 2\"x2\"x3/16\" — Osario 1/2025"},
+    models.MaterialType.FLAT_BAR: {"price_per_lb": 0.96, "notes": "A36 flat bar — Wexler/Osario avg 2023-2025"},
+    models.MaterialType.PLATE: {"price_per_lb": 0.56, "notes": "3/8\" HR plate — Wexler 6/2024"},
 }
 
 @router.get("/seed")
