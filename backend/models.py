@@ -17,6 +17,7 @@ class JobType(str, enum.Enum):
     ARCHITECTURAL = "architectural"
     SIGNAGE = "signage"
     LED_INTEGRATION = "led_integration"
+    SCULPTURE = "sculpture"       # Artistic/sculptural — higher creative complexity rate
     CUSTOM = "custom"
 
 
