@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 from .database import engine, Base
-from .routers import quotes, customers, materials, process_rates
+from .routers import quotes, customers, materials, process_rates, ai_quote
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -29,6 +29,7 @@ app.include_router(quotes.router, prefix="/api")
 app.include_router(customers.router, prefix="/api")
 app.include_router(materials.router, prefix="/api")
 app.include_router(process_rates.router, prefix="/api")
+app.include_router(ai_quote.router, prefix="/api")
 
 # Serve frontend
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")

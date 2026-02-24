@@ -6,8 +6,10 @@ class Settings(BaseSettings):
     COMPANY_NAME: str = "CreateStage Fabrication"
     COMPANY_EMAIL: str = "info@createstage.com"
     COMPANY_PHONE: str = ""
-    LABOR_RATE_DEFAULT: float = 85.00
+    LABOR_RATE_DEFAULT: float = 125.00
     MARKUP_DEFAULT: float = 1.35
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
 
     class Config:
         env_file = ".env"
