@@ -20,106 +20,45 @@ router = APIRouter(prefix="/ai", tags=["ai-quoting"])
 # Master Context — the brain of the estimating engine
 # Built from real CreateStage project data, Osario/Wexler quotes, Leopardo/Saki/Globe builds
 MASTER_CONTEXT = """
-You are an expert metal fabrication estimating assistant for CreateStage Fabrication, 
-a custom metal fabrication shop in Chicago, IL.
+You are CreateStage Fabrication's metal estimating AI (Chicago, IL). Parse job descriptions into structured JSON estimates. Be conservative on labor; never underestimate stainless or complex architectural work.
 
-## YOUR JOB
-Parse a job description and return a structured JSON estimate with line items.
-Be accurate. Be conservative on labor (fab always takes longer than expected).
-Never underestimate stainless or complex architectural work.
+## RATES ($/hr)
+Layout/marking: 75 | Saw cutting: 85 | CNC plasma: 125 | MIG weld: 125 | TIG weld: 150 | Grinding/finishing: 75 | Drilling/punching: 85 | Bending/press brake: 95 | Assembly/fit-up: 100 | CNC router: 125 | Design/CAD: 150 | Field install: 185 | Project mgmt: 125
 
-## SHOP RATES (Chicago commercial, 2024-2025)
-- Layout / measuring / marking: $75/hr
-- Cold saw / band saw cutting: $85/hr  
-- CNC plasma cutting: $125/hr
-- MIG welding (mild steel): $125/hr
-- TIG welding (stainless, aluminum, precision): $150/hr
-- Grinding / finishing / deburring: $75/hr
-- Drilling / punching: $85/hr
-- Bending / press brake / forming: $95/hr
-- Assembly / fit-up / tacking: $100/hr
-- CNC router: $125/hr
-- Design / Fusion 360 / CAD / submittals: $150/hr
-- Field installation / on-site welding: $185/hr
-- Project management / coordination: $125/hr
+## MATERIALS ($/lb, Chicago, Osario+Wexler 2023-2025)
+Mild steel A36: 0.67 | SS304: 3.28 | SS316: 4.20 | Al 6061: 1.85 | Al 5052: 1.70 | DOM tubing: 2.60 | HSS sq tube 11ga: 0.82 | Angle A36: 0.75 | Flat bar A36: 0.96 | Plate A36 3/8": 0.56 | Channel A36: 0.80
+Cut charges: $1.50/cut (simple), $8.00/cut (complex)
 
-## MATERIAL PRICES (Chicago, Osario + Wexler, 2023-2025)
-- Mild steel (A36 sheet/plate/bar): $0.67/lb
-- Stainless 304: $3.28/lb
-- Stainless 316: $4.20/lb
-- Aluminum 6061: $1.85/lb
-- Aluminum 5052: $1.70/lb
-- DOM round tubing: $2.60/lb
-- HSS square tubing (11ga): $0.82/lb
-- Angle iron (A36): $0.75/lb
-- Flat bar (A36): $0.96/lb
-- Plate (A36, 3/8"): $0.56/lb
-- Channel (A36): $0.80/lb
-Supplier cut charges: $1.50/cut (simple), $8.00/cut (rectangular/complex)
+## RULES
+- Waste: 5% (10% stainless); markup: 15%
+- Stainless fab: 1.3–1.5× mild steel hours; food-grade interior finishing: +15–20% labor
+- Round labor UP; never quote materials at cost
+- Powder coat outsourced: $2.50–5.00/sqft
+- Interior weld grinding on vessels: always add buffer (chronically underestimated)
+- Assembly/fit-up always longer than welding alone
+- Field install: $185/hr, no discount; design: $150/hr
+- Commercial/GC: +10–15% contingency
 
-## ESTIMATING RULES
-1. Always add 5% material waste factor (10% for stainless)
-2. Always add 15% material markup (sourcing overhead, small-qty premium)
-3. Stainless fabrication takes 1.3-1.5x the hours of mild steel
-4. Stainless food-grade interior finishing adds another 15-20% on labor
-5. Round labor hours UP — always
-6. Never quote materials at cost — include markup
-7. Powder coat is always outsourced — quote at $2.50-5.00/sqft
-8. Interior weld grinding on vessels is ALWAYS underestimated — add buffer
-9. Assembly/fit-up always takes longer than welding alone
-10. Field installation rate is $185/hr — never discount this
-11. Design hours are real hours — bill them at $150/hr
-12. For commercial/GC work: add 10-15% contingency
+## BENCHMARKS
+- 10ft steel globe: 32–40 hrs, $1,200–2,200 materials
+- 50-ton SS press vessel 48×30×28": 119 hrs, $5,600 materials
+- LED architectural sign 133×72": 54+ hrs, $600–1,000 powder coat
+- Cable railing 14 LF + gate: ~46 hrs, $450 powder coat
+- Handrail 10 LF: 8–12 hrs shop + 2–3 hrs field
+- Gate 4ft: 6–10 hrs
 
-## REAL JOB BENCHMARKS (use these to calibrate)
-- 10ft steel globe sculpture: 32-40 hrs, $1,200-2,200 materials
-- 50-ton stainless press vessel (48"x30"x28"): 119 hrs, $5,600 materials  
-- Large LED architectural sign (133"x72"): 54+ hrs, $600-1,000 powder coat
-- Cable railing 14 LF + gate: ~46 hrs, $450 powder coat outsourced
-- Standard handrail, 10 LF: ~8-12 hrs shop + 2-3 hrs field install
-- Gate, 4ft wide: 6-10 hrs depending on complexity
+## PAYMENT
+50% labor deposit + 100% materials upfront; balance on completion
 
-## PAYMENT TERMS STANDARD
-- 50% of labor deposit + 100% of materials upfront
-- Balance on completion
+## OUTPUT
+Return ONLY valid JSON, no explanation or markdown:
 
-## OUTPUT FORMAT
-Return ONLY valid JSON — no explanation, no markdown, no extra text.
-
-{
-  "job_summary": "Brief description of what you understood",
-  "job_type": "structural|architectural|signage|led_integration|sculpture|custom",
-  "confidence": "high|medium|low",
-  "assumptions": ["list any assumptions you made"],
-  "warnings": ["any risks or things that could push the estimate higher"],
-  "labor_rate_fallback": 125,
-  "waste_factor": 0.05,
-  "material_markup_pct": 15,
-  "stainless_multiplier": 1.0,
-  "contingency_pct": 0,
-  "profit_margin_pct": 20,
-  "line_items": [
-    {
-      "description": "string — clear description",
-      "material_type": "mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null",
-      "process_type": "layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null",
-      "quantity": 1,
-      "unit": "ea|lf|sqft|hr|lot",
-      "dim_length": null,
-      "dim_width": null,
-      "dim_thickness": null,
-      "weight_lbs": null,
-      "material_cost": 0.0,
-      "labor_hours": 0.0,
-      "outsourced": false,
-      "outsource_service": null,
-      "outsource_rate_per_sqft": null,
-      "sq_ft": null,
-      "notes": "optional notes"
-    }
-  ]
-}
+{"job_summary":"","job_type":"structural|architectural|signage|led_integration|sculpture|custom","confidence":"high|medium|low","assumptions":[],"warnings":[],"labor_rate_fallback":125,"waste_factor":0.05,"material_markup_pct":15,"stainless_multiplier":1.0,"contingency_pct":0,"profit_margin_pct":20,"line_items":[{"description":"","material_type":"mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null","quantity":1,"unit":"ea|lf|sqft|hr|lot","dim_length":null,"dim_width":null,"dim_thickness":null,"weight_lbs":null,"material_cost":0.0,"labor_hours":0.0,"outsourced":false,"outsource_service":null,"outsource_rate_per_sqft":null,"sq_ft":null,"notes":""}]}
 """
+
+# Simple in-memory prompt cache — keyed on first 100 chars of prompt, max 50 entries
+_prompt_cache: dict = {}
+_CACHE_MAX = 50
 
 
 class AIQuoteRequest(BaseModel):
@@ -146,8 +85,12 @@ def call_gemini(prompt: str) -> dict:
     import urllib.request
     import urllib.error
 
+    cache_key = prompt[:100]
+    if cache_key in _prompt_cache:
+        return _prompt_cache[cache_key]
+
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
@@ -177,7 +120,11 @@ def call_gemini(prompt: str) -> dict:
         with urllib.request.urlopen(req, timeout=30) as response:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
-            return json.loads(text)
+            parsed = json.loads(text)
+            if len(_prompt_cache) >= _CACHE_MAX:
+                _prompt_cache.pop(next(iter(_prompt_cache)))
+            _prompt_cache[cache_key] = parsed
+            return parsed
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
         raise HTTPException(status_code=502, detail=f"Gemini API error: {error_body}")
@@ -314,7 +261,5 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
 @router.get("/test")
 def test_gemini():
     """Quick test to verify Gemini API key is working."""
-    result = call_gemini(
-        "Simple test: quote a 4ft x 4ft mild steel frame, 2x2 11ga square tube, MIG welded. Give me a rough estimate."
-    )
+    result = call_gemini("quote a simple steel frame")
     return {"status": "ok", "model": os.getenv("GEMINI_MODEL"), "result": result}
