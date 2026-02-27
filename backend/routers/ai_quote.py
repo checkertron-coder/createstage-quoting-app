@@ -79,7 +79,10 @@ RULE: A 20" end table with decorative detail is SMALL. Total labor should be 8�
 ## PAYMENT
 50% labor deposit + 100% materials upfront; balance on completion
 
-## OUTPUT
+## OUTPUT RULES
+- material_cost = RAW cost (weight × $/lb or unit price), BEFORE waste or markup. Backend applies waste_factor and material_markup_pct automatically.
+- waste_factor = decimal (0.05 for 5%, 0.10 for stainless) — NOT a percentage integer
+- labor_hours = total hours for this line item (not per-unit when quantity > 1)
 Return ONLY valid JSON, no explanation or markdown:
 
 {"job_summary":"","job_type":"structural|architectural|signage|led_integration|sculpture|custom","confidence":"high|medium|low","assumptions":[],"warnings":[],"labor_rate_fallback":125,"waste_factor":0.05,"material_markup_pct":15,"stainless_multiplier":1.0,"contingency_pct":0,"profit_margin_pct":20,"line_items":[{"description":"","material_type":"mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null","quantity":1,"unit":"ea|lf|sqft|hr|lot","dim_length":null,"dim_width":null,"dim_thickness":null,"weight_lbs":null,"material_cost":0.0,"labor_hours":0.0,"outsourced":false,"outsource_service":null,"outsource_rate_per_sqft":null,"sq_ft":null,"notes":""}]}
@@ -90,10 +93,24 @@ _prompt_cache: dict = {}
 _CACHE_MAX = 50
 
 
+def _normalize_estimate(estimate: dict) -> None:
+    """Fix common Gemini formatting issues in-place.
+
+    waste_factor: Gemini sometimes returns 5 (meaning 5%) instead of 0.05.
+    Every other pct field (material_markup_pct, profit_margin_pct, contingency_pct)
+    is an integer like 15/20/0 and is divided by 100 in the calculation code.
+    waste_factor is the only field used as a decimal — normalize it here.
+    """
+    waste = estimate.get("waste_factor")
+    if isinstance(waste, (int, float)) and waste > 1:
+        estimate["waste_factor"] = waste / 100
+
+
 class AIQuoteRequest(BaseModel):
     job_description: str
     customer_id: Optional[int] = None
     additional_context: Optional[str] = None
+    pre_computed_estimate: Optional[dict] = None  # Skip Gemini if provided
 
 
 class AIQuoteResponse(BaseModel):
@@ -150,6 +167,7 @@ def call_gemini(prompt: str) -> dict:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
+            _normalize_estimate(parsed)
             if len(_prompt_cache) >= _CACHE_MAX:
                 _prompt_cache.pop(next(iter(_prompt_cache)))
             _prompt_cache[cache_key] = parsed
@@ -224,11 +242,15 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    prompt = request.job_description
-    if request.additional_context:
-        prompt += f"\n\nAdditional context: {request.additional_context}"
-
-    estimate = call_gemini(prompt)
+    if request.pre_computed_estimate:
+        # Use the estimate already shown to the user — no second Gemini call
+        estimate = request.pre_computed_estimate
+        _normalize_estimate(estimate)
+    else:
+        prompt = request.job_description
+        if request.additional_context:
+            prompt += f"\n\nAdditional context: {request.additional_context}"
+        estimate = call_gemini(prompt)
 
     # Import here to avoid circular
     from .quotes import generate_quote_number, calculate_totals, _quote_to_dict

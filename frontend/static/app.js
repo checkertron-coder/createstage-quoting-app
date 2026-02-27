@@ -329,7 +329,8 @@ async function saveQuote() {
     const lastUserMsg = [...conversationHistory].reverse().find(m => m.role === 'user');
     const description = lastUserMsg?.text || 'AI-generated quote';
 
-    // Create quote
+    // Create quote — pass the raw estimate so the backend skips the second Gemini call
+    // and saves exactly what was shown to the user
     const notes = document.getElementById('save-notes').value.trim();
     const quoteRes = await fetch('/api/ai/quote', {
       method: 'POST',
@@ -337,7 +338,8 @@ async function saveQuote() {
       body: JSON.stringify({
         job_description: description,
         customer_id: customer.id,
-        additional_context: notes || null
+        additional_context: notes || null,
+        pre_computed_estimate: currentEstimate?.raw_estimate || null
       })
     });
 
