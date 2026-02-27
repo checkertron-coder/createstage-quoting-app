@@ -1,0 +1,146 @@
+[
+  {
+    "description": "2\" x 2\" x 11G HR SQUARE TUBE 24'",
+    "qty": 96.0,
+    "unit": "ft",
+    "rate_per_unit": 3.5,
+    "supplier": "Wexler",
+    "date": "8/23/2023",
+    "file": "Est_100698_from_D._Wexler__Sons_Inc._13792 (1).pdf"
+  },
+  {
+    "description": "2\" x 2\" x 11G HR SQUARE TUBE 24'",
+    "qty": 96.0,
+    "unit": "ft",
+    "rate_per_unit": 2.57,
+    "supplier": "Wexler",
+    "date": "8/23/2023",
+    "file": "Est_100698_from_D._Wexler__Sons_Inc._13792.pdf"
+  },
+  {
+    "description": "1/2\" x 4\" HR FLATS 20'",
+    "qty": 136.0,
+    "unit": "lb",
+    "rate_per_unit": 0.96,
+    "supplier": "Wexler",
+    "date": "9/5/2023",
+    "file": "Est_101016_from_D._Wexler__Sons_Inc._24432.pdf"
+  },
+  {
+    "description": "4\" x 2\" x 11G HR RECTANGULAR TUBE 24'",
+    "qty": 24.0,
+    "unit": "ft",
+    "rate_per_unit": 3.76,
+    "supplier": "Wexler",
+    "date": "11/3/2023",
+    "file": "Est_102929_from_D._Wexler__Sons_Inc._42384 (1).pdf"
+  },
+  {
+    "description": "7GA x 48\" x 96\" HR SHEET",
+    "qty": 40.0,
+    "unit": "lb",
+    "rate_per_unit": 0.88,
+    "supplier": "Wexler",
+    "date": "2/29/2024",
+    "file": "Est_105861_from_D._Wexler__Sons_Inc._12356.pdf"
+  },
+  {
+    "description": "20GA x 48\" x 96\" STAINLESS STEEL SHEET, TYPE",
+    "qty": 48.0,
+    "unit": "lb",
+    "rate_per_unit": 4.75,
+    "supplier": "Wexler",
+    "date": "2/29/2024",
+    "file": "Est_105861_from_D._Wexler__Sons_Inc._12356.pdf"
+  },
+  {
+    "description": "4\" x 2\" x 11G HR RECTANGULAR TUBE 24'",
+    "qty": 327.0,
+    "unit": "lb",
+    "rate_per_unit": 3.42,
+    "supplier": "Wexler",
+    "date": "6/3/2024",
+    "file": "Est_108902_from_D._Wexler__Sons_Inc._56796.pdf"
+  },
+  {
+    "description": "16GA x 48\" x 96\" STAINLESS STEEL SHEET, TYPE",
+    "qty": 327.0,
+    "unit": "lb",
+    "rate_per_unit": 2.86,
+    "supplier": "Wexler",
+    "date": "6/26/2024",
+    "file": "Est_109688_from_D._Wexler__Sons_Inc._28464.pdf"
+  },
+  {
+    "description": "16GA x 48\" x 96\" STAINLESS STEEL SHEET, TYPE",
+    "qty": 327.0,
+    "unit": "lb",
+    "rate_per_unit": 3.25,
+    "supplier": "Wexler",
+    "date": "6/26/2024",
+    "file": "Est_109688_from_D._Wexler__Sons_Inc._37880.pdf"
+  },
+  {
+    "description": "22GA x 48\" x 96\" STAINLESS STEEL SHEET, TYPE",
+    "qty": 65.0,
+    "unit": "lb",
+    "rate_per_unit": 5.27,
+    "supplier": "Wexler",
+    "date": "9/6/2024",
+    "file": "Est_111980_from_D._Wexler__Sons_Inc._30148.pdf"
+  },
+  {
+    "description": "HRRDTB-001800-11-... 1-1/2\" OD x 11G HR DOM RND TUBE >> 20' R/L",
+    "qty": 20.0,
+    "unit": "ft",
+    "rate_per_unit": 4.72,
+    "supplier": "Wexler",
+    "date": "1/13/2025",
+    "file": "Est_115534_from_D._Wexler__Sons_Inc._34316.pdf"
+  },
+  {
+    "description": "3/16\" X 4\" Type 304 Stainless Steel Strip 12' ***",
+    "qty": 31.0,
+    "unit": "lb",
+    "rate_per_unit": 2.89,
+    "supplier": "Wexler",
+    "date": "3/21/2025",
+    "file": "Est_117316_from_D._Wexler__Sons_Inc._36424.pdf"
+  },
+  {
+    "description": "3/16\" x 4\" Stainless Steel T316 Strip 12' R/L ***",
+    "qty": 31.0,
+    "unit": "lb",
+    "rate_per_unit": 4.98,
+    "supplier": "Wexler",
+    "date": "3/26/2025",
+    "file": "Est_117447_from_D._Wexler__Sons_Inc._43056.pdf"
+  },
+  {
+    "description": "HRRECTB-0295-24",
+    "qty": 48.0,
+    "unit": "ft",
+    "rate_per_unit": 7.28,
+    "supplier": "Wexler",
+    "date": "11/28/2022",
+    "file": "Est_92689_from_D._Wexler__Sons_Inc._16256.pdf"
+  },
+  {
+    "description": "3\" x 2\" x .250 RECTANGULAR TUBE 20'***",
+    "qty": 48.0,
+    "unit": "ft",
+    "rate_per_unit": 7.28,
+    "supplier": "Wexler",
+    "date": "11/28/2022",
+    "file": "Est_92689_from_D._Wexler__Sons_Inc._16256.pdf"
+  },
+  {
+    "description": "16GA x 48\" x 96\" STAINLESS STEEL SHEET, TYPE",
+    "qty": 85.0,
+    "unit": "lb",
+    "rate_per_unit": 4.39,
+    "supplier": "Wexler",
+    "date": "5/16/2023",
+    "file": "Est_97509_from_D._Wexler__Sons_Inc._9784.pdf"
+  }
+]
