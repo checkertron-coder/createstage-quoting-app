@@ -90,7 +90,7 @@ def call_gemini(prompt: str) -> dict:
         return _prompt_cache[cache_key]
 
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
