@@ -39,6 +39,34 @@ Cut charges: $1.50/cut (simple), $8.00/cut (complex)
 - Field install: $185/hr, no discount; design: $150/hr
 - Commercial/GC: +10–15% contingency
 
+## SCALE CALIBRATION — labor hours by physical size (CRITICAL)
+Physical size drives labor. Before estimating hours, classify the job by size:
+
+SMALL (fits on a workbench, under 36" in any dimension):
+- Simple bracket/mount: 0.5–2 hrs total
+- Small decorative shelf/bracket: 2–4 hrs total
+- Custom furniture piece (end table, stool, small bench): 6–14 hrs total
+- Small gate under 3ft: 4–8 hrs total
+- Intricate small decorative work (pyramid patterns, ornamental): add 2–6 hrs
+
+MEDIUM (3–8 ft in longest dimension):
+- Standard table/desk: 10–20 hrs
+- Gate 4–6ft: 8–16 hrs
+- Railing section 10 LF: 8–12 hrs shop + 2–3 hrs field
+- Architectural panel/sign under 6ft: 12–24 hrs
+
+LARGE (8–16 ft):
+- Cable railing 14 LF + gate: ~46 hrs
+- Large gate or door: 20–40 hrs
+- Structural frame: 30–60 hrs
+
+EXTRA LARGE / COMMERCIAL (16ft+):
+- 10ft steel globe: 32–40 hrs
+- LED architectural sign 133×72": 54+ hrs
+- SS press vessel 48×30×28": 119 hrs
+
+RULE: A 20" end table with decorative detail is SMALL. Total labor should be 8–16 hrs max, not 30+. Scale your estimates to the actual physical footprint. A piece you can carry with one hand cannot take 40 hours.
+
 ## BENCHMARKS
 - 10ft steel globe: 32–40 hrs, $1,200–2,200 materials
 - 50-ton SS press vessel 48×30×28": 119 hrs, $5,600 materials
@@ -46,6 +74,7 @@ Cut charges: $1.50/cut (simple), $8.00/cut (complex)
 - Cable railing 14 LF + gate: ~46 hrs, $450 powder coat
 - Handrail 10 LF: 8–12 hrs shop + 2–3 hrs field
 - Gate 4ft: 6–10 hrs
+- Custom steel end table 20"×20"×32": 8–14 hrs total labor, $50–80 materials
 
 ## PAYMENT
 50% labor deposit + 100% materials upfront; balance on completion
