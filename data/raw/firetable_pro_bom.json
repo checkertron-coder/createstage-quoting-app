@@ -1,0 +1,105 @@
+{
+  "product": "FireTable Pro",
+  "source_quote": "Osorio Metals Supply Inc. Quotation 62028",
+  "materials": [
+    {
+      "qty": 1,
+      "desc": "HR Plate 3/4\" x 24\" x 34\"",
+      "material": "mild_steel_plate",
+      "unit_price": 212.41
+    },
+    {
+      "qty": 3,
+      "desc": "SS Angle 2\"x2\"x3/16\" x 20' T-304",
+      "material": "ss_304_angle",
+      "unit_price": 169.58
+    },
+    {
+      "qty": 3,
+      "desc": "SS Flat Bar 3/16\"x3\"x12' T-304",
+      "material": "ss_304_flat_bar",
+      "unit_price": 61.62
+    },
+    {
+      "qty": 2,
+      "desc": "SS Flat Bar 1/4\"x2\"x12' T-304",
+      "material": "ss_304_flat_bar",
+      "unit_price": 55.64
+    },
+    {
+      "qty": 1,
+      "desc": "SS Square Tube 1-1/4\"x11GA x 20' T-304",
+      "material": "ss_304_sq_tube",
+      "unit_price": 109.08
+    },
+    {
+      "qty": 2,
+      "desc": "SS Square Tube 1\"x1\"x1/8\" x 20'",
+      "material": "ss_304_sq_tube",
+      "unit_price": 91.16
+    },
+    {
+      "qty": 1,
+      "desc": "SS Sheet 11GA 48\"x96\" T-304 w/ PVC",
+      "material": "ss_304_sheet",
+      "unit_price": 464.4
+    },
+    {
+      "qty": 1,
+      "desc": "Aluminum Sheet 11GA 48\"x96\"",
+      "material": "aluminum_sheet",
+      "unit_price": 224.67
+    },
+    {
+      "qty": 4,
+      "desc": "Square Steel Tubing 1-1/2\"x1-1/2\"x14GA x 24'",
+      "material": "mild_steel_sq_tube",
+      "unit_price": 26.64
+    },
+    {
+      "qty": 1,
+      "desc": "Square Steel Tubing 1-1/2\"x1-1/2\"x11GA x 24'",
+      "material": "mild_steel_sq_tube",
+      "unit_price": 37.21
+    },
+    {
+      "qty": 1,
+      "desc": "Square Steel Tubing 1-3/4\"x1-3/4\"x11GA x 24'",
+      "material": "mild_steel_sq_tube",
+      "unit_price": 57.55
+    },
+    {
+      "qty": 2,
+      "desc": "SS Sheet 3/16\" x 48\" x 96\" T-304",
+      "material": "ss_304_sheet",
+      "unit_price": 682.78
+    }
+  ],
+  "totals": {
+    "subtotal": 3643.24,
+    "tax": 373.44,
+    "total": 4016.68,
+    "weight_lbs": 1522.969
+  },
+  "labor_estimate": {
+    "hours_range": "8-12 hours",
+    "shop_rate": 125.0,
+    "labor_cost_range": [
+      1000.0,
+      1500.0
+    ]
+  },
+  "configurations": [
+    "base (basin + stand)",
+    "upgrades available",
+    "full pro version"
+  ],
+  "retail_prices": {
+    "FireTable Pro System": 6100,
+    "FireTable Grill": 2600,
+    "FireTable Suspension System_from": 1045,
+    "FireTable Lid": 590,
+    "Locking Casters": 100,
+    "Hanger Bracket": 75
+  }
+}
