@@ -66,16 +66,24 @@ For any mild steel job with aesthetic, architectural, or finish-quality requirem
 - Required for: architectural railings, furniture, decorative/ornamental work, any job going to powder coat or clear coat
 - Not required for: structural/hidden steel, galvanized, stainless, aluminum
 
-## NESTED PATTERN MATH (pyramid / stepped flat bar patterns)
-For layered flat bar patterns inside a square/rectangular frame:
-- Inside clear dimension = outer frame dimension - (2 × tube wall size)
-  Example: 20" outer frame, 1" tube → inside clear = 18"
-- Layer 1 length = inside clear - (2 × step_inward)
-  Example: 18" - 2(0.25") = 17.5"
-- Each successive layer = previous layer length - (2 × step_inward)
-  Example: Layer 2 = 17.0", Layer 3 = 16.5", etc.
-- Each layer has 2 bars running each direction = 4 bars per layer total
-- Generate EXACT cut lengths for every layer in the cut list — do not approximate
+## NESTED PYRAMID FLAT BAR PATTERN — SOLVED GEOMETRY
+When a job describes a nested/pyramid flat bar pattern inside a square tube frame:
+
+KEY RULE: The pattern starts on the UNDERSIDE (bottom face) of the top frame tube and hangs DOWN. It does NOT sit inside the frame height. The frame height is irrelevant to layer count.
+
+MATH:
+- Inside clear = outer frame size - (2 × tube size). Example: 20" frame, 1" tube → 18" clear
+- Layer 1: welded to underside of frame, 1/4" inward from inside edge → length = 18" - 2(0.25") = 17.5", depth = 0" below frame bottom
+- Each next layer: length -= 0.5" (0.25" each side), depth += 0.25"
+- Layer 2: 17.0" @ 0.25" below | Layer 3: 16.5" @ 0.50" | Layer 4: 16.0" @ 0.75"
+- Layer 5: 15.5" @ 1.00" | Layer 6: 15.0" @ 1.25" | Layer 7: 14.5" @ 1.50"
+- Layer 8: 14.0" @ 1.75" | Layer 9: 13.5" @ 2.00" | Layer 10: 13.0" @ 2.25"
+- Stop when innermost square reaches ~4-6" across OR when specified by job
+- Each layer = 4 bars (2 running each direction, same length)
+- All cuts are square cuts (not miters) on flat bar
+- Total flat bar for 10 layers = 40 pieces
+
+ALWAYS generate exact cut lengths for every layer. Never approximate or stop early due to frame height — the pattern hangs below the frame plane.
 
 ## SCALE CALIBRATION — labor hours by physical size (CRITICAL)
 Physical size drives labor. Before estimating hours, classify the job by size:
