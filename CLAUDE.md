@@ -442,9 +442,22 @@ These are rough market averages — good enough for testing, not for production 
 ```python
 # integrations/steel_pricing.py
 class SteelPricingIntegration:
-    """Stub for Bayern Software / distributor pricing API — Phase 3"""
+    """
+    Stub for Enmark ENITEO / SteelXML integration — Phase 3
+
+    Bayern Software (founded 1985, Indiana) merged with Enmark Systems (2024).
+    Product: ENITEO — #1 ERP for metal service centers in North America.
+    Integration path: SteelXML (AISC standard) + e-Acquire360 for electronic data exchange.
+    Partner program: eniteo.enmark.com/partners/
+
+    When implemented, this pulls live pricing from a distributor's ENITEO instance.
+    """
     def get_price(self, material_type: str, size: str, quantity: float, zip_code: str) -> float:
-        raise NotImplementedError("Bayern Software integration not yet built — using market averages")
+        raise NotImplementedError("ENITEO/SteelXML integration not yet built — using market averages")
+
+    def search_inventory(self, material_type: str, size: str, zip_code: str) -> list:
+        """Search nearby distributors for available stock — Phase 3"""
+        raise NotImplementedError
 
 # integrations/fusion360.py
 class Fusion360Integration:
