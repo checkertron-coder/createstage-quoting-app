@@ -1,0 +1,167 @@
+[
+  {
+    "invoice": "12216",
+    "date": "Jun 18, 2024",
+    "description": "Invoice #12216",
+    "total": 4867.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": 2367.0,
+    "labor_cost": 2500.0,
+    "file": "sqinv-Aluminum-Gate-12216.pdf"
+  },
+  {
+    "invoice": "12228",
+    "date": "Oct 23, 2025",
+    "description": "Invoice #12228",
+    "total": 2335.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": 150.0,
+    "labor_cost": 2185.0,
+    "file": "sqinv-Beis-Medrash-Mikor-Hachaim-12228.pdf"
+  },
+  {
+    "invoice": "12210",
+    "date": "Feb 28, 2024",
+    "description": "Invoice #12210",
+    "total": 7448.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Bob-Ciesla-12210.pdf"
+  },
+  {
+    "invoice": "12220",
+    "date": "Oct 5, 2024",
+    "description": "Invoice #12220",
+    "total": 1960.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": 550.0,
+    "labor_cost": null,
+    "file": "sqinv-Bogdan-Buzatu-12220.pdf"
+  },
+  {
+    "invoice": "12217",
+    "date": "Jun 23, 2024",
+    "description": "Invoice #12217",
+    "total": 1255.0,
+    "shop_rate": 125.0,
+    "hours_quoted": 7.0,
+    "material_cost": 95.0,
+    "labor_cost": null,
+    "file": "sqinv-Chantel-and-Brian-Asner-12217.pdf"
+  },
+  {
+    "invoice": "12206",
+    "date": "Jan 16, 2024",
+    "description": "Invoice #12206",
+    "total": 414.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Eric-Guetzloff-12206.pdf"
+  },
+  {
+    "invoice": "12224",
+    "date": "Jul 31, 2025",
+    "description": "Invoice #12224",
+    "total": 1137.5,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-George-K-Tuhowski-12224.pdf"
+  },
+  {
+    "invoice": "12215",
+    "date": "Jun 18, 2024",
+    "description": "Invoice #12215",
+    "total": 4000.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-James-Blair-12215.pdf"
+  },
+  {
+    "invoice": "12225",
+    "date": "Aug 29, 2025",
+    "description": "Invoice #12225",
+    "total": 1810.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-James-Williamson-12225.pdf"
+  },
+  {
+    "invoice": "12221",
+    "date": "Oct 13, 2024",
+    "description": "Invoice #12221",
+    "total": 5975.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": 1650.0,
+    "labor_cost": 3200.0,
+    "file": "sqinv-Jorge-Hernandez-12221.pdf"
+  },
+  {
+    "invoice": "12213",
+    "date": "Apr 2, 2024",
+    "description": "Invoice #12213",
+    "total": 3225.5,
+    "shop_rate": 125.0,
+    "hours_quoted": 25.5,
+    "material_cost": 38.0,
+    "labor_cost": null,
+    "file": "sqinv-Kent-Koplin-12213.pdf"
+  },
+  {
+    "invoice": "000001",
+    "date": "Sep 5, 2023",
+    "description": "Invoice #000001",
+    "total": 288.4,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Paul-Minarik-000001.pdf"
+  },
+  {
+    "invoice": "12218",
+    "date": "Jul 5, 2024",
+    "description": "Invoice #12218",
+    "total": 12725.0,
+    "shop_rate": 125.0,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Radames-W-Santiago-12218.pdf"
+  },
+  {
+    "invoice": "12222",
+    "date": "Feb 26, 2025",
+    "description": "Invoice #12222",
+    "total": 4500.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Rob-12222.pdf"
+  },
+  {
+    "invoice": "12223",
+    "date": "Apr 24, 2025",
+    "description": "Invoice #12223",
+    "total": 2500.0,
+    "shop_rate": null,
+    "hours_quoted": null,
+    "material_cost": null,
+    "labor_cost": null,
+    "file": "sqinv-Ryan-Garton-12223.pdf"
+  }
+]

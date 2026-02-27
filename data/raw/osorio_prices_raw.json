@@ -1,0 +1,538 @@
+[
+  {
+    "material": "Flat Bar 1/2\" x",
+    "size": "20' 0\"",
+    "price_per_piece": 112.0,
+    "price_per_foot": 5.6,
+    "supplier": "Osorio",
+    "date": "9/5/2023"
+  },
+  {
+    "material": "Flat Bar 1/2\" x",
+    "size": "10' 0\"",
+    "price_per_piece": 66.22,
+    "price_per_foot": 6.622,
+    "supplier": "Osorio",
+    "date": "9/5/2023"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 102.7,
+    "price_per_foot": 4.2792,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "12' 0\"",
+    "price_per_piece": 27.2,
+    "price_per_foot": 2.2667,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 2-1/2\" x 2-1/2\" x 11ga",
+    "size": "12' 0\"",
+    "price_per_piece": 45.66,
+    "price_per_foot": 3.805,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 91.67,
+    "price_per_foot": 3.8196,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "12' 0\"",
+    "price_per_piece": 25.96,
+    "price_per_foot": 2.1633,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 2-1/2\" x 2-1/2\" x 11ga",
+    "size": "12' 0\"",
+    "price_per_piece": 42.11,
+    "price_per_foot": 3.5092,
+    "supplier": "Osorio",
+    "date": "11/3/2023"
+  },
+  {
+    "material": "Tubing - Square 2\" x 2\" x 11 ga",
+    "size": "24' 0\"",
+    "price_per_piece": 69.174,
+    "price_per_foot": 2.8823,
+    "supplier": "Osorio",
+    "date": "3/1/2024"
+  },
+  {
+    "material": "Tubing - Rect 4\" x 2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 102.88,
+    "price_per_foot": 4.2867,
+    "supplier": "Osorio",
+    "date": "6/3/2024"
+  },
+  {
+    "material": "Tubing - Square 6\" x 6\" x 3/16ga",
+    "size": "24' 0\"",
+    "price_per_piece": 326.4,
+    "price_per_foot": 13.6,
+    "supplier": "Osorio",
+    "date": "6/3/2024"
+  },
+  {
+    "material": "Tubing - Round 4\" OD x sch 40",
+    "size": "21' 0\"",
+    "price_per_piece": 167.87,
+    "price_per_foot": 7.9938,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Flat Bar - 3/8\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 61.97,
+    "price_per_foot": 3.0985,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Flat Bar - 1/4\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 41.31,
+    "price_per_foot": 2.0655,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Tubing - Round 4\" OD x sch 40",
+    "size": "21' 0\"",
+    "price_per_piece": 167.87,
+    "price_per_foot": 7.9938,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Flat Bar - 3/8\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 61.97,
+    "price_per_foot": 3.0985,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Flat Bar - 1/4\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 41.31,
+    "price_per_foot": 2.0655,
+    "supplier": "Osorio",
+    "date": "6/17/2024"
+  },
+  {
+    "material": "Tubing - Square 2\" x 2\" x 11 ga",
+    "size": "24' 0\"",
+    "price_per_piece": 59.86,
+    "price_per_foot": 2.4942,
+    "supplier": "Osorio",
+    "date": "6/21/2024"
+  },
+  {
+    "material": "Tubing - Square 2\" x 2\" x 11 ga",
+    "size": "24' 0\"",
+    "price_per_piece": 59.86,
+    "price_per_foot": 2.4942,
+    "supplier": "Osorio",
+    "date": "6/21/2024"
+  },
+  {
+    "material": "Tubing - Square 1\" x 1\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 27.55,
+    "price_per_foot": 1.1479,
+    "supplier": "Osorio",
+    "date": "7/5/2024"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 43.78,
+    "price_per_foot": 1.8242,
+    "supplier": "Osorio",
+    "date": "7/5/2024"
+  },
+  {
+    "material": "Channel 3\" x 4.1#",
+    "size": "20' 0\"",
+    "price_per_piece": 65.73,
+    "price_per_foot": 3.2865,
+    "supplier": "Osorio",
+    "date": "7/5/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1\"",
+    "size": "20' 0\"",
+    "price_per_piece": 6.78,
+    "price_per_foot": 0.339,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1-1/4\"",
+    "size": "20' 0\"",
+    "price_per_piece": 7.88,
+    "price_per_foot": 0.394,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1/2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 6.35,
+    "price_per_foot": 0.3175,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1\"",
+    "size": "20' 0\"",
+    "price_per_piece": 6.78,
+    "price_per_foot": 0.339,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1-1/4\"",
+    "size": "20' 0\"",
+    "price_per_piece": 7.88,
+    "price_per_foot": 0.394,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Flat Bar - 1/8\" x 1/2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 6.35,
+    "price_per_foot": 0.3175,
+    "supplier": "Osorio",
+    "date": "9/3/2024"
+  },
+  {
+    "material": "Angle 3\" x 3\" x 3/16\"",
+    "size": "20' 0\"",
+    "price_per_piece": 62.82,
+    "price_per_foot": 3.141,
+    "supplier": "Osorio",
+    "date": "9/19/2024"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 26.07,
+    "price_per_foot": 1.3035,
+    "supplier": "Osorio",
+    "date": "9/19/2024"
+  },
+  {
+    "material": "Tubing - Rect. 3\" x 2\" x 14ga",
+    "size": "24' 0\"",
+    "price_per_piece": 52.6,
+    "price_per_foot": 2.1917,
+    "supplier": "Osorio",
+    "date": "9/19/2024"
+  },
+  {
+    "material": "Bar - Round 1/2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 10.99,
+    "price_per_foot": 0.5495,
+    "supplier": "Osorio",
+    "date": "9/19/2024"
+  },
+  {
+    "material": "Channel 2\" x 1\" x 1/8\" No Punch",
+    "size": "20' 0\"",
+    "price_per_piece": 32.65,
+    "price_per_foot": 1.6325,
+    "supplier": "Osorio",
+    "date": "9/19/2024"
+  },
+  {
+    "material": "Bar - Round 1/2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 10.99,
+    "price_per_foot": 0.5495,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Bar - Round 1/4\"",
+    "size": "20' 0\"",
+    "price_per_piece": 4.1,
+    "price_per_foot": 0.205,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Aluminum - Angle 2\" x 2\" x 1/8\"",
+    "size": "25' 0\"",
+    "price_per_piece": 70.5,
+    "price_per_foot": 2.82,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.73,
+    "price_per_foot": 1.2865,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Bar - Round 1/2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 10.99,
+    "price_per_foot": 0.5495,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Bar - Round 1/4\"",
+    "size": "20' 0\"",
+    "price_per_piece": 4.1,
+    "price_per_foot": 0.205,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Aluminum - Angle 2\" x 2\" x 1/8\"",
+    "size": "25' 0\"",
+    "price_per_piece": 70.5,
+    "price_per_foot": 2.82,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.73,
+    "price_per_foot": 1.2865,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Flat Bar - 1/4\" x 1\"",
+    "size": "20' 0\"",
+    "price_per_piece": 15.15,
+    "price_per_foot": 0.7575,
+    "supplier": "Osorio",
+    "date": "9/24/2024"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 37.93,
+    "price_per_foot": 1.5804,
+    "supplier": "Osorio",
+    "date": "10/3/2024"
+  },
+  {
+    "material": "Tubing - Square 1/2\" x 1/2\" x 16ga",
+    "size": "24' 0\"",
+    "price_per_piece": 8.84,
+    "price_per_foot": 0.3683,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  },
+  {
+    "material": "Tubing - Square 2\" x 2\" x 14ga",
+    "size": "24' 0\"",
+    "price_per_piece": 36.51,
+    "price_per_foot": 1.5212,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.73,
+    "price_per_foot": 1.2865,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  },
+  {
+    "material": "SS - Square Tube 1\" x 1\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 91.16,
+    "price_per_foot": 4.558,
+    "supplier": "Osorio",
+    "date": "1/22/2025"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 14ga",
+    "size": "24' 0\"",
+    "price_per_piece": 26.64,
+    "price_per_foot": 1.11,
+    "supplier": "Osorio",
+    "date": "1/22/2025"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 37.21,
+    "price_per_foot": 1.5504,
+    "supplier": "Osorio",
+    "date": "1/22/2025"
+  },
+  {
+    "material": "Tubing - Square 1-3/4\" x 1-3/4 x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 57.55,
+    "price_per_foot": 2.3979,
+    "supplier": "Osorio",
+    "date": "1/22/2025"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 3/16\"",
+    "size": "20' 0\"",
+    "price_per_piece": 36.79,
+    "price_per_foot": 1.8395,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Flat Bar - 3/16\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 30.22,
+    "price_per_foot": 1.511,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Flat Bar - 1/4\" x 2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.64,
+    "price_per_foot": 1.282,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Tubing - Square 1-1/4\" x 1-1/4\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 32.86,
+    "price_per_foot": 1.3692,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Tubing - Square 1\" x 1\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 27.55,
+    "price_per_foot": 1.1479,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 3/16\"",
+    "size": "20' 0\"",
+    "price_per_piece": 36.79,
+    "price_per_foot": 1.8395,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Flat Bar - 3/16\" x 3\"",
+    "size": "20' 0\"",
+    "price_per_piece": 30.22,
+    "price_per_foot": 1.511,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Flat Bar - 1/4\" x 2\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.64,
+    "price_per_foot": 1.282,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Tubing - Square 1-1/4\" x 1-1/4\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 32.86,
+    "price_per_foot": 1.3692,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Tubing - Square 1\" x 1\" x 11ga",
+    "size": "24' 0\"",
+    "price_per_piece": 27.55,
+    "price_per_foot": 1.1479,
+    "supplier": "Osorio",
+    "date": "1/28/2025"
+  },
+  {
+    "material": "Tubing - Square 1-1/2\" x 1-1/2\" x 3/16ga",
+    "size": "24' 0\"",
+    "price_per_piece": 59.6,
+    "price_per_foot": 2.4833,
+    "supplier": "Osorio",
+    "date": "2/24/2025"
+  },
+  {
+    "material": "Tubing - Square 3\" x 3\" x 3/16ga",
+    "size": "24' 0\"",
+    "price_per_piece": 122.43,
+    "price_per_foot": 5.1013,
+    "supplier": "Osorio",
+    "date": "2/24/2025"
+  },
+  {
+    "material": "Tubing - Square 3\" x 3\" x 1/4\"",
+    "size": "24' 0\"",
+    "price_per_piece": 179.88,
+    "price_per_foot": 7.495,
+    "supplier": "Osorio",
+    "date": "2/24/2025"
+  },
+  {
+    "material": "Angle 3\" x 3\" x 3/16\"",
+    "size": "20' 0\"",
+    "price_per_piece": 47.3,
+    "price_per_foot": 2.365,
+    "supplier": "Osorio",
+    "date": "2/24/2025"
+  },
+  {
+    "material": "Angle 1-1/2\" x 1-1/2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 19.18,
+    "price_per_foot": 0.959,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  },
+  {
+    "material": "Tubing - Square 2\" x 2\" x 14ga",
+    "size": "24' 0\"",
+    "price_per_piece": 36.51,
+    "price_per_foot": 1.5212,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  },
+  {
+    "material": "Angle 2\" x 2\" x 1/8\"",
+    "size": "20' 0\"",
+    "price_per_piece": 25.73,
+    "price_per_foot": 1.2865,
+    "supplier": "Osorio",
+    "date": "12/2/2024"
+  }
+]
