@@ -785,3 +785,25 @@ body {
   .chat-welcome h2 { font-size: 22px; }
   .list-view { padding: 16px; }
 }
+
+/* Cut List + Build Order */
+.section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 16px 4px;
+  border-top: 1px solid var(--border, #2a2a2a);
+  margin-top: 8px;
+}
+.cut-list-table { margin-bottom: 4px; }
+.cut-list-table td { font-size: 12px; }
+.build-order-list {
+  margin: 4px 16px 12px 32px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary, #ccc);
+}
+.build-order-list li { padding: 1px 0; }

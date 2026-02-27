@@ -193,6 +193,34 @@ function appendAIResponse(data) {
 
     ${notesHtml}
 
+    ${(() => {
+      const cutList = data.raw_estimate?.cut_list || [];
+      if (!cutList.length) return '';
+      const rows = cutList.map(p => `
+        <tr>
+          <td>${escHtml(p.piece_description || '')}</td>
+          <td>${escHtml(String(p.material || ''))}</td>
+          <td>${p.quantity || 1}</td>
+          <td>${[p.length ? p.length + '"' : null, p.width ? p.width + '"' : null, p.thickness || null].filter(Boolean).join(' × ')}</td>
+          <td>${escHtml(p.notes || '')}</td>
+        </tr>`).join('');
+      return `
+        <div class="section-header">✂️ Cut List</div>
+        <table class="line-items-table cut-list-table">
+          <thead><tr><th>Piece</th><th>Material</th><th>Qty</th><th>Dimensions</th><th>Notes</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    })()}
+
+    ${(() => {
+      const buildOrder = data.raw_estimate?.build_order || [];
+      if (!buildOrder.length) return '';
+      const steps = buildOrder.map((s, i) => `<li>${escHtml(s)}</li>`).join('');
+      return `
+        <div class="section-header">🔧 Build Order</div>
+        <ol class="build-order-list">${steps}</ol>`;
+    })()}
+
     <div class="ai-totals-bar">
       <div class="at-item">
         <div class="at-label">Shop Cost</div>

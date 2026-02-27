@@ -39,6 +39,14 @@ Cut charges: $1.50/cut (simple), $8.00/cut (complex)
 - Field install: $185/hr, no discount; design: $150/hr
 - Commercial/GC: +10–15% contingency
 
+## MILD STEEL SURFACE PREP — VINEGAR BATH / MILL SCALE REMOVAL
+For any mild steel job with aesthetic, architectural, or finish-quality requirements, include a vinegar bath line item:
+- Process: after cutting, all parts soak in white vinegar bath overnight to dissolve mill scale; next day parts are washed and dried
+- Active labor time: 0.5–1h setup (fill tub, load parts) + 0.5h wash/dry
+- Use process_type: "grinding" (surface prep), labor_hours: 1.0–1.5, material_cost: $5–15 (vinegar consumable)
+- Required for: architectural railings, furniture, decorative/ornamental work, any job going to powder coat or clear coat
+- Not required for: structural/hidden steel, galvanized, stainless, aluminum
+
 ## SCALE CALIBRATION — labor hours by physical size (CRITICAL)
 Physical size drives labor. Before estimating hours, classify the job by size:
 
@@ -85,7 +93,7 @@ RULE: A 20" end table with decorative detail is SMALL. Total labor should be 8�
 - labor_hours = total hours for this line item (not per-unit when quantity > 1)
 Return ONLY valid JSON, no explanation or markdown:
 
-{"job_summary":"","job_type":"structural|architectural|signage|led_integration|sculpture|custom","confidence":"high|medium|low","assumptions":[],"warnings":[],"labor_rate_fallback":125,"waste_factor":0.05,"material_markup_pct":15,"stainless_multiplier":1.0,"contingency_pct":0,"profit_margin_pct":20,"line_items":[{"description":"","material_type":"mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null","quantity":1,"unit":"ea|lf|sqft|hr|lot","dim_length":null,"dim_width":null,"dim_thickness":null,"weight_lbs":null,"material_cost":0.0,"labor_hours":0.0,"outsourced":false,"outsource_service":null,"outsource_rate_per_sqft":null,"sq_ft":null,"notes":""}]}
+{"job_summary":"","job_type":"structural|architectural|signage|led_integration|sculpture|custom","confidence":"high|medium|low","assumptions":[],"warnings":[],"labor_rate_fallback":125,"waste_factor":0.05,"material_markup_pct":15,"stainless_multiplier":1.0,"contingency_pct":0,"profit_margin_pct":20,"line_items":[{"description":"","material_type":"mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null","quantity":1,"unit":"ea|lf|sqft|hr|lot","dim_length":null,"dim_width":null,"dim_thickness":null,"weight_lbs":null,"material_cost":0.0,"labor_hours":0.0,"outsourced":false,"outsource_service":null,"outsource_rate_per_sqft":null,"sq_ft":null,"notes":""}],"cut_list":[{"piece_description":"","material":"","quantity":1,"length":null,"width":null,"thickness":null,"notes":""}],"build_order":["Step 1: ...","Step 2: ..."]}
 """
 
 # Simple in-memory prompt cache — keyed on first 100 chars of prompt, max 50 entries
