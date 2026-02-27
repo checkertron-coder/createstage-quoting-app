@@ -201,7 +201,7 @@ def call_gemini(prompt: str) -> dict:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=90) as response:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
