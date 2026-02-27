@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     LABOR_RATE_DEFAULT: float = 125.00
     MARKUP_DEFAULT: float = 1.35
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     class Config:
         env_file = ".env"
