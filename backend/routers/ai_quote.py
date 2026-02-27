@@ -39,6 +39,25 @@ Cut charges: $1.50/cut (simple), $8.00/cut (complex)
 - Field install: $185/hr, no discount; design: $150/hr
 - Commercial/GC: +10–15% contingency
 
+## MITER VS SQUARE CUTS — JOINT SELECTION RULES
+- Decorative/furniture/architectural frames (tables, railings, gates, ornamental): use 45° MITER cuts at corners
+  - Miter math: each mitered piece = nominal dimension MINUS one full tube width (e.g. 20" frame with 1" tube = 19" cut length per side for square miter)
+  - Mark cut list as "45° miter both ends" or "45° miter one end, square other"
+  - Cut charge: complex ($8/cut) for miters vs simple ($1.50/cut) for square
+- Structural/hidden connections (columns, brackets, gussets, hidden frames): square cuts
+  - Square cuts are stronger for full-pen welds and easier to fit tight
+- Triangulated supports and gussets: always 45° or compound angle — calculate from geometry
+- When in doubt on furniture/decorative: default to 45° miter
+
+## CLEAR COAT FINISH (in-house, polished steel look)
+For jobs requiring a polished near-stainless appearance with clear coat (no powder coat):
+- Step 1 — Polish: grind and polish all surfaces to 320-400 grit before finishing. Labor: 2-4h depending on piece complexity and surface area.
+- Step 2 — Clear coat application: spray top surfaces, let cure (1-2h), flip piece on lazy susan / padded surface, coat bottom and legs. Labor: 1-2h active time.
+- Materials: clear coat, tack rags, masking = ~$25-40
+- Total clear coat process adds: 3-5h labor + $30 materials (no outsource cost unlike powder coat)
+- Use process_type: "grinding" for polish step, "paint" for clear coat step
+- Do NOT include outsourced powder coat line item when job specifies clear coat
+
 ## MILD STEEL SURFACE PREP — VINEGAR BATH / MILL SCALE REMOVAL
 For any mild steel job with aesthetic, architectural, or finish-quality requirements, include a vinegar bath line item:
 - Process: after cutting, all parts soak in white vinegar bath overnight to dissolve mill scale; next day parts are washed and dried
@@ -46,6 +65,17 @@ For any mild steel job with aesthetic, architectural, or finish-quality requirem
 - Use process_type: "grinding" (surface prep), labor_hours: 1.0–1.5, material_cost: $5–15 (vinegar consumable)
 - Required for: architectural railings, furniture, decorative/ornamental work, any job going to powder coat or clear coat
 - Not required for: structural/hidden steel, galvanized, stainless, aluminum
+
+## NESTED PATTERN MATH (pyramid / stepped flat bar patterns)
+For layered flat bar patterns inside a square/rectangular frame:
+- Inside clear dimension = outer frame dimension - (2 × tube wall size)
+  Example: 20" outer frame, 1" tube → inside clear = 18"
+- Layer 1 length = inside clear - (2 × step_inward)
+  Example: 18" - 2(0.25") = 17.5"
+- Each successive layer = previous layer length - (2 × step_inward)
+  Example: Layer 2 = 17.0", Layer 3 = 16.5", etc.
+- Each layer has 2 bars running each direction = 4 bars per layer total
+- Generate EXACT cut lengths for every layer in the cut list — do not approximate
 
 ## SCALE CALIBRATION — labor hours by physical size (CRITICAL)
 Physical size drives labor. Before estimating hours, classify the job by size:
