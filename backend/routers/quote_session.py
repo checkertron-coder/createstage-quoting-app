@@ -423,41 +423,73 @@ def estimate_labor(
 
     # Run labor estimator (Stage 4)
     from ..labor_estimator import LaborEstimator
-    estimator = LaborEstimator()
-    labor_estimate = estimator.estimate(material_list, quote_params, user_rates)
-
-    # Run historical validation
     from ..historical_validator import HistoricalValidator
-    validator = HistoricalValidator()
-    labor_estimate = validator.validate(labor_estimate, session.job_type, db)
-
-    # Build finishing section
     from ..finishing import FinishingBuilder
+    from sqlalchemy.orm.attributes import flag_modified
+
+    estimator = LaborEstimator()
     fields = quote_params.get("fields", {})
     finish_type = fields.get("finish", "raw")
-    finishing_builder = FinishingBuilder()
-    finishing = finishing_builder.build(
-        finish_type=finish_type,
-        total_sq_ft=material_list.get("total_sq_ft", 0),
-        labor_processes=labor_estimate.get("processes", []),
-    )
 
-    # Compute totals
-    total_labor_hours = labor_estimate.get("total_hours", 0)
-    total_labor_cost = round(
-        sum(p["hours"] * p["rate"] for p in labor_estimate.get("processes", [])),
-        2,
-    )
+    try:
+        labor_estimate = estimator.estimate(material_list, quote_params, user_rates)
 
-    # Store results in session
-    from sqlalchemy.orm.attributes import flag_modified
-    current_params["_labor_estimate"] = labor_estimate
-    current_params["_finishing"] = finishing
-    session.params_json = current_params
-    session.stage = "price"  # Ready for Stage 5
-    session.updated_at = datetime.utcnow()
-    flag_modified(session, "params_json")
-    db.commit()
+        # Run historical validation
+        validator = HistoricalValidator()
+        labor_estimate = validator.validate(labor_estimate, session.job_type, db)
+
+        # Build finishing section
+        finishing_builder = FinishingBuilder()
+        finishing = finishing_builder.build(
+            finish_type=finish_type,
+            total_sq_ft=material_list.get("total_sq_ft", 0),
+            labor_processes=labor_estimate.get("processes", []),
+        )
+
+        # Compute totals
+        total_labor_hours = labor_estimate.get("total_hours", 0)
+        total_labor_cost = round(
+            sum(p["hours"] * p["rate"] for p in labor_estimate.get("processes", [])),
+            2,
+        )
+
+        # Store results in session
+        current_params["_labor_estimate"] = labor_estimate
+        current_params["_finishing"] = finishing
+        session.params_json = current_params
+        session.stage = "price"  # Ready for Stage 5
+        session.updated_at = datetime.utcnow()
+        flag_modified(session, "params_json")
+        db.commit()
+    except Exception:
+        db.rollback()
+
+        # Fallback: use rule-based estimation
+        labor_estimate = estimator._fallback_estimate(material_list, quote_params, user_rates)
+
+        # Build finishing section with fallback estimate
+        finishing_builder = FinishingBuilder()
+        finishing = finishing_builder.build(
+            finish_type=finish_type,
+            total_sq_ft=material_list.get("total_sq_ft", 0),
+            labor_processes=labor_estimate.get("processes", []),
+        )
+
+        # Compute totals
+        total_labor_hours = labor_estimate.get("total_hours", 0)
+        total_labor_cost = round(
+            sum(p["hours"] * p["rate"] for p in labor_estimate.get("processes", [])),
+            2,
+        )
+
+        # Store results in session
+        current_params["_labor_estimate"] = labor_estimate
+        current_params["_finishing"] = finishing
+        session.params_json = current_params
+        session.stage = "price"  # Ready for Stage 5
+        session.updated_at = datetime.utcnow()
+        flag_modified(session, "params_json")
+        db.commit()
 
     return {
         "session_id": session_id,
