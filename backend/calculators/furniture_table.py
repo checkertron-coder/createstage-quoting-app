@@ -1,9 +1,13 @@
 """
 Furniture table calculator.
 
-Legs (tube) + stretchers + top support frame.
-Parametric by table dimensions.
+Legs (tube) + individual frame rails + stretchers + top support.
+Parametric by table dimensions. Supports AI cut list for custom designs.
+
+Dimension parser handles formats like "20 x 20 x 32" (L x W x H in inches).
 """
+
+import re
 
 from .base import BaseCalculator
 from .material_lookup import MaterialLookup
@@ -23,7 +27,179 @@ class FurnitureTableCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
-        # Parse inputs
+        # Try AI cut list for custom/complex designs
+        ai_cuts = self._try_ai_cut_list(fields)
+        if ai_cuts is not None:
+            return self._build_from_ai_cuts(ai_cuts, fields, assumptions)
+
+        # Parse dimensions — handles "20 x 20 x 32" format
+        dims = self._parse_table_dimensions(fields)
+        table_length_in = dims["length"]
+        table_width_in = dims["width"]
+        table_height_in = dims["height"]
+
+        quantity = self.parse_int(fields.get("quantity"), default=1)
+        if quantity < 1:
+            quantity = 1
+
+        leg_style = fields.get("leg_style", "Straight legs")
+        leg_profile = "sq_tube_2x2_11ga"
+        frame_profile = "sq_tube_1.5x1.5_11ga"
+
+        if "round" in str(leg_style).lower() or "hairpin" in str(leg_style).lower():
+            leg_profile = "round_tube_1.5_14ga"
+
+        leg_price_ft = lookup.get_price_per_foot(leg_profile)
+        frame_price_ft = lookup.get_price_per_foot(frame_profile)
+
+        # 1. Legs — 4 per table
+        leg_count = 4 * quantity
+        leg_length_in = table_height_in
+        leg_total_ft = self.inches_to_feet(leg_length_in) * leg_count
+        leg_weight = self.get_weight_lbs(leg_profile, leg_total_ft)
+
+        items.append(self.make_material_item(
+            description="Table legs — %s × %d (%.0f\" each)" % (
+                leg_profile, leg_count, leg_length_in),
+            material_type="square_tubing",
+            profile=leg_profile,
+            length_inches=leg_length_in,
+            quantity=self.apply_waste(leg_count, self.WASTE_TUBE),
+            unit_price=round(self.inches_to_feet(leg_length_in) * leg_price_ft, 2),
+            cut_type="miter_45",
+            waste_factor=self.WASTE_TUBE,
+        ))
+        total_weight += leg_weight
+
+        # 2. Top frame — individual rails (2 long + 2 short per table)
+        long_rail_count = 2 * quantity
+        short_rail_count = 2 * quantity
+        long_rail_in = table_length_in
+        short_rail_in = table_width_in
+
+        # Long rails
+        long_rail_total_ft = self.inches_to_feet(long_rail_in) * long_rail_count
+        long_rail_weight = self.get_weight_lbs(frame_profile, long_rail_total_ft)
+
+        items.append(self.make_material_item(
+            description="Top frame long rails — %s × %d (%.0f\" each)" % (
+                frame_profile, long_rail_count, long_rail_in),
+            material_type="square_tubing",
+            profile=frame_profile,
+            length_inches=long_rail_in,
+            quantity=self.apply_waste(long_rail_count, self.WASTE_TUBE),
+            unit_price=round(self.inches_to_feet(long_rail_in) * frame_price_ft, 2),
+            cut_type="miter_45",
+            waste_factor=self.WASTE_TUBE,
+        ))
+        total_weight += long_rail_weight
+
+        # Short rails
+        short_rail_total_ft = self.inches_to_feet(short_rail_in) * short_rail_count
+        short_rail_weight = self.get_weight_lbs(frame_profile, short_rail_total_ft)
+
+        items.append(self.make_material_item(
+            description="Top frame short rails — %s × %d (%.0f\" each)" % (
+                frame_profile, short_rail_count, short_rail_in),
+            material_type="square_tubing",
+            profile=frame_profile,
+            length_inches=short_rail_in,
+            quantity=self.apply_waste(short_rail_count, self.WASTE_TUBE),
+            unit_price=round(self.inches_to_feet(short_rail_in) * frame_price_ft, 2),
+            cut_type="miter_45",
+            waste_factor=self.WASTE_TUBE,
+        ))
+        total_weight += short_rail_weight
+
+        # 3. Center stretcher (1 per table, long direction)
+        stretcher_count = 1 * quantity
+        center_stretcher_in = table_length_in - 4  # Inset from frame
+        center_ft = self.inches_to_feet(center_stretcher_in) * stretcher_count
+        center_weight = self.get_weight_lbs(frame_profile, center_ft)
+
+        items.append(self.make_material_item(
+            description="Center stretcher — %s × %d (%.0f\" each)" % (
+                frame_profile, stretcher_count, center_stretcher_in),
+            material_type="square_tubing",
+            profile=frame_profile,
+            length_inches=center_stretcher_in,
+            quantity=self.apply_waste(stretcher_count, self.WASTE_TUBE),
+            unit_price=round(self.inches_to_feet(center_stretcher_in) * frame_price_ft, 2),
+            cut_type="square",
+            waste_factor=self.WASTE_TUBE,
+        ))
+        total_weight += center_weight
+
+        # 4. Bottom stretchers (H-frame between legs, 2 per table)
+        bottom_count = 2 * quantity
+        bottom_length_in = table_length_in - 4  # Inset from legs
+        bottom_total_ft = self.inches_to_feet(bottom_length_in) * bottom_count
+        bottom_weight = self.get_weight_lbs(frame_profile, bottom_total_ft)
+
+        items.append(self.make_material_item(
+            description="Bottom stretchers — %s × %d (%.0f\" each)" % (
+                frame_profile, bottom_count, bottom_length_in),
+            material_type="square_tubing",
+            profile=frame_profile,
+            length_inches=bottom_length_in,
+            quantity=self.apply_waste(bottom_count, self.WASTE_TUBE),
+            unit_price=round(self.inches_to_feet(bottom_length_in) * frame_price_ft, 2),
+            cut_type="square",
+            waste_factor=self.WASTE_TUBE,
+        ))
+        total_weight += bottom_weight
+
+        # Leveling feet hardware
+        hardware.append(self.make_hardware_item(
+            description="Adjustable leveling feet",
+            quantity=4 * quantity,
+            options=[
+                {"supplier": "McMaster-Carr", "price": 5.00, "url": "", "part_number": None, "lead_days": 3},
+                {"supplier": "Amazon", "price": 3.50, "url": "", "part_number": None, "lead_days": 5},
+                {"supplier": "Grainger", "price": 6.00, "url": "", "part_number": None, "lead_days": 2},
+            ],
+        ))
+
+        # Weld totals
+        total_weld_inches = leg_count * 8  # Leg-to-frame welds (4 sides × 2")
+        total_weld_inches += bottom_count * 4  # Bottom stretcher welds
+        total_weld_inches += stretcher_count * 4  # Center stretcher welds
+        total_weld_inches += (long_rail_count + short_rail_count) * 6  # Frame corner welds
+
+        # Surface area
+        total_sq_ft = self.sq_ft_from_dimensions(table_length_in, table_width_in) * quantity
+
+        assumptions.append(
+            "Table: %.0f\" × %.0f\" × %.0f\" height × %d unit(s). "
+            "Top material (wood, stone, glass) NOT included — steel frame only." % (
+                table_length_in, table_width_in, table_height_in, quantity))
+
+        return self.make_material_list(
+            job_type="furniture_table",
+            items=items,
+            hardware=hardware,
+            total_weight_lbs=total_weight,
+            total_sq_ft=total_sq_ft,
+            weld_linear_inches=total_weld_inches,
+            assumptions=assumptions,
+        )
+
+    def _parse_table_dimensions(self, fields: dict) -> dict:
+        """
+        Parse table dimensions from fields. Handles multiple formats:
+        - Individual fields: table_length, table_width, table_height / height
+        - Combined format: approximate_size or dimensions = "20 x 20 x 32"
+        - Defaults: 60" × 30" × 30"
+        """
+        # Try combined dimension string first (e.g., "20 x 20 x 32")
+        for dim_key in ("approximate_size", "dimensions", "size"):
+            dim_str = fields.get(dim_key, "")
+            if dim_str:
+                parsed = self._parse_dimension_string(str(dim_str))
+                if parsed:
+                    return parsed
+
+        # Fall back to individual fields
         table_length_in = self.parse_inches(
             fields.get("table_length"),
             default=self.feet_to_inches(self.parse_feet(
@@ -43,105 +219,115 @@ class FurnitureTableCalculator(BaseCalculator):
         table_height_in = self.parse_inches(
             fields.get("table_height", fields.get("height")), default=30.0)
         if table_height_in < 12:
-            table_height_in *= 12  # Probably in feet
+            table_height_in *= 12
+
+        return {
+            "length": table_length_in,
+            "width": table_width_in,
+            "height": table_height_in,
+        }
+
+    def _parse_dimension_string(self, dim_str: str):
+        """
+        Parse "L x W x H" dimension string.
+        Handles formats like: "20 x 20 x 32", "20x20x32", "20 × 20 × 32"
+        Returns dict or None if can't parse.
+        """
+        # Normalize separators
+        s = dim_str.replace("×", "x").replace("X", "x").replace("by", "x")
+        nums = re.findall(r'(\d+\.?\d*)', s)
+
+        if len(nums) >= 3:
+            vals = [float(n) for n in nums[:3]]
+            # If values are small (< 12), probably feet — convert
+            is_feet = "ft" in dim_str.lower() or "'" in dim_str
+            if is_feet:
+                vals = [v * 12 for v in vals]
+            return {
+                "length": max(vals[0], 6.0),
+                "width": max(vals[1], 6.0),
+                "height": max(vals[2], 6.0),
+            }
+        elif len(nums) == 2:
+            vals = [float(n) for n in nums[:2]]
+            is_feet = "ft" in dim_str.lower() or "'" in dim_str
+            if is_feet:
+                vals = [v * 12 for v in vals]
+            return {
+                "length": max(vals[0], 6.0),
+                "width": max(vals[1], 6.0),
+                "height": 30.0,
+            }
+        return None
+
+    def _try_ai_cut_list(self, fields: dict):
+        """Try AI cut list for custom designs. Returns list or None."""
+        # Only use AI if there's a description suggesting custom work
+        description = fields.get("description", "")
+        notes = fields.get("notes", "")
+        combined = (str(description) + " " + str(notes)).lower()
+
+        # Trigger AI for keywords suggesting non-standard design
+        ai_triggers = [
+            "custom", "unique", "curved", "bent", "welded art",
+            "sculptural", "asymmetric", "live edge", "industrial",
+            "modern", "mid-century", "trestle", "pedestal",
+        ]
+        if not any(trigger in combined for trigger in ai_triggers):
+            return None
+
+        from .ai_cut_list import AICutListGenerator
+        generator = AICutListGenerator()
+        return generator.generate_cut_list("furniture_table", fields)
+
+    def _build_from_ai_cuts(self, ai_cuts, fields, assumptions):
+        """Build MaterialList from AI-generated cut list."""
+        items = []
+        total_weight = 0.0
+        total_sq_ft = 0.0
+        total_weld_inches = 0.0
+
+        for cut in ai_cuts:
+            profile = cut.get("profile", "sq_tube_1.5x1.5_11ga")
+            length_in = cut.get("length_inches", 12.0)
+            quantity = cut.get("quantity", 1)
+            price_ft = lookup.get_price_per_foot(profile)
+            length_ft = self.inches_to_feet(length_in)
+            weight = self.get_weight_lbs(profile, length_ft * quantity)
+
+            items.append(self.make_material_item(
+                description=cut.get("description", "Cut piece"),
+                material_type=cut.get("material_type", "square_tubing"),
+                profile=profile,
+                length_inches=length_in,
+                quantity=self.apply_waste(quantity, self.WASTE_TUBE),
+                unit_price=round(length_ft * price_ft, 2),
+                cut_type=cut.get("cut_type", "square"),
+                waste_factor=self.WASTE_TUBE,
+            ))
+            total_weight += weight
+            total_weld_inches += quantity * 6  # Estimate 6" of weld per piece
+
+        # Parse dimensions for surface area
+        dims = self._parse_table_dimensions(fields)
+        total_sq_ft = self.sq_ft_from_dimensions(dims["length"], dims["width"])
 
         quantity = self.parse_int(fields.get("quantity"), default=1)
-        if quantity < 1:
-            quantity = 1
 
-        leg_style = fields.get("leg_style", "Straight legs")
-        leg_profile = "sq_tube_2x2_11ga"
-        frame_profile = "sq_tube_1.5x1.5_11ga"
-
-        if "round" in str(leg_style).lower() or "hairpin" in str(leg_style).lower():
-            leg_profile = "round_tube_1.5_14ga"
-
-        leg_price_ft = lookup.get_price_per_foot(leg_profile)
-        frame_price_ft = lookup.get_price_per_foot(frame_profile)
-
-        # 1. Legs (4 per table)
-        leg_count = 4 * quantity
-        leg_length_in = table_height_in
-        leg_total_ft = self.inches_to_feet(leg_length_in) * leg_count
-        leg_weight = self.get_weight_lbs(leg_profile, leg_total_ft)
-
-        items.append(self.make_material_item(
-            description="Table legs — %s × %d (%.0f\" each)" % (
-                leg_profile, leg_count, leg_length_in),
-            material_type="square_tubing",
-            profile=leg_profile,
-            length_inches=leg_length_in,
-            quantity=self.apply_waste(leg_count, self.WASTE_TUBE),
-            unit_price=round(self.inches_to_feet(leg_length_in) * leg_price_ft, 2),
-            cut_type="miter_45",
-            waste_factor=self.WASTE_TUBE,
-        ))
-        total_weight += leg_weight
-
-        # 2. Top support frame (perimeter + 1 center stretcher)
-        frame_perim_in = self.perimeter_inches(table_length_in, table_width_in)
-        center_stretcher_in = table_length_in  # Long direction
-        total_frame_in = (frame_perim_in + center_stretcher_in) * quantity
-        total_frame_ft = self.inches_to_feet(total_frame_in)
-        frame_weight = self.get_weight_lbs(frame_profile, total_frame_ft)
-
-        items.append(self.make_material_item(
-            description="Top support frame — %s (perimeter + center stretcher × %d)" % (
-                frame_profile, quantity),
-            material_type="square_tubing",
-            profile=frame_profile,
-            length_inches=total_frame_in / max(quantity, 1),
-            quantity=self.apply_waste(
-                self.linear_feet_to_pieces(total_frame_ft), self.WASTE_TUBE),
-            unit_price=round(total_frame_ft * frame_price_ft / max(
-                self.linear_feet_to_pieces(total_frame_ft), 1), 2),
-            cut_type="miter_45",
-            waste_factor=self.WASTE_TUBE,
-        ))
-        total_weight += frame_weight
-
-        # 3. Bottom stretchers (H-frame between legs)
-        stretcher_count = 2 * quantity  # 2 per table (long direction)
-        stretcher_length_in = table_length_in - 4  # Inset from legs
-        stretcher_total_ft = self.inches_to_feet(stretcher_length_in) * stretcher_count
-        stretcher_weight = self.get_weight_lbs(frame_profile, stretcher_total_ft)
-
-        items.append(self.make_material_item(
-            description="Bottom stretchers — %s × %d (%.0f\" each)" % (
-                frame_profile, stretcher_count, stretcher_length_in),
-            material_type="square_tubing",
-            profile=frame_profile,
-            length_inches=stretcher_length_in,
-            quantity=self.apply_waste(stretcher_count, self.WASTE_TUBE),
-            unit_price=round(self.inches_to_feet(stretcher_length_in) * frame_price_ft, 2),
-            cut_type="square",
-            waste_factor=self.WASTE_TUBE,
-        ))
-        total_weight += stretcher_weight
-
-        # Leveling feet hardware
-        hardware.append(self.make_hardware_item(
+        # Hardware
+        hardware = [self.make_hardware_item(
             description="Adjustable leveling feet",
-            quantity=4 * quantity,
+            quantity=4 * max(quantity, 1),
             options=[
                 {"supplier": "McMaster-Carr", "price": 5.00, "url": "", "part_number": None, "lead_days": 3},
                 {"supplier": "Amazon", "price": 3.50, "url": "", "part_number": None, "lead_days": 5},
                 {"supplier": "Grainger", "price": 6.00, "url": "", "part_number": None, "lead_days": 2},
             ],
-        ))
+        )]
 
-        # Weld totals
-        total_weld_inches = leg_count * 8  # Leg-to-frame welds (4 sides × 2")
-        total_weld_inches += stretcher_count * 4  # Stretcher welds
-        total_weld_inches += quantity * frame_perim_in * 0.1  # Frame corner welds
-
-        # Surface area
-        total_sq_ft = self.sq_ft_from_dimensions(table_length_in, table_width_in) * quantity
-
+        assumptions.append("Cut list generated by AI from custom design description.")
         assumptions.append(
-            "Table: %.0f\" × %.0f\" × %.0f\" height × %d unit(s). "
-            "Top material (wood, stone, glass) NOT included — steel frame only." % (
-                table_length_in, table_width_in, table_height_in, quantity))
+            "Top material (wood, stone, glass) NOT included — steel frame only.")
 
         return self.make_material_list(
             job_type="furniture_table",

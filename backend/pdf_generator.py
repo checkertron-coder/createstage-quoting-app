@@ -4,15 +4,17 @@ PDF Quote Generator — Stage 6.
 Generates professional PDF quote documents from PricedQuote data.
 Uses fpdf2 (pure Python, no system dependencies).
 
-All 8 sections always present:
+All 10 sections always present:
 1. Header + Job Summary
 2. Material Breakdown
 3. Cut List
-4. Hardware & Parts
-5. Labor Breakdown
-6. Finishing
-7. Project Total
-8. Assumptions & Exclusions
+4. Detailed Cut List (AI-enhanced, when available)
+5. Hardware & Parts
+6. Labor Breakdown
+7. Finishing
+8. Fabrication Sequence (AI-generated build instructions, when available)
+9. Project Total
+10. Assumptions & Exclusions
 
 White-labeled: uses shop name/logo from user profile, no CreateStage branding.
 """
@@ -40,6 +42,16 @@ JOB_TYPE_NAMES = {
     "bollard": "Bollard",
     "repair_structural": "Structural Repair",
     "custom_fab": "Custom Fabrication",
+    "offroad_bumper": "Off-Road Bumper",
+    "rock_slider": "Rock Slider / Rocker Guard",
+    "roll_cage": "Roll Cage / Roll Bar",
+    "exhaust_custom": "Custom Exhaust",
+    "trailer_fab": "Custom Trailer",
+    "structural_frame": "Structural Steel Frame",
+    "furniture_other": "Custom Furniture / Fixtures",
+    "sign_frame": "Sign Frame / Bracket",
+    "led_sign_custom": "Custom LED / Illuminated Sign",
+    "product_firetable": "FireTable Product",
 }
 
 # Labor process display names
@@ -357,6 +369,28 @@ def generate_quote_pdf(
 
     pdf.ln(4)
 
+    # ── SECTION 3B: Detailed Cut List (AI-enhanced, when available) ──
+    detailed_cuts = priced_quote.get("detailed_cut_list", [])
+    if detailed_cuts:
+        pdf.section_header("DETAILED CUT LIST")
+        detail_cols = [("Piece", 55), ("Profile", 35), ("Length", 25), ("Qty", 15),
+                       ("Cut", 25), ("Notes", 35)]
+        detail_widths = [c[1] for c in detail_cols]
+        pdf.table_header(detail_cols)
+
+        for cut in detailed_cuts:
+            desc = _safe(str(cut.get("description", ""))[:28])
+            profile = _safe(str(cut.get("profile", ""))[:18])
+            length = cut.get("length_inches")
+            qty = cut.get("quantity", 1)
+            cut_type = _safe(str(cut.get("cut_type", "square"))[:12])
+            notes = _safe(str(cut.get("notes", ""))[:18])
+            length_str = '%.0f"' % length if length else "-"
+            pdf.table_row([desc, profile, length_str, str(qty), cut_type, notes],
+                          detail_widths)
+
+        pdf.ln(4)
+
     # ── SECTION 4: Hardware & Parts ──
     hardware = priced_quote.get("hardware", [])
     consumables = priced_quote.get("consumables", [])
@@ -455,7 +489,46 @@ def generate_quote_pdf(
     fin_sub = priced_quote.get("finishing_subtotal", fin_total)
     pdf.subtotal_row("Finishing Subtotal", fin_sub)
 
-    # ── SECTION 7: Project Total ──
+    # ── SECTION 8: Fabrication Sequence (when available) ──
+    build_steps = priced_quote.get("build_instructions", [])
+    if build_steps:
+        pdf.section_header("FABRICATION SEQUENCE")
+        for step in build_steps:
+            step_num = step.get("step", 0)
+            title = _safe(str(step.get("title", "")))
+            description = _safe(str(step.get("description", "")))
+            tools = step.get("tools", [])
+            duration = step.get("duration_minutes", 0)
+
+            # Step header
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.cell(0, 5, "Step %d: %s" % (step_num, title),
+                     new_x="LMARGIN", new_y="NEXT")
+
+            # Description
+            pdf.set_font("Helvetica", "", 8)
+            pdf.set_x(pdf.l_margin + 5)
+            pdf.multi_cell(pw - 5, 4, description)
+
+            # Tools and duration
+            if tools or duration:
+                pdf.set_font("Helvetica", "I", 7)
+                pdf.set_text_color(100, 100, 100)
+                info_parts = []
+                if tools:
+                    tools_str = ", ".join(_safe(str(t)) for t in tools[:5])
+                    info_parts.append("Tools: %s" % tools_str)
+                if duration:
+                    info_parts.append("~%d min" % duration)
+                pdf.set_x(pdf.l_margin + 5)
+                pdf.cell(pw - 5, 4, " | ".join(info_parts),
+                         new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(0, 0, 0)
+            pdf.ln(2)
+
+        pdf.ln(2)
+
+    # ── SECTION 9: Project Total ──
     pdf.section_header("PROJECT TOTAL")
     pdf.set_font("Helvetica", "", 10)
 
@@ -501,7 +574,7 @@ def generate_quote_pdf(
     pdf.set_text_color(0, 0, 0)
     pdf.ln(14)
 
-    # ── SECTION 8: Assumptions & Exclusions ──
+    # ── SECTION 10: Assumptions & Exclusions ──
     assumptions = priced_quote.get("assumptions", [])
     exclusions = priced_quote.get("exclusions", [])
 

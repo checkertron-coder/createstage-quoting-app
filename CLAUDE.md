@@ -1,6 +1,6 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: Session 3B-Hotfix (Feb 28, 2026) — all contracts verified against code.*
+*Last verified: AI Cut List Hotfix (Feb 28, 2026) — all contracts verified against code.*
 
 ---
 
@@ -17,7 +17,7 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 ### What Works — Full 6-Stage Pipeline + Bid Parser + Seed Data + All 25 Calculators + Photo Upload + Vision
 - **Stage 1 — Intake:** Job type detection via keyword matching + Gemini fallback, field extraction from description + photos
 - **Stage 2 — Clarify:** 25 question trees (all job types), branching logic, completion tracking, extraction confirmation UI
-- **Stage 3 — Calculate:** 25 deterministic calculators (all job types covered, CustomFab as universal fallback)
+- **Stage 3 — Calculate:** 25 deterministic calculators (all job types covered, CustomFab as universal fallback), AI-assisted cut list generation for custom/complex designs
 - **Stage 4 — Estimate:** AI labor estimation (Gemini 2.0 Flash) with rule-based fallback, finishing builder, historical validator
 - **Stage 5 — Price:** Hardware sourcing (25-item catalog), consumable estimation, pricing engine, markup options (0-30%)
 - **Stage 6 — Output:** Frontend UI (vanilla JS SPA), PDF generator (fpdf2), quote history, PDF download
@@ -54,7 +54,7 @@ createstage-quoting-app/
 │   ├── historical_validator.py — Stage 4: Compare estimates vs historical actuals
 │   ├── hardware_sourcer.py  — Stage 5: 25-item hardware catalog + consumable estimation
 │   ├── pricing_engine.py    — Stage 5: PricedQuote assembly, markup options, subtotals
-│   ├── pdf_generator.py     — Stage 6: PDF generation with fpdf2, _safe() Unicode helper
+│   ├── pdf_generator.py     — Stage 6: PDF generation (10 sections), _safe() Unicode helper
 │   ├── bid_parser.py        — Session 7: Bid scope extraction (Gemini + keyword fallback)
 │   ├── pdf_extractor.py     — Session 7: PDF text extraction via pdfplumber
 │   ├── routers/
@@ -98,7 +98,8 @@ createstage-quoting-app/
 │   │   ├── furniture_other.py   — Routes by item_type (shelving/bracket/generic)
 │   │   ├── sign_frame.py        — Frame tube + mounting by sign_type
 │   │   ├── led_sign_custom.py   — Channel letters / cabinet estimate
-│   │   └── product_firetable.py — BOM-based from firetable_pro_bom.json
+│   │   ├── product_firetable.py — BOM-based from firetable_pro_bom.json
+│   │   └── ai_cut_list.py      — AI-assisted cut list + build instructions (Gemini)
 │   └── question_trees/
 │       ├── __init__.py
 │       ├── engine.py        — QuestionTreeEngine (load, detect_job_type, extract_fields, extract_from_photo, next_questions)
@@ -151,6 +152,7 @@ createstage-quoting-app/
 │   ├── test_session7_bid_parser.py      — 26 tests (bid parser)
 │   ├── test_session8_integration.py    — 15 tests (smoke, seed data, meta)
 │   ├── test_photo_extraction.py        — 20 tests (photo upload, vision, extraction confirmation)
+│   ├── test_ai_cut_list.py             — 20 tests (AI cut list, furniture fixes, PDF sections)
 │   └── fixtures/
 │       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
 ├── alembic/                 — Database migrations
@@ -641,7 +643,8 @@ pip install pytest-randomly && pytest tests/ -v -p randomly
 | `test_session7_bid_parser.py` | 26 |
 | `test_session8_integration.py` | 15 |
 | `test_photo_extraction.py` | 20 |
-| **Total** | **258** |
+| `test_ai_cut_list.py` | 20 |
+| **Total** | **278** |
 
 ---
 

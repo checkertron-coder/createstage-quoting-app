@@ -4,7 +4,7 @@
 
 ---
 
-## Current Status: Session 3B-Hotfix complete — Photo Upload + Vision + Extraction Confirmation
+## Current Status: AI Cut List Hotfix complete — AI-assisted cut lists + build instructions + PDF sections
 
 **Live URL:** createstage-quoting-app-production.up.railway.app
 **Repo:** github.com/checkertron-coder/createstage-quoting-app
@@ -912,6 +912,64 @@ Using keyword fallback (no Gemini API key in test environment):
 #### Tests
 - pytest results: **258 passed, 0 failed** (11 S1 + 21 S2A + 23 S2B + 30 S3 + 35 S3B + 26 S4 + 26 S5 + 25 S6 + 26 S7 + 15 S8 + 20 Photo)
 - Test file: `tests/test_photo_extraction.py`
+
+---
+
+### AI Cut List Hotfix — 2026-02-28 (Opus 4.6)
+
+#### Completed
+- **Deliverable 1 — AI Cut List Generator (`backend/calculators/ai_cut_list.py`)**
+  - `AICutListGenerator` class with Gemini-powered cut list generation
+  - `generate_cut_list(job_type, fields)` — sends structured prompt, parses JSON array response
+  - `generate_build_instructions(job_type, fields, cut_list)` — fabrication sequence generation
+  - Response parsing with validation: sanitizes bad values (negative length, invalid cut types)
+  - Graceful fallback: returns None when Gemini unavailable, callers use template output
+  - Same API call pattern as labor_estimator.py (urllib.request, responseMimeType: application/json)
+
+- **Deliverable 2 — Calculator Integration (6 calculators)**
+  - Added `_try_ai_cut_list()` and `_build_from_ai_cuts()` to:
+    - `furniture_table.py` — triggers on custom design keywords (curved, trestle, pedestal, etc.)
+    - `custom_fab.py` — always tries AI when description/notes field is present
+    - `furniture_other.py` — triggers on custom/artistic keywords
+    - `led_sign_custom.py` — triggers on custom/sculptural/3D keywords
+    - `repair_decorative.py` — triggers on fabricate/replicate/match design keywords
+    - `repair_structural.py` — triggers on complex/extensive keywords
+  - All calculators still produce valid output without Gemini (template fallback)
+
+- **Deliverable 3 — Furniture Table Fixes**
+  - Individual frame pieces: 2 long rails + 2 short rails (not single perimeter piece)
+  - Center stretcher as separate item
+  - Dimension parser: handles "L x W x H" format (e.g., "20 x 20 x 32")
+  - Also handles "×" separator, feet conversion, 2-number fallback
+  - 4 legs confirmed (waste factor applies: 4 * 1.05 = 5 after waste rounding)
+
+- **Deliverable 4 — PDF Template Updates (`backend/pdf_generator.py`)**
+  - Added "DETAILED CUT LIST" section (Section 3B) — renders when `detailed_cut_list` key present
+  - Added "FABRICATION SEQUENCE" section (Section 8) — renders when `build_instructions` key present
+  - Each build step shows: step number, title, description, tools, duration
+  - PDF now has 10 sections (up from 8), sections 3B and 8 are conditional
+  - Added all 25 job types to `JOB_TYPE_NAMES` dict (was missing 10 new types)
+
+- **Deliverable 5 — Tests (`tests/test_ai_cut_list.py`)**
+  - 20 tests covering:
+    - AICutListGenerator (5): prompt building, response parsing, sanitization, invalid response, no API key
+    - Furniture table fixes (5): 4 legs, individual frame pieces, L×W×H parser, feet parser, individual fields
+    - AI integration (3): trigger keywords, custom_fab always tries, all 6 calculators work without AI
+    - Build instructions (3): parse valid, no API key, prompt includes cut list
+    - PDF sections (4): all 25 job types, detailed cut list renders, build instructions render, no AI sections renders
+
+#### Not completed / blocked
+- None — all 5 deliverables complete
+
+#### Architectural decisions made
+- AI cut list is opt-in per calculator: only triggers on specific keywords suggesting custom/complex work
+- Custom_fab always tries AI when description is present (it's the freeform fallback)
+- AI sections in PDF are conditional — no empty sections when AI data not available
+- Gemini response parsed with sanitization: negative lengths default to 12", invalid cut types default to "square"
+
+#### Tests
+- pytest results: **278 passed, 0 failed** (258 existing + 20 new)
+- Test file: `tests/test_ai_cut_list.py`
 
 ---
 
