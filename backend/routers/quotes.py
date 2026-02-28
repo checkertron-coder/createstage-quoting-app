@@ -11,9 +11,15 @@ router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 
 def generate_quote_number(db: Session) -> str:
-    count = db.query(models.Quote).count()
-    year = datetime.utcnow().year
-    return f"CS-{year}-{str(count + 1).zfill(4)}"
+    try:
+        count = db.query(models.Quote).count()
+        year = datetime.utcnow().year
+        return f"CS-{year}-{str(count + 1).zfill(4)}"
+    except Exception:
+        db.rollback()
+        # Fallback: timestamp-based quote number if DB schema is outdated
+        now = datetime.utcnow()
+        return f"CS-{now.year}-{now.strftime('%m%d%H%M%S')}"
 
 
 def get_process_rate(process_type, db: Session, fallback_rate: float = 125.0) -> float:

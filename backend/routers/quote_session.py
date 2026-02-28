@@ -571,6 +571,8 @@ def price_quote(
 
     # Run pricing engine
     from ..pricing_engine import PricingEngine
+    from sqlalchemy.orm.attributes import flag_modified
+
     pricing_engine = PricingEngine()
     priced_quote = pricing_engine.build_priced_quote(session_data, user_dict)
 
@@ -583,44 +585,50 @@ def price_quote(
         photos=session.photo_urls or [],
     )
 
-    # Generate quote number
-    from .quotes import generate_quote_number
-    quote_number = generate_quote_number(db)
+    try:
+        # Generate quote number
+        from .quotes import generate_quote_number
+        quote_number = generate_quote_number(db)
 
-    # Create Quote record
-    quote = models.Quote(
-        quote_number=quote_number,
-        job_type=session.job_type,
-        user_id=current_user.id,
-        session_id=session_id,
-        inputs_json=quote_params,
-        outputs_json=priced_quote,
-        selected_markup_pct=priced_quote.get("selected_markup_pct", 15),
-        subtotal=priced_quote.get("subtotal", 0),
-        total=priced_quote.get("total", 0),
-        project_description=fields.get("description", ""),
-    )
-    db.add(quote)
-    db.flush()
+        # Create Quote record
+        quote = models.Quote(
+            quote_number=quote_number,
+            job_type=session.job_type,
+            user_id=current_user.id,
+            session_id=session_id,
+            inputs_json=quote_params,
+            outputs_json=priced_quote,
+            selected_markup_pct=priced_quote.get("selected_markup_pct", 15),
+            subtotal=priced_quote.get("subtotal", 0),
+            total=priced_quote.get("total", 0),
+            project_description=fields.get("description", ""),
+        )
+        db.add(quote)
+        db.flush()
 
-    # Update priced_quote with the quote_id
-    priced_quote["quote_id"] = quote.id
-    quote.outputs_json = priced_quote
+        # Update priced_quote with the quote_id
+        priced_quote["quote_id"] = quote.id
+        quote.outputs_json = priced_quote
 
-    # Transition session to output stage
-    from sqlalchemy.orm.attributes import flag_modified
-    session.stage = "output"
-    session.status = "complete"
-    session.updated_at = datetime.utcnow()
-    flag_modified(session, "params_json")
-    db.commit()
+        # Transition session to output stage
+        session.stage = "output"
+        session.status = "complete"
+        session.updated_at = datetime.utcnow()
+        flag_modified(session, "params_json")
+        db.commit()
 
-    return {
-        "session_id": session_id,
-        "quote_id": quote.id,
-        "quote_number": quote_number,
-        "priced_quote": priced_quote,
-    }
+        return {
+            "session_id": session_id,
+            "quote_id": quote.id,
+            "quote_number": quote_number,
+            "priced_quote": priced_quote,
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Quote creation failed: {str(e)}. Session is intact — retry /price.",
+        )
 
 
 def _serialize_questions(questions: list[dict]) -> list[dict]:
