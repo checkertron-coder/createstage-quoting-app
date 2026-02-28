@@ -1,0 +1,167 @@
+{
+    "job_type": "furniture_table",
+    "version": "1.0",
+    "display_name": "Steel Furniture / Table Base",
+    "category": "specialty",
+    "required_fields": [
+        "item_type", "dimensions", "material", "leg_design",
+        "top_supply", "quantity", "finish"
+    ],
+    "questions": [
+        {
+            "id": "item_type",
+            "text": "What type of furniture piece?",
+            "type": "choice",
+            "options": ["Dining table base", "Coffee table base", "Console / sofa table base", "Desk frame", "Bar height table base", "Shelving / bookcase frame", "Bench frame", "Custom furniture piece"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "dimensions",
+            "text": "What are the overall dimensions? (length x width x height)",
+            "type": "text",
+            "required": true,
+            "hint": "Standard dining table height: 30\". Bar height: 42\". Coffee table: 16-18\". List all dimensions.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "quantity",
+            "text": "How many units?",
+            "type": "number",
+            "required": true,
+            "hint": "Multiple identical units are more efficient — jig setup is one-time cost spread across all pieces.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "What material?",
+            "type": "choice",
+            "options": ["Mild steel (most common)", "Stainless steel", "Aluminum"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Stainless steel": ["stainless_grade"]
+            }
+        },
+        {
+            "id": "stainless_grade",
+            "text": "What stainless grade?",
+            "type": "choice",
+            "options": ["304 (standard — interior use)", "316 (marine grade — exterior / food contact)"],
+            "required": false,
+            "hint": "316 is required for food service or outdoor/coastal environments. 304 is fine for most interior furniture. Stainless requires TIG welding — adds 30-50% to labor vs. mild steel MIG.",
+            "depends_on": "material",
+            "branches": null
+        },
+        {
+            "id": "leg_design",
+            "text": "What leg/base design?",
+            "type": "choice",
+            "options": ["Straight legs (4 legs)", "Hairpin legs", "Trestle base (two end frames + stretcher)", "Pedestal base (single center column)", "X-base or cross base", "Slab / panel legs (flat plate)", "I-beam or channel legs (industrial)", "Custom design"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Custom design": ["design_reference"]
+            }
+        },
+        {
+            "id": "leg_material_profile",
+            "text": "What material profile for the legs/frame?",
+            "type": "choice",
+            "options": ["1\" square tube (light furniture)", "1-1/2\" square tube (standard)", "2\" square tube (heavy/large tables)", "1\" round tube", "1-1/2\" round tube", "2\" round tube", "Flat bar (1/4\" x 2\" or similar)", "Angle iron"],
+            "required": false,
+            "hint": "Square tube is most common for modern furniture. Round tube for mid-century modern. Flat bar for minimalist/contemporary.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "top_supply",
+            "text": "Who is supplying the top surface?",
+            "type": "choice",
+            "options": ["No top needed — base/frame only", "Steel top included (we fabricate)", "Wood top by others — we provide mounting points", "Glass top by others — we provide supports", "Stone/concrete top by others — we provide supports"],
+            "required": true,
+            "hint": "Most furniture orders are base/frame only. If we supply a steel top, specify thickness and edge treatment.",
+            "depends_on": null,
+            "branches": {
+                "Steel top included (we fabricate)": ["top_thickness"]
+            }
+        },
+        {
+            "id": "top_thickness",
+            "text": "Steel top thickness?",
+            "type": "choice",
+            "options": ["1/8\" (light — decorative only)", "3/16\" (standard)", "1/4\" (heavy duty)", "3/8\" (industrial)"],
+            "required": false,
+            "hint": "Thicker tops require more grinding/finishing work. 3/16\" is typical for furniture.",
+            "depends_on": "top_supply",
+            "branches": null
+        },
+        {
+            "id": "leveler_feet",
+            "text": "Adjustable leveler feet?",
+            "type": "choice",
+            "options": ["Yes — threaded leveler feet", "No — fixed feet / flat bottom", "Floor glides (plastic or felt)"],
+            "required": false,
+            "hint": "Leveler feet are strongly recommended for tables — floors are never perfectly level. Threaded inserts welded into legs.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "ada_compliance",
+            "text": "Does this need to meet ADA requirements?",
+            "type": "choice",
+            "options": ["No — residential / non-public", "Yes — ADA compliant (public / commercial space)"],
+            "required": false,
+            "hint": "ADA requires 27\" minimum knee clearance height, 30\" wide x 19\" deep knee space. Pedestal bases can block wheelchair access.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "weld_visibility",
+            "text": "How visible will the welds be?",
+            "type": "choice",
+            "options": ["Exposed welds OK (industrial look)", "Ground smooth and blended (furniture finish)", "Hidden welds only (plug welds, internal joints)"],
+            "required": false,
+            "hint": "Ground/blended welds add significant labor — budget 30-50% more grind time for furniture-grade finish vs. structural.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Clear coat (shows steel/patina)", "Paint (in-house)", "Blackened / patina (hot oil finish)", "Brushed stainless (no coating)", "Raw steel (customer finishes)"],
+            "required": true,
+            "hint": "Clear coat over raw steel gives an industrial look but will develop patina over time. Powder coat is most durable for daily use.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Matte black", "Satin black", "White", "Bronze", "Gold", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have reference photos, sketches, or drawings?",
+            "type": "photo",
+            "required": false,
+            "hint": "Furniture pieces vary widely — a reference photo eliminates guesswork and speeds up the quote.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

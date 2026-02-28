@@ -1,142 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CreateStage | AI Quoting</title>
-  <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fabrication Quoting</title>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-  <div class="app">
-
-    <!-- HEADER -->
-    <header class="app-header">
-      <div class="header-left">
-        <span class="logo-mark">⬡</span>
-        <span class="logo-text">CreateStage</span>
-        <span class="logo-tag">AI Quoting</span>
-      </div>
-      <div class="header-right">
-        <button class="hdr-btn" onclick="showView('quotes')">All Quotes</button>
-        <button class="hdr-btn active" onclick="showView('chat')">+ New Quote</button>
-      </div>
-    </header>
-
-    <!-- CHAT VIEW -->
-    <div id="view-chat" class="view active">
-      <div class="chat-layout">
-
-        <!-- LEFT: Conversation -->
-        <div class="chat-panel">
-          <div class="chat-thread" id="chat-thread">
-            <div class="chat-welcome">
-              <div class="welcome-icon">⬡</div>
-              <h2>Describe the job.</h2>
-              <p>Tell me what you're building — materials, size, finish, anything you know. I'll build the estimate.</p>
-              <div class="examples">
-                <button class="example-chip" onclick="useExample(this)">6x8 steel gate, 2" square tube frame, expanded metal infill, hinges, powder coat black</button>
-                <button class="example-chip" onclick="useExample(this)">10ft stainless handrail, TIG welded, brushed finish, field install downtown Chicago</button>
-                <button class="example-chip" onclick="useExample(this)">Custom steel desk frame, 72x30, 2x2 11ga tube, shelf brackets, clear coat</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="chat-input-bar">
-            <div class="input-wrap">
-              <textarea
-                id="job-input"
-                placeholder="Describe your job... (materials, size, finish, complexity)"
-                rows="1"
-                onkeydown="handleKey(event)"
-                oninput="autoResize(this)"
-              ></textarea>
-              <button id="send-btn" class="send-btn" onclick="submitJob()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="22" y1="2" x2="11" y2="13"></line>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-              </button>
-            </div>
-            <div class="input-hint">Enter to send · Shift+Enter for new line</div>
-          </div>
+    <!-- Navigation -->
+    <nav class="app-nav" id="main-nav" style="display:none">
+        <div class="nav-left">
+            <span class="nav-brand">Quoting</span>
+            <span class="nav-shop-name" id="nav-shop-name"></span>
         </div>
-
-        <!-- RIGHT: Live Quote Panel -->
-        <div class="quote-panel" id="quote-panel">
-          <div class="qp-header">
-            <span class="qp-title">Live Estimate</span>
-            <span class="qp-status" id="qp-status">—</span>
-          </div>
-          <div class="qp-body" id="qp-body">
-            <div class="qp-empty">
-              <p>Your estimate will build here as you describe the job.</p>
-            </div>
-          </div>
-          <div class="qp-footer" id="qp-footer" style="display:none">
-            <div class="qp-totals">
-              <div class="qp-row"><span>Cost</span><span id="qp-cost">—</span></div>
-              <div class="qp-row total"><span>Quote Total</span><span id="qp-total">—</span></div>
-            </div>
-            <button class="save-btn" onclick="showSaveModal()">Save Quote →</button>
-          </div>
+        <div class="nav-right">
+            <button class="nav-btn active" data-view="quote" onclick="App.showView('quote')">New Quote</button>
+            <button class="nav-btn" data-view="history" onclick="App.showView('history')">Quotes</button>
+            <button class="nav-btn" data-view="profile" onclick="Auth.renderProfileView(); App.showView('profile')">Profile</button>
+            <button class="nav-btn-logout" onclick="Auth.logout()">Log Out</button>
         </div>
+    </nav>
 
-      </div>
-    </div>
+    <!-- Views -->
+    <main>
+        <div id="view-auth" style="display:none"></div>
+        <div id="view-profile" style="display:none"></div>
+        <div id="view-quote" style="display:none"></div>
+        <div id="view-history" style="display:none"></div>
+    </main>
 
-    <!-- QUOTES VIEW -->
-    <div id="view-quotes" class="view">
-      <div class="list-view">
-        <div class="list-header">
-          <h2>All Quotes</h2>
-          <button class="hdr-btn active" onclick="showView('chat')">+ New Quote</button>
-        </div>
-        <div id="quotes-list" class="quotes-grid"></div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- SAVE QUOTE MODAL -->
-  <div class="modal-overlay" id="save-modal" style="display:none" onclick="closeSaveModal(event)">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Save Quote</h3>
-        <button class="modal-close" onclick="closeSaveModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <label class="field-label">Customer Name *
-          <input type="text" id="save-customer-name" placeholder="e.g. Chicago Properties LLC" autocomplete="off">
-        </label>
-        <label class="field-label">Company
-          <input type="text" id="save-company" placeholder="Optional">
-        </label>
-        <label class="field-label">Email
-          <input type="email" id="save-email" placeholder="Optional">
-        </label>
-        <label class="field-label">Notes / Terms
-          <textarea id="save-notes" rows="2" placeholder="Payment terms, lead time, valid 30 days..."></textarea>
-        </label>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-cancel" onclick="closeSaveModal()">Cancel</button>
-        <button class="btn-save" onclick="saveQuote()">Save Quote</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- QUOTE DETAIL MODAL -->
-  <div class="modal-overlay" id="detail-modal" style="display:none" onclick="closeDetailModal(event)">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <h3 id="detail-title">Quote Detail</h3>
-        <button class="modal-close" onclick="closeDetailModal()">✕</button>
-      </div>
-      <div class="modal-body" id="detail-body"></div>
-    </div>
-  </div>
-
-  <script src="/static/app.js"></script>
+    <!-- Scripts (order matters: api first, then auth, then quote-flow, then app) -->
+    <script src="/js/api.js"></script>
+    <script src="/js/auth.js"></script>
+    <script src="/js/quote-flow.js"></script>
+    <script src="/js/app.js"></script>
 </body>
 </html>

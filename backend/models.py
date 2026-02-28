@@ -279,6 +279,22 @@ class QuoteLineItem(Base):
     quote = relationship("Quote", back_populates="line_items")
 
 
+class BidAnalysis(Base):
+    """Stored bid document analysis — users may revisit extractions."""
+    __tablename__ = "bid_analyses"
+
+    id = Column(String, primary_key=True)  # UUID
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    filename = Column(String, nullable=True)
+    page_count = Column(Integer, nullable=True)
+    extraction_confidence = Column(Float, nullable=True)
+    items_json = Column(JSON, nullable=True)     # List of ExtractedItem
+    warnings_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class MaterialPrice(Base):
     __tablename__ = "material_prices"
 

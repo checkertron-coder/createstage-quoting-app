@@ -1,0 +1,145 @@
+{
+    "job_type": "custom_fab",
+    "version": "1.0",
+    "display_name": "Custom Fabrication",
+    "category": "specialty",
+    "required_fields": [
+        "description", "has_drawings", "material",
+        "approximate_size", "quantity"
+    ],
+    "questions": [
+        {
+            "id": "description",
+            "text": "Describe the item you need fabricated. Be as detailed as possible.",
+            "type": "text",
+            "required": true,
+            "hint": "Include: what it is, what it's for, how it will be used, and any specific requirements. The more detail, the faster and more accurate the quote.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "has_drawings",
+            "text": "Do you have drawings, sketches, or reference images?",
+            "type": "choice",
+            "options": ["Yes — engineered/CAD drawings", "Yes — hand sketch or reference photos", "No — I need help with design"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Yes — engineered/CAD drawings": ["upload_drawings"],
+                "Yes — hand sketch or reference photos": ["upload_drawings"],
+                "No — I need help with design": ["design_charge_note"]
+            }
+        },
+        {
+            "id": "upload_drawings",
+            "text": "Upload your drawings, sketches, or reference photos.",
+            "type": "photo",
+            "required": false,
+            "hint": "Accepted: photos of hand sketches, PDFs, DXF/DWG references, or even photos of a similar item you want replicated.",
+            "depends_on": "has_drawings",
+            "branches": null
+        },
+        {
+            "id": "design_charge_note",
+            "text": "Design/engineering note: Custom items without drawings require design time. We charge $75-125/hr for design work, which is credited toward fabrication if the project proceeds. Should we include design time in this quote?",
+            "type": "choice",
+            "options": ["Yes — include design time in quote", "No — I'll provide drawings before fabrication starts", "Let's discuss the design first, then decide"],
+            "required": false,
+            "hint": "Even a rough hand sketch dramatically reduces design time. A napkin drawing is better than no drawing.",
+            "depends_on": "has_drawings",
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "What material?",
+            "type": "choice",
+            "options": ["Mild steel (most common / cheapest)", "Stainless steel (304)", "Stainless steel (316 — marine/food grade)", "Aluminum", "Corten / weathering steel", "Not sure — recommend based on application"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "approximate_size",
+            "text": "Approximate overall dimensions? (doesn't need to be exact — just gives us scale)",
+            "type": "text",
+            "required": true,
+            "hint": "Example: 'about 4 ft x 2 ft x 3 ft tall' or 'fits on a tabletop' or '10 ft long beam'. Scale determines material cost, handling, and shipping.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "quantity",
+            "text": "How many units?",
+            "type": "number",
+            "required": true,
+            "hint": "One-off custom pieces require full setup time. Multiple identical pieces amortize setup across units — significant savings at 5+ units.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "tolerance_requirements",
+            "text": "What precision/tolerance is needed?",
+            "type": "choice",
+            "options": ["Standard fab tolerance (+/- 1/8\")", "Tight tolerance (+/- 1/16\")", "Precision / machine-shop level (+/- 0.010\")", "Not critical — general fabrication"],
+            "required": false,
+            "hint": "Standard fab shop tolerance is +/- 1/8\". Anything tighter requires more setup time, checking, and possibly CNC operations. Machine-shop tolerances may require a different vendor.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat", "Paint (in-house)", "Clear coat", "Galvanized", "Brushed / polished (stainless or aluminum)", "Raw steel", "Not sure — recommend based on use"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Powder coat": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "White", "Gray", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation or delivery?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only", "Shop pickup", "Ship (need crating/freight)"],
+            "required": false,
+            "hint": "Large or heavy items may need freight shipping. We can arrange crating and LTL freight.",
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"],
+                "Ship (need crating/freight)": ["ship_destination"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "ship_destination",
+            "text": "Where should we ship to?",
+            "type": "text",
+            "required": false,
+            "hint": "City/state or zip code. Commercial address or residential? (Residential delivery costs more for freight.)",
+            "depends_on": "installation",
+            "branches": null
+        }
+    ]
+}

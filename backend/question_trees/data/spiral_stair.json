@@ -1,0 +1,207 @@
+{
+    "job_type": "spiral_stair",
+    "version": "1.0",
+    "display_name": "Spiral Staircase",
+    "category": "architectural",
+    "required_fields": [
+        "diameter", "total_rise", "num_treads", "material",
+        "tread_style", "handrail_style", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "diameter",
+            "text": "What is the overall diameter of the spiral staircase?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": true,
+            "hint": "IRC R311.7.10.1: min 5 ft (60\") diameter for code compliance. 6 ft+ is more comfortable. Measured from outside edge to outside edge.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "total_rise",
+            "text": "What is the total rise? (floor to floor height)",
+            "type": "measurement",
+            "unit": "inches",
+            "required": true,
+            "hint": "Standard story height: 108-120 inches. Measure from finished floor to finished floor.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "num_treads",
+            "text": "How many treads? (or should we calculate from code requirements?)",
+            "type": "choice",
+            "options": ["Calculate for me based on total rise", "I know — let me specify"],
+            "required": true,
+            "hint": "IRC max rise per tread: 9.5\". Typical: 12-16 treads for a full floor. A full 360-degree rotation is usually 12 treads (30-degree wedge each).",
+            "depends_on": null,
+            "branches": {
+                "I know — let me specify": ["custom_tread_count"]
+            }
+        },
+        {
+            "id": "custom_tread_count",
+            "text": "How many treads?",
+            "type": "number",
+            "required": false,
+            "hint": null,
+            "depends_on": "num_treads",
+            "branches": null
+        },
+        {
+            "id": "rotation_direction",
+            "text": "Rotation direction?",
+            "type": "choice",
+            "options": ["Clockwise (ascending)", "Counterclockwise (ascending)", "No preference"],
+            "required": false,
+            "hint": "Consider which direction feels natural when climbing, and where the stair exits at the top.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "What material?",
+            "type": "choice",
+            "options": ["Mild steel (most common)", "Stainless steel", "Aluminum"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Stainless steel": ["stainless_note"]
+            }
+        },
+        {
+            "id": "stainless_note",
+            "text": "Stainless steel note: Spiral stairs in stainless require TIG welding throughout and add approximately 30-50% to labor cost vs. mild steel. The material cost is also 4-5x higher. Proceed with stainless?",
+            "type": "choice",
+            "options": ["Yes — stainless is required", "Let me reconsider — quote in mild steel instead"],
+            "required": false,
+            "hint": "If the look is the goal but not corrosion resistance, consider mild steel with a brushed nickel powder coat for a similar aesthetic at much lower cost.",
+            "depends_on": "material",
+            "branches": null
+        },
+        {
+            "id": "tread_style",
+            "text": "What tread style?",
+            "type": "choice",
+            "options": ["Solid steel plate (1/4\" or 3/8\")", "Checker plate / diamond plate", "Bar grating (industrial)", "Steel frame with wood overlay (wood by others)", "Steel frame with glass insert", "Perforated steel"],
+            "required": true,
+            "hint": "Solid plate is most common for residential spiral stairs. Wood overlay treads let you match interior flooring.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "center_column",
+            "text": "Center column style?",
+            "type": "choice",
+            "options": ["Round pipe (standard — 3-4\" diameter)", "Square tube", "Decorative wrapped column", "Open center (no column — advanced engineering)"],
+            "required": false,
+            "hint": "3.5\" schedule 40 pipe is standard. Open-center spirals are structurally complex and significantly more expensive.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "center_column_size",
+            "text": "Center column diameter?",
+            "type": "choice",
+            "options": ["3\" pipe", "3.5\" pipe (standard)", "4\" pipe (heavy duty)", "6\" pipe (commercial)"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "handrail_style",
+            "text": "Handrail style?",
+            "type": "choice",
+            "options": ["Formed steel flat bar (helical — most common)", "Round tube (bent to helix)", "Square tube (bent to helix)", "Wood handrail on steel brackets"],
+            "required": true,
+            "hint": "Handrail bending/forming for spiral stairs is skilled-labor intensive. Flat bar is easiest to form; round tube is hardest and most expensive.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "baluster_style",
+            "text": "Baluster/infill style?",
+            "type": "choice",
+            "options": ["Vertical square bar", "Vertical round bar", "Horizontal bars", "Flat bar (contemporary)", "Solid panel", "Cable infill", "None — handrail and center column only"],
+            "required": false,
+            "hint": "Balusters on spiral stairs must be cut/fit to the helical angle. This adds significant labor compared to straight railing.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "headroom_clearance",
+            "text": "Is there sufficient headroom? (min 6'6\" / 78\" clear from tread nosing to structure above)",
+            "type": "choice",
+            "options": ["Yes — verified", "Not sure — need to measure", "Tight — may need to adjust tread count or rotation"],
+            "required": false,
+            "hint": "IRC R311.7.10.1 requires min 6'6\" headroom. This is measured from the leading edge of each tread to the nearest overhead obstruction.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "landing_platform",
+            "text": "Does the staircase need a landing platform at the top?",
+            "type": "choice",
+            "options": ["Yes — steel landing platform included", "No — connects directly to existing floor/opening", "Yes — but by others (we provide connection points)"],
+            "required": false,
+            "hint": "A top landing may be needed if the stair exits through a floor opening. This adds material and labor.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Clear coat (shows steel)", "Galvanized", "Brushed stainless (no coating)", "Raw steel"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "Bronze", "White", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only", "Shop pickup"],
+            "required": true,
+            "hint": "Spiral stairs are typically assembled in sections. Installation through existing floor openings can be challenging — verify access.",
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have reference photos, sketches, or drawings?",
+            "type": "photo",
+            "required": false,
+            "hint": "Photos of the space and desired style help us design the right staircase.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

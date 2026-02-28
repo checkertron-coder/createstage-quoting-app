@@ -1,0 +1,298 @@
+{
+    "job_type": "stair_railing",
+    "version": "1.0",
+    "display_name": "Stair Railing",
+    "category": "railing",
+    "required_fields": [
+        "linear_footage", "location", "application", "railing_height",
+        "stair_angle", "num_risers", "top_rail_profile", "infill_style",
+        "post_mount_type", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "linear_footage",
+            "text": "What is the total length of stair railing needed? (measured along the slope)",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Measure along the stair slope, not the horizontal distance. Include any landing sections.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "location",
+            "text": "Interior or exterior stair railing?",
+            "type": "choice",
+            "options": ["Exterior", "Interior"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "application",
+            "text": "Residential or commercial?",
+            "type": "choice",
+            "options": ["Residential", "Commercial / public building"],
+            "required": true,
+            "hint": "Commercial requires 42\" height, handrails on both sides, and ADA extensions at top/bottom.",
+            "depends_on": null,
+            "branches": {
+                "Commercial / public building": ["ada_required", "wall_handrail"],
+                "Residential": ["wall_handrail"]
+            }
+        },
+        {
+            "id": "ada_required",
+            "text": "Is ADA compliance required?",
+            "type": "choice",
+            "options": ["Yes", "No", "Not sure — assume yes for safety"],
+            "required": false,
+            "hint": "ADA handrails must be graspable (1.25-2\" round), extend 12\" beyond top riser and one tread depth beyond bottom riser.",
+            "depends_on": "application",
+            "branches": null
+        },
+        {
+            "id": "wall_handrail",
+            "text": "Is a wall-mounted handrail needed on the opposite side?",
+            "type": "choice",
+            "options": ["Yes — wall-mount handrail opposite side", "No — railing on one side only", "Railing on both sides (open stair)"],
+            "required": false,
+            "hint": "Commercial code often requires handrails on both sides for stairs wider than 44\". Wall-mount is simpler than a freestanding second railing.",
+            "depends_on": "application",
+            "branches": null
+        },
+        {
+            "id": "stair_angle",
+            "text": "What is the stair angle? (or provide rise and run dimensions)",
+            "type": "choice",
+            "options": ["Standard residential (about 35-37 degrees)", "Steep (38-42 degrees)", "Shallow (under 35 degrees)", "I'll provide rise and run measurements"],
+            "required": true,
+            "hint": "Standard residential stairs are about 7\" rise x 11\" run = ~32-35 degrees. We can calculate from rise/run if you provide those.",
+            "depends_on": null,
+            "branches": {
+                "I'll provide rise and run measurements": ["stair_rise", "stair_run"]
+            }
+        },
+        {
+            "id": "stair_rise",
+            "text": "What is the individual riser height?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": false,
+            "hint": "Measure one step from top of tread to top of next tread. Typical: 7-7.75 inches.",
+            "depends_on": "stair_angle",
+            "branches": null
+        },
+        {
+            "id": "stair_run",
+            "text": "What is the individual tread depth (run)?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": false,
+            "hint": "Measure from nose to nose, or front of tread to front of next tread. Typical: 10-11 inches.",
+            "depends_on": "stair_angle",
+            "branches": null
+        },
+        {
+            "id": "num_risers",
+            "text": "How many risers (steps)?",
+            "type": "number",
+            "required": true,
+            "hint": "Count the number of steps. Typical story height is 13-15 risers.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "stair_width",
+            "text": "How wide is the stairway?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": false,
+            "hint": "Measured wall-to-wall or edge-to-edge. Affects whether railing is on one or both sides.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "railing_height",
+            "text": "What railing height? (measured vertically from stair nosing)",
+            "type": "choice",
+            "options": ["34\" (IRC minimum for stairs)", "36\" (common residential)", "42\" (IBC commercial minimum)", "Custom height"],
+            "required": true,
+            "hint": "IRC R311.7.8: 34-38\" for residential stairs. IBC 1014: 42\" for commercial stairs. Measured vertically from stair nosing.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "top_rail_continuity",
+            "text": "Continuous top rail or post-to-post?",
+            "type": "choice",
+            "options": ["Continuous (rail bends over posts — cleaner look)", "Post-to-post (rail terminates at each post)", "Not sure — show me the difference"],
+            "required": false,
+            "hint": "Continuous is more elegant but harder to fabricate. Post-to-post is more traditional and easier to install in sections.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "top_rail_profile",
+            "text": "What top rail profile?",
+            "type": "choice",
+            "options": ["1-1/2\" round tube (ADA graspable)", "1-1/4\" round tube (ADA graspable)", "Square tube 1-1/2\"", "Flat bar cap", "Wood cap rail (by others)"],
+            "required": true,
+            "hint": "Round tube 1.25-2\" is required for ADA graspability.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "infill_style",
+            "text": "What baluster/infill style?",
+            "type": "choice",
+            "options": ["Vertical square bar", "Vertical round bar", "Horizontal bars", "Cable infill", "Glass panels", "Flat bar", "None (posts and rail only)"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Cable infill": ["cable_diameter"],
+                "Glass panels": ["glass_type"],
+                "Vertical square bar": ["baluster_orientation"],
+                "Vertical round bar": ["baluster_orientation"]
+            }
+        },
+        {
+            "id": "baluster_orientation",
+            "text": "Balusters plumb (vertical) or parallel to stair rake?",
+            "type": "choice",
+            "options": ["Plumb (vertical — most common)", "Raked (parallel to stair angle — modern look)"],
+            "required": false,
+            "hint": "Plumb is standard and easier to fabricate. Raked requires angled cuts on each baluster but looks sleek.",
+            "depends_on": "infill_style",
+            "branches": null
+        },
+        {
+            "id": "cable_diameter",
+            "text": "Cable diameter?",
+            "type": "choice",
+            "options": ["1/8\" (standard)", "3/16\" (commercial)"],
+            "required": false,
+            "hint": null,
+            "depends_on": "infill_style",
+            "branches": null
+        },
+        {
+            "id": "glass_type",
+            "text": "Glass panel type?",
+            "type": "choice",
+            "options": ["Tempered glass in post clamps", "Tempered glass in channel"],
+            "required": false,
+            "hint": null,
+            "depends_on": "infill_style",
+            "branches": null
+        },
+        {
+            "id": "newel_posts",
+            "text": "Include top and bottom newel posts?",
+            "type": "choice",
+            "options": ["Yes — both top and bottom newel posts", "Top newel only", "Bottom newel only", "No newel posts — just line posts"],
+            "required": false,
+            "hint": "Newel posts are larger decorative posts at the top and bottom of the stair run. They anchor the railing and are a design feature.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "landing_extension",
+            "text": "Does the railing continue on a landing at top or bottom?",
+            "type": "choice",
+            "options": ["Yes — extends onto top landing", "Yes — extends onto bottom landing", "Yes — both top and bottom landings", "No — stair section only"],
+            "required": false,
+            "hint": "Landing extensions add straight railing sections. ADA requires 12\" extension beyond top riser.",
+            "depends_on": null,
+            "branches": {
+                "Yes — extends onto top landing": ["landing_length_top"],
+                "Yes — extends onto bottom landing": ["landing_length_bottom"],
+                "Yes — both top and bottom landings": ["landing_length_top", "landing_length_bottom"]
+            }
+        },
+        {
+            "id": "landing_length_top",
+            "text": "How long is the top landing railing extension?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "ADA minimum: 12\" beyond the top riser.",
+            "depends_on": "landing_extension",
+            "branches": null
+        },
+        {
+            "id": "landing_length_bottom",
+            "text": "How long is the bottom landing railing extension?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "ADA minimum: one tread depth beyond the bottom riser.",
+            "depends_on": "landing_extension",
+            "branches": null
+        },
+        {
+            "id": "post_mount_type",
+            "text": "How will posts be mounted?",
+            "type": "choice",
+            "options": ["Surface mount flange (on top of stair tread)", "Core drill (into concrete stair)", "Side mount (face of stringer)", "Embedded in concrete", "Welded to steel stringer"],
+            "required": true,
+            "hint": "Surface mount on treads is most common for retrofit. Side mount on stringer for a cleaner look.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Clear coat", "Galvanized", "Raw steel"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "Bronze", "White", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Shop pickup", "Delivery only"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have reference photos or design inspiration?",
+            "type": "photo",
+            "required": false,
+            "hint": "Upload photos of the style you like, or photos of the existing stairway.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

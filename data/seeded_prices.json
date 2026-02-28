@@ -1,0 +1,142 @@
+{
+  "angle_1.5x1.5x0.125": {
+    "price_per_foot": 0.959,
+    "supplier": "Osorio"
+  },
+  "angle_2x2x0.125": {
+    "price_per_foot": 1.2865,
+    "supplier": "Osorio"
+  },
+  "angle_2x2x0.1875": {
+    "price_per_foot": 1.8395,
+    "supplier": "Osorio"
+  },
+  "angle_3x3x0.1875": {
+    "price_per_foot": 3.141,
+    "supplier": "Osorio"
+  },
+  "channel_2x1": {
+    "price_per_foot": 1.6325,
+    "supplier": "Osorio"
+  },
+  "channel_3x4.1": {
+    "price_per_foot": 3.2865,
+    "supplier": "Osorio"
+  },
+  "flat_bar_0.5x0.125": {
+    "price_per_foot": 0.3175,
+    "supplier": "Osorio"
+  },
+  "flat_bar_1.25x0.125": {
+    "price_per_foot": 0.394,
+    "supplier": "Osorio"
+  },
+  "flat_bar_1x0.125": {
+    "price_per_foot": 0.339,
+    "supplier": "Osorio"
+  },
+  "flat_bar_1x0.25": {
+    "price_per_foot": 0.7575,
+    "supplier": "Osorio"
+  },
+  "flat_bar_2x0.25": {
+    "price_per_foot": 1.282,
+    "supplier": "Osorio"
+  },
+  "flat_bar_3x0.1875": {
+    "price_per_foot": 1.511,
+    "supplier": "Osorio"
+  },
+  "flat_bar_3x0.25": {
+    "price_per_foot": 2.0655,
+    "supplier": "Osorio"
+  },
+  "flat_bar_3x0.375": {
+    "price_per_foot": 3.0985,
+    "supplier": "Osorio"
+  },
+  "rect_tube_3x2": {
+    "price_per_foot": 7.28,
+    "supplier": "Wexler"
+  },
+  "rect_tube_3x2_14ga": {
+    "price_per_foot": 2.1917,
+    "supplier": "Osorio"
+  },
+  "rect_tube_4x2_11ga": {
+    "price_per_foot": 4.2867,
+    "supplier": "Osorio"
+  },
+  "round_bar_0.25": {
+    "price_per_foot": 0.205,
+    "supplier": "Osorio"
+  },
+  "round_bar_0.5": {
+    "price_per_foot": 0.5495,
+    "supplier": "Osorio"
+  },
+  "round_tube_1.5_11ga": {
+    "price_per_foot": 4.72,
+    "supplier": "Wexler"
+  },
+  "round_tube_4": {
+    "price_per_foot": 7.9938,
+    "supplier": "Osorio"
+  },
+  "sq_tube_0.5x0.5_16ga": {
+    "price_per_foot": 0.3683,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1.25x1.25_11ga": {
+    "price_per_foot": 1.3692,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1.5x1.5_11ga": {
+    "price_per_foot": 1.8242,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1.5x1.5_14ga": {
+    "price_per_foot": 1.11,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1.5x1.5_16ga": {
+    "price_per_foot": 2.4833,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1.75x1.75_11ga": {
+    "price_per_foot": 2.3979,
+    "supplier": "Osorio"
+  },
+  "sq_tube_1x1_11ga": {
+    "price_per_foot": 1.1479,
+    "supplier": "Osorio"
+  },
+  "sq_tube_2.5x2.5_11ga": {
+    "price_per_foot": 3.805,
+    "supplier": "Osorio"
+  },
+  "sq_tube_2x2_11ga": {
+    "price_per_foot": 2.4942,
+    "supplier": "Osorio"
+  },
+  "sq_tube_2x2_14ga": {
+    "price_per_foot": 1.5212,
+    "supplier": "Osorio"
+  },
+  "sq_tube_3x3_0.25": {
+    "price_per_foot": 7.495,
+    "supplier": "Osorio"
+  },
+  "sq_tube_3x3_16ga": {
+    "price_per_foot": 5.1013,
+    "supplier": "Osorio"
+  },
+  "sq_tube_6x6_16ga": {
+    "price_per_foot": 13.6,
+    "supplier": "Osorio"
+  },
+  "ss_304_sq_tube_1x1_0.125": {
+    "price_per_foot": 4.558,
+    "supplier": "Osorio"
+  }
+}

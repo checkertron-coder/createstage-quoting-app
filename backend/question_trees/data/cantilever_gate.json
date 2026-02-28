@@ -1,0 +1,303 @@
+{
+    "job_type": "cantilever_gate",
+    "version": "1.0",
+    "display_name": "Cantilever Sliding Gate",
+    "category": "gate",
+    "required_fields": [
+        "clear_width", "height", "frame_material", "frame_gauge",
+        "infill_type", "post_count", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "clear_width",
+            "text": "What is the clear opening width? (the space the gate needs to cover when fully open)",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Measure from post to post, or tell us the driveway width. Typical residential: 10-16 ft, commercial: 20-40 ft.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "height",
+            "text": "What height do you need for the gate?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Residential typical: 5-6 ft. Commercial/security: 6-8 ft. Measured from ground to top of frame.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "frame_material",
+            "text": "What material for the gate frame?",
+            "type": "choice",
+            "options": ["Square tube (most common)", "Round tube", "Rectangular tube", "Angle iron"],
+            "required": true,
+            "hint": "2\" square tube 11ga is the industry standard for cantilever gates up to 20 ft.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "frame_gauge",
+            "text": "What gauge/thickness for the frame?",
+            "type": "choice",
+            "options": ["11 gauge (0.120\" - standard for gates)", "14 gauge (0.075\" - light duty)", "7 gauge (0.187\" - heavy commercial)", "3/16\" wall", "1/4\" wall"],
+            "required": true,
+            "hint": "11 gauge is standard for residential/light commercial. Go heavier for gates over 20 ft or high-wind areas.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "frame_size",
+            "text": "What size tubing for the frame?",
+            "type": "choice",
+            "options": ["2\" x 2\"", "2\" x 3\"", "2\" x 4\"", "3\" x 3\"", "4\" x 4\""],
+            "required": false,
+            "hint": "2\"x2\" handles most residential. 2\"x4\" or larger for commercial/heavy gates.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "infill_type",
+            "text": "What type of infill/panel design?",
+            "type": "choice",
+            "options": ["Pickets (vertical bars)", "Flat bar vertical", "Expanded metal", "Solid sheet panel", "Horizontal bars", "Chain link", "Open frame (no infill)", "Custom design"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Pickets (vertical bars)": ["picket_style", "picket_spacing"],
+                "Flat bar vertical": ["flat_bar_spacing", "flat_bar_size"],
+                "Expanded metal": ["expanded_metal_gauge"],
+                "Custom design": ["design_reference"]
+            }
+        },
+        {
+            "id": "picket_style",
+            "text": "What picket style?",
+            "type": "choice",
+            "options": ["Plain square bar", "Plain round bar", "Spear-top square", "Spear-top round", "Twist pickets", "Basket pickets"],
+            "required": false,
+            "hint": "3/4\" square bar or 5/8\" round bar are standard. Decorative tops add $2-4 per picket.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "picket_spacing",
+            "text": "What spacing between pickets?",
+            "type": "choice",
+            "options": ["4\" on-center (code compliant)", "3.5\" on-center (tighter look)", "6\" on-center (open look)", "Custom spacing"],
+            "required": false,
+            "hint": "4\" max clear space is required by most residential codes to prevent child entrapment.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "flat_bar_spacing",
+            "text": "What spacing between flat bars?",
+            "type": "choice",
+            "options": ["4\" on-center", "3\" on-center", "6\" on-center", "Custom spacing"],
+            "required": false,
+            "hint": null,
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "flat_bar_size",
+            "text": "What size flat bar?",
+            "type": "choice",
+            "options": ["1\" x 1/4\"", "1\" x 3/16\"", "1-1/2\" x 1/4\"", "3/4\" x 1/4\""],
+            "required": false,
+            "hint": "1\" x 1/4\" is the most common for gate infill.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "expanded_metal_gauge",
+            "text": "What gauge expanded metal?",
+            "type": "choice",
+            "options": ["16 gauge (light)", "13 gauge (standard)", "10 gauge (heavy duty)"],
+            "required": false,
+            "hint": "13 gauge with 3/4\" diamond is standard for security gates.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have a photo or sketch of the design you want?",
+            "type": "photo",
+            "required": false,
+            "hint": "Upload a reference photo or describe the design. We'll work from your vision.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "tail_clearance",
+            "text": "How much space is available behind the gate for the counterbalance tail? (cantilever gates need ~50% extra length behind the opening)",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "A 12 ft opening needs about 18 ft total track length (6 ft tail). If you don't have this space, a swing gate may be better.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_count",
+            "text": "How many posts? (Cantilever gates typically use 3: 2 for the carriage assembly, 1 catch post at opening end)",
+            "type": "choice",
+            "options": ["3 posts (standard)", "2 posts (short spans)", "4 posts (extra long gates)"],
+            "required": true,
+            "hint": "3 posts is standard. The 2 rear posts hold the roller carriages, the front post catches the gate when closed.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_size",
+            "text": "What size posts?",
+            "type": "choice",
+            "options": ["4\" x 4\" square tube", "6\" x 6\" square tube", "4\" round pipe Sch 40", "6\" round pipe Sch 40", "Match existing"],
+            "required": false,
+            "hint": "4\"x4\" is minimum for residential cantilever. 6\"x6\" for commercial or gates over 20 ft.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_concrete",
+            "text": "Post installation: new concrete footings needed?",
+            "type": "choice",
+            "options": ["Yes — new footings needed", "No — welding to existing structure", "No — posts already in place", "Not sure"],
+            "required": false,
+            "hint": "Cantilever posts need deep footings (36-48\" below grade, 12-18\" diameter). This is critical for gate function.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "roller_carriages",
+            "text": "Roller carriage type?",
+            "type": "choice",
+            "options": ["Standard duty (gates under 1,000 lbs)", "Heavy duty (gates 1,000-2,000 lbs)", "Extra heavy duty (gates over 2,000 lbs)", "Not sure — size based on gate weight"],
+            "required": false,
+            "hint": "A typical 12 ft residential cantilever gate weighs 400-800 lbs. Always size up from calculated weight.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bottom_guide",
+            "text": "Bottom guide rail type?",
+            "type": "choice",
+            "options": ["Surface mount guide roller", "Embedded track (flush with ground)", "No bottom guide (top-hung only)"],
+            "required": false,
+            "hint": "Surface mount is cheaper and easier to maintain. Embedded looks cleaner but requires concrete work.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "has_motor",
+            "text": "Will this gate have an electric operator (motor)?",
+            "type": "choice",
+            "options": ["Yes", "No — manual operation", "Not sure — show me options"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Yes": ["motor_brand"],
+                "Not sure — show me options": ["motor_brand"]
+            }
+        },
+        {
+            "id": "motor_brand",
+            "text": "Which gate operator are you considering?",
+            "type": "choice",
+            "options": ["LiftMaster LA412 (industry standard)", "US Automatic Patriot", "Viking", "Bull Dog", "DoorKing", "Other / not sure"],
+            "required": false,
+            "hint": "LiftMaster LA412 is the most common for residential/light commercial. Viking and DoorKing for heavy commercial.",
+            "depends_on": "has_motor",
+            "branches": null
+        },
+        {
+            "id": "latch_lock",
+            "text": "What type of latch or lock?",
+            "type": "choice",
+            "options": ["Gravity latch", "Magnetic lock", "Keyed deadbolt", "Electric strike (with motor)", "Chain and padlock", "None"],
+            "required": false,
+            "hint": "If motorized, an electric strike or magnetic lock is typical. Manual gates usually get a gravity latch or padlock.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish do you want?",
+            "type": "choice",
+            "options": ["Powder coat (most durable, outsourced)", "Paint (in-house)", "Clear coat (shows steel grain)", "Galvanized (hot-dip)", "Raw steel (no finish)"],
+            "required": true,
+            "hint": "Powder coat is the most common and durable for exterior gates. Galvanizing is best for coastal or harsh environments.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable, outsourced)": ["powder_coat_color"],
+                "Paint (in-house)": ["paint_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "What powder coat color?",
+            "type": "choice",
+            "options": ["Black (most common)", "Bronze", "White", "Dark green", "Custom RAL color"],
+            "required": false,
+            "hint": "Black satin is the most popular. Custom RAL colors may add lead time.",
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "paint_color",
+            "text": "What paint color?",
+            "type": "text",
+            "required": false,
+            "hint": "Describe the color or provide a paint code. We use Rustoleum or similar direct-to-metal paint.",
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation (gate + posts + concrete)", "Gate install only (posts already set)", "Shop pickup (no installation)", "Delivery only (no installation)"],
+            "required": true,
+            "hint": "Full install includes setting posts in concrete, mounting carriages, hanging gate, and adjustments.",
+            "depends_on": null,
+            "branches": {
+                "Full installation (gate + posts + concrete)": ["site_location", "site_access"],
+                "Gate install only (posts already set)": ["site_location", "site_access"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site? (city or zip code for travel time)",
+            "type": "text",
+            "required": false,
+            "hint": "We need this to calculate travel time at the on-site rate.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "site_access",
+            "text": "Any site access constraints?",
+            "type": "multi_choice",
+            "options": ["Tight/narrow access", "Unpaved or rough terrain", "HOA approval required", "Permit required", "Underground utilities to mark", "No constraints"],
+            "required": false,
+            "hint": "These affect install time and may require additional prep.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "decorative_elements",
+            "text": "Any decorative elements or custom design details?",
+            "type": "multi_choice",
+            "options": ["Scrollwork", "Spear tops on frame", "Monogram or lettering", "Arch top", "Custom pattern", "None — keep it clean"],
+            "required": false,
+            "hint": "Decorative work adds labor and sometimes material. Upload a reference photo if you have one.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

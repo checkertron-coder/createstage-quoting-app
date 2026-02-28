@@ -1,0 +1,240 @@
+{
+    "job_type": "ornamental_fence",
+    "version": "1.0",
+    "display_name": "Ornamental Fence Sections",
+    "category": "ornamental",
+    "required_fields": [
+        "linear_footage", "height", "panel_design", "picket_spacing",
+        "post_frequency", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "linear_footage",
+            "text": "What is the total linear footage of fence needed?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Measure the full perimeter or length to be fenced. Include any returns or corners.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "height",
+            "text": "What fence height?",
+            "type": "choice",
+            "options": ["3 ft (decorative border)", "4 ft (standard residential)", "5 ft (enhanced privacy/security)", "6 ft (pool code / tall residential)", "8 ft (commercial/security)", "Custom height"],
+            "required": true,
+            "hint": "Pool fencing code typically requires 4 ft minimum with self-closing/self-latching gate. Check local codes.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "pool_proximity",
+            "text": "Is this fence near a swimming pool?",
+            "type": "choice",
+            "options": ["Yes — pool barrier fence", "No"],
+            "required": false,
+            "hint": "Pool barrier fencing must meet ASTM F1908 / IRC G2604: max 4\" clear spacing between pickets, no climbable horizontal rails, self-closing + self-latching gate required.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "panel_design",
+            "text": "What panel design style?",
+            "type": "choice",
+            "options": ["Spear-top pickets (traditional)", "Flat-top pickets (modern)", "Flat bar grid (contemporary)", "Scroll work panels (ornate)", "Combination (pickets + decorative bands)", "Custom design"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Scroll work panels (ornate)": ["scroll_complexity"],
+                "Combination (pickets + decorative bands)": ["decorative_elements"],
+                "Custom design": ["design_reference"]
+            }
+        },
+        {
+            "id": "scroll_complexity",
+            "text": "How complex is the scroll work?",
+            "type": "choice",
+            "options": ["Simple S-scrolls or C-scrolls", "Moderate — mixed scrolls with collars", "Complex — heavy ornamental with forged elements"],
+            "required": false,
+            "hint": "Scroll work is labor-intensive. Complex ornamental panels can triple the labor hours per section compared to plain pickets.",
+            "depends_on": "panel_design",
+            "branches": null
+        },
+        {
+            "id": "decorative_elements",
+            "text": "What decorative elements?",
+            "type": "multi_choice",
+            "options": ["Spear tips/finials on pickets", "Decorative collars at rail intersections", "Scroll inserts between pickets", "Cast iron rosettes", "Twisted pickets", "None — keep it simple"],
+            "required": false,
+            "hint": "Each decorative element adds labor. Spear tips: $2-4 each. Collars: $1-2 each. Scrolls: $8-15 each. Budget accordingly.",
+            "depends_on": "panel_design",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have a photo or sketch of the design?",
+            "type": "photo",
+            "required": false,
+            "hint": "Upload reference photos — ornamental fence styles vary widely and a picture saves hours of back-and-forth.",
+            "depends_on": "panel_design",
+            "branches": null
+        },
+        {
+            "id": "picket_material",
+            "text": "What picket/infill material?",
+            "type": "choice",
+            "options": ["3/4\" square bar (standard)", "1\" square bar (heavy duty)", "5/8\" round bar", "3/4\" round bar", "1\" x 1/4\" flat bar"],
+            "required": false,
+            "hint": "3/4\" square bar is the industry standard for ornamental fence pickets.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "picket_spacing",
+            "text": "Picket/bar spacing?",
+            "type": "choice",
+            "options": ["4\" on-center (code compliant — pool safe)", "3-1/2\" on-center (tighter look)", "5\" on-center (open look — NOT pool code)", "6\" on-center (decorative only)", "Custom spacing"],
+            "required": true,
+            "hint": "4\" max clear space required for pool barriers and most residential codes. If near a pool, do NOT exceed 4\".",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "rail_type",
+            "text": "What type of horizontal rails?",
+            "type": "choice",
+            "options": ["1\" x 1/4\" flat bar rails (traditional ornamental)", "1-1/2\" square tube rails", "1\" x 1\" square tube rails", "Round tube rails"],
+            "required": false,
+            "hint": "Flat bar rails are traditional for ornamental fencing. Tube rails are stronger for longer panel spans.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "includes_gates",
+            "text": "Are any gates included in this fence run?",
+            "type": "choice",
+            "options": ["Yes — pedestrian gate(s)", "Yes — driveway gate(s)", "Yes — both pedestrian and driveway", "No gates — fence only"],
+            "required": false,
+            "hint": "Fence gates are typically swing gates. If you need a driveway gate, it may be quoted separately using our swing gate or cantilever gate pricing.",
+            "depends_on": null,
+            "branches": {
+                "Yes — pedestrian gate(s)": ["gate_count", "gate_width", "gate_latch"],
+                "Yes — driveway gate(s)": ["gate_count", "gate_width", "gate_latch"],
+                "Yes — both pedestrian and driveway": ["gate_count", "gate_width", "gate_latch"]
+            }
+        },
+        {
+            "id": "gate_count",
+            "text": "How many gates?",
+            "type": "number",
+            "required": false,
+            "hint": null,
+            "depends_on": "includes_gates",
+            "branches": null
+        },
+        {
+            "id": "gate_width",
+            "text": "Gate opening width(s)?",
+            "type": "text",
+            "required": false,
+            "hint": "Pedestrian: 3-4 ft typical. Driveway: 10-16 ft. List each gate width if different.",
+            "depends_on": "includes_gates",
+            "branches": null
+        },
+        {
+            "id": "gate_latch",
+            "text": "Gate latch type?",
+            "type": "choice",
+            "options": ["Gravity latch (standard)", "Pool code latch (self-closing, self-latching)", "Keyed deadbolt", "Magnetic latch", "Ring latch (decorative)"],
+            "required": false,
+            "hint": "Pool code requires self-closing + self-latching at 54\" above grade.",
+            "depends_on": "includes_gates",
+            "branches": null
+        },
+        {
+            "id": "post_frequency",
+            "text": "Post spacing?",
+            "type": "choice",
+            "options": ["6 ft on-center (standard)", "7 ft on-center", "8 ft on-center (max typical)", "Match existing fence line", "Custom spacing"],
+            "required": true,
+            "hint": "6-8 ft is standard. Shorter spans for ornate/heavy panels.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_size",
+            "text": "Post size?",
+            "type": "choice",
+            "options": ["2\" x 2\" square tube", "2-1/2\" x 2-1/2\" square tube", "3\" x 3\" square tube", "4\" x 4\" square tube (corner/gate posts)"],
+            "required": false,
+            "hint": "Posts should be larger than picket material. 2-1/2\" is standard for fence posts. Gate posts need 3\" or 4\" minimum.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_concrete_depth",
+            "text": "Post footing depth?",
+            "type": "choice",
+            "options": ["24\" (frost line in mild climates)", "36\" (standard frost line)", "42\" (deep frost line — northern climates)", "Not sure — use local code requirement"],
+            "required": false,
+            "hint": "Posts must be set below the frost line to prevent heaving. Chicago area: 42\" minimum.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable, outsourced)", "Paint (in-house)", "Galvanized (hot-dip)", "Clear coat", "Raw steel (no finish)"],
+            "required": true,
+            "hint": "Exterior ornamental fencing should always be powder coated or galvanized. Raw steel will rust quickly.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable, outsourced)": ["powder_coat_color"],
+                "Paint (in-house)": ["paint_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black (most common)", "Bronze", "White", "Dark green", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "paint_color",
+            "text": "Paint color?",
+            "type": "text",
+            "required": false,
+            "hint": "Color name or paint code.",
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation (fence + posts + concrete)", "Fence panels only (no posts/install)", "Shop pickup", "Delivery only"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Full installation (fence + posts + concrete)": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time calculation.",
+            "depends_on": "installation",
+            "branches": null
+        }
+    ]
+}

@@ -1,0 +1,158 @@
+{
+    "job_type": "repair_structural",
+    "version": "1.0",
+    "display_name": "Structural / Heavy Repair",
+    "category": "specialty",
+    "required_fields": [
+        "photos", "repair_type", "item_description",
+        "material_type", "access_situation"
+    ],
+    "questions": [
+        {
+            "id": "photos",
+            "text": "Upload photos of the damage or area needing repair. (REQUIRED — structural repair cannot be quoted without photos)",
+            "type": "photo",
+            "required": true,
+            "hint": "Take photos from multiple angles. Include close-ups of cracks, rust-through, bends, or broken welds. Show the overall structure for context. A ruler or tape measure in the photo helps us gauge scale.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "repair_type",
+            "text": "What type of repair?",
+            "type": "choice",
+            "options": ["Crack / weld failure repair", "Rust-through / corrosion repair", "Bent / deformed member — straighten or replace", "Broken / severed member — reattach or replace", "Reinforcement / strengthening (add material)", "Modification (cut, relocate, add new sections)", "Complete section replacement"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "item_description",
+            "text": "What is the item or structure being repaired?",
+            "type": "choice",
+            "options": ["Trailer frame / chassis", "Vehicle frame / body", "Heavy equipment (excavator, loader, etc.)", "Truck body / flatbed", "Agricultural equipment (implements, frames)", "Structural steel beam / column", "Steel platform / mezzanine", "Industrial machine frame", "Other — describe"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Trailer frame / chassis": ["trailer_details"],
+                "Vehicle frame / body": ["dot_certification"],
+                "Truck body / flatbed": ["dot_certification"]
+            }
+        },
+        {
+            "id": "trailer_details",
+            "text": "Trailer type and approximate size?",
+            "type": "text",
+            "required": false,
+            "hint": "Example: '20 ft flatbed trailer', '16 ft enclosed cargo trailer', '40 ft gooseneck'. Include GVWR if known.",
+            "depends_on": "item_description",
+            "branches": null
+        },
+        {
+            "id": "dot_certification",
+            "text": "Does this repair need DOT certification or inspection?",
+            "type": "choice",
+            "options": ["Yes — DOT-certified repair required", "No — not a road vehicle / not DOT regulated", "Not sure — need to check"],
+            "required": false,
+            "hint": "DOT-certified frame repairs require specific procedures, documentation, and often a certified welder. This adds significant cost and limits who can perform the work. We can refer to a DOT-certified shop if needed.",
+            "depends_on": "item_description",
+            "branches": null
+        },
+        {
+            "id": "material_type",
+            "text": "What is the material being repaired?",
+            "type": "choice",
+            "options": ["Mild steel (A36 / standard structural)", "High-strength low-alloy (HSLA — common in trailers/equipment)", "Stainless steel", "Aluminum", "Cast iron / cast steel", "Unknown — need to test"],
+            "required": true,
+            "hint": "IMPORTANT: HSLA steels (T1, A514, AR400, Hardox) require preheat and controlled interpass temperature. Welding HSLA cold causes hydrogen cracking. If in doubt, assume HSLA and preheat.",
+            "depends_on": null,
+            "branches": {
+                "High-strength low-alloy (HSLA — common in trailers/equipment)": ["hsla_preheat_note"],
+                "Cast iron / cast steel": ["cast_repair_note"]
+            }
+        },
+        {
+            "id": "hsla_preheat_note",
+            "text": "HSLA steel preheat advisory: This material requires preheat (typically 200-400°F) and specific low-hydrogen electrodes (E7018 or ER70S-6). Cold welding HSLA steel will crack. Acknowledged?",
+            "type": "choice",
+            "options": ["Understood — proceed with proper procedures", "Not sure it's HSLA — can you test?"],
+            "required": false,
+            "hint": "We can test material with a hardness tester or spark test. If the original weld filler is unknown, we default to HSLA procedures for safety.",
+            "depends_on": "material_type",
+            "branches": null
+        },
+        {
+            "id": "cast_repair_note",
+            "text": "Cast iron/steel repair advisory: Cast repairs are specialized work requiring nickel rod, preheat, and slow cooling. Success rate is lower than structural steel repair. Proceed?",
+            "type": "choice",
+            "options": ["Yes — attempt the repair", "Evaluate and advise (may need replacement part instead)"],
+            "required": false,
+            "hint": "Cast iron repairs can fail if the piece has hidden internal cracks or is heavily stressed. Consider whether a fabricated replacement is more reliable.",
+            "depends_on": "material_type",
+            "branches": null
+        },
+        {
+            "id": "damage_dimensions",
+            "text": "Approximate size of the damaged area?",
+            "type": "text",
+            "required": false,
+            "hint": "Example: '6 inch crack along weld', '2 ft section of rusted-through tube', '8 inch bend in beam'. Be as specific as possible.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "member_sizes",
+            "text": "What are the member sizes being repaired? (if known)",
+            "type": "text",
+            "required": false,
+            "hint": "Example: '4x4x1/4 square tube', 'W8x31 beam', '3/8 plate'. If unknown, we'll determine from photos.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "access_situation",
+            "text": "How will we access the repair area?",
+            "type": "choice",
+            "options": ["Item comes to our shop (preferred)", "On-site repair — ground level", "On-site repair — elevated (ladder/scaffold needed)", "On-site repair — confined space", "On-site repair — outdoor / field conditions"],
+            "required": true,
+            "hint": "Shop repairs are almost always faster, cheaper, and higher quality than field repairs. If the item can be transported, bring it to the shop.",
+            "depends_on": null,
+            "branches": {
+                "On-site repair — ground level": ["site_location"],
+                "On-site repair — elevated (ladder/scaffold needed)": ["site_location"],
+                "On-site repair — confined space": ["site_location"],
+                "On-site repair — outdoor / field conditions": ["site_location"]
+            }
+        },
+        {
+            "id": "urgency",
+            "text": "How urgent is this repair?",
+            "type": "choice",
+            "options": ["Emergency — equipment is down, losing money", "Urgent — within 1 week", "Standard — 2-3 weeks is fine", "Can schedule whenever"],
+            "required": false,
+            "hint": "Emergency/rush repairs typically incur a 25-50% premium for overtime and schedule disruption.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site or where will you bring the item?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code. If bringing to shop, just note that.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "additional_photos",
+            "text": "Any additional photos showing the full structure or context?",
+            "type": "photo",
+            "required": false,
+            "hint": "Wide-angle shots showing how the damaged area relates to the overall structure help us plan the repair approach.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

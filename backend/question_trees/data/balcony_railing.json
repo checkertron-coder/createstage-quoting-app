@@ -1,0 +1,248 @@
+{
+    "job_type": "balcony_railing",
+    "version": "1.0",
+    "display_name": "Balcony Railing",
+    "category": "architectural",
+    "required_fields": [
+        "scope", "railing_sides", "linear_footage", "railing_height",
+        "infill_style", "post_mount_type", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "scope",
+            "text": "Is this railing only, or does the structural balcony frame also need fabrication?",
+            "type": "choice",
+            "options": ["Railing only — balcony structure exists", "Structural frame + railing (full balcony fabrication)", "Not sure — need assessment"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Structural frame + railing (full balcony fabrication)": ["balcony_width", "balcony_depth", "dead_load", "structure_attachment", "pe_stamp"],
+                "Not sure — need assessment": ["balcony_photos"]
+            }
+        },
+        {
+            "id": "balcony_width",
+            "text": "Balcony width (along the building face)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": null,
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "balcony_depth",
+            "text": "Balcony depth (projection from building)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "Typical: 4-6 ft projection. Deeper balconies need heavier engineering.",
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "dead_load",
+            "text": "What will be on the balcony? (affects structural design)",
+            "type": "multi_choice",
+            "options": ["Standard use (furniture, people — 40 psf live load)", "Heavy planters or garden", "Tile or stone decking", "Hot tub or spa (VERY heavy — 100+ psf)", "Light use only"],
+            "required": false,
+            "hint": "Hot tubs can weigh 3,000-6,000 lbs filled. This dramatically changes the structural requirements. Flag this early.",
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "structure_attachment",
+            "text": "How will the balcony attach to the building?",
+            "type": "choice",
+            "options": ["Bolt to concrete wall/slab", "Weld to steel embed plates", "Through-bolt to wood framing with steel brackets", "Cantilever from steel beams (no posts below)", "Posts to ground + tie to building"],
+            "required": false,
+            "hint": "Attachment to existing structure is always harder than new construction. Factor in field conditions and hidden obstacles.",
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "pe_stamp",
+            "text": "Structural engineering (PE stamp) — will you need this?",
+            "type": "choice",
+            "options": ["Yes — PE stamp required", "No — already have engineering", "Not sure — check with building department"],
+            "required": false,
+            "hint": "A structural PE stamp is almost always required for new balcony construction. This is typically a separate line item outside the fabrication scope ($2,000-$5,000+).",
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "balcony_photos",
+            "text": "Can you upload photos of the existing balcony or the location?",
+            "type": "photo",
+            "required": false,
+            "hint": "Photos help us assess whether the existing structure can support railing attachment.",
+            "depends_on": "scope",
+            "branches": null
+        },
+        {
+            "id": "railing_sides",
+            "text": "Railing on how many sides?",
+            "type": "choice",
+            "options": ["1 side (front only)", "2 sides (front + one end)", "3 sides (front + both ends)", "All sides (freestanding balcony)"],
+            "required": true,
+            "hint": "Building-side typically doesn't need railing (wall acts as barrier).",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "linear_footage",
+            "text": "Total linear footage of railing needed?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Add up all sides that need railing. Include any returns to the building.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "railing_height",
+            "text": "Railing height?",
+            "type": "choice",
+            "options": ["42\" (IBC commercial minimum — most common for balconies)", "36\" (IRC residential minimum)", "48\" (extra tall / child safety)", "Custom height"],
+            "required": true,
+            "hint": "IBC 1015: 42\" minimum for balcony guards in commercial and most residential over 30\" above grade. Check local code.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "top_rail_profile",
+            "text": "Top rail profile?",
+            "type": "choice",
+            "options": ["1-1/2\" round tube", "2\" round tube", "Square tube 1-1/2\"", "Square tube 2\"", "Flat bar cap", "Wood cap rail"],
+            "required": false,
+            "hint": "Round tube 1.25-2\" for ADA graspability if needed. Flat bar cap for a modern look.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "infill_style",
+            "text": "Baluster/infill style?",
+            "type": "choice",
+            "options": ["Vertical square bar", "Vertical round bar", "Horizontal bars", "Cable infill", "Glass panels", "Perforated metal panel", "Flat bar (contemporary)", "Solid panel (privacy)"],
+            "required": true,
+            "hint": "Glass panels and cable are popular for balconies — they preserve views. Solid panels provide wind protection and privacy.",
+            "depends_on": null,
+            "branches": {
+                "Cable infill": ["cable_diameter"],
+                "Glass panels": ["glass_type"]
+            }
+        },
+        {
+            "id": "cable_diameter",
+            "text": "Cable diameter?",
+            "type": "choice",
+            "options": ["1/8\" (standard)", "3/16\" (commercial)"],
+            "required": false,
+            "hint": null,
+            "depends_on": "infill_style",
+            "branches": null
+        },
+        {
+            "id": "glass_type",
+            "text": "Glass type?",
+            "type": "choice",
+            "options": ["Tempered glass in post clamps", "Tempered glass in channel (base shoe)", "Laminated safety glass"],
+            "required": false,
+            "hint": "Tempered glass is standard for exterior railing. We fabricate the steel frame; glass is typically sourced separately.",
+            "depends_on": "infill_style",
+            "branches": null
+        },
+        {
+            "id": "post_mount_type",
+            "text": "Post mounting method?",
+            "type": "choice",
+            "options": ["Surface mount flange (top of balcony slab)", "Side mount (face of balcony edge)", "Core drill into concrete", "Weld to steel frame"],
+            "required": true,
+            "hint": "Side mount gives maximum usable balcony width. Surface mount is simpler to install.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "post_spacing",
+            "text": "Post spacing?",
+            "type": "choice",
+            "options": ["4 ft on-center (cable/glass)", "5 ft on-center", "6 ft on-center (standard)", "Custom"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "transitions",
+            "text": "Number of corners/transitions?",
+            "type": "number",
+            "required": false,
+            "hint": "Count each corner, return to wall, or direction change.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "drainage",
+            "text": "Drainage consideration for structural balcony?",
+            "type": "choice",
+            "options": ["Slope away from building (standard)", "Scupper drains", "N/A — railing only, no structural frame"],
+            "required": false,
+            "hint": "Water must drain away from the building face. This affects the structural frame design.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized", "Clear coat", "Raw steel"],
+            "required": true,
+            "hint": "Exterior balcony railing should be powder coated or galvanized. Salt air environments need marine-grade finish.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "Bronze", "White", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only", "Shop pickup"],
+            "required": true,
+            "hint": "Balcony work often requires scaffolding or lift rental — factor this into install planning.",
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have reference photos or design drawings?",
+            "type": "photo",
+            "required": false,
+            "hint": "Photos of the existing balcony and desired railing style help tremendously.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

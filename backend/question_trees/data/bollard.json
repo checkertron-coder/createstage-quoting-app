@@ -1,0 +1,169 @@
+{
+    "job_type": "bollard",
+    "version": "1.0",
+    "display_name": "Bollard (Vehicle Barrier)",
+    "category": "specialty",
+    "required_fields": [
+        "bollard_count", "pipe_size", "bollard_height",
+        "fixed_or_removable", "finish"
+    ],
+    "questions": [
+        {
+            "id": "bollard_count",
+            "text": "How many bollards?",
+            "type": "number",
+            "required": true,
+            "hint": "Pricing improves significantly with quantity — batch cutting and welding is very efficient.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bollard_purpose",
+            "text": "What is the primary purpose?",
+            "type": "choice",
+            "options": ["Vehicle barrier (parking lot / storefront protection)", "Traffic control / lane separation", "Decorative / architectural", "Security (anti-ram / crash rated)", "Bike parking"],
+            "required": false,
+            "hint": "Crash-rated bollards require specific engineering (ASTM F2656) and are a different product than standard fabricated bollards. We fabricate standard bollards — crash-rated are typically purchased pre-engineered.",
+            "depends_on": null,
+            "branches": {
+                "Security (anti-ram / crash rated)": ["crash_rating_note"]
+            }
+        },
+        {
+            "id": "crash_rating_note",
+            "text": "Note: Crash-rated (anti-ram) bollards must meet ASTM F2656 and are typically pre-engineered products, not custom fabricated. Do you need crash-rated, or is a standard heavy-duty fabricated bollard sufficient?",
+            "type": "choice",
+            "options": ["Standard heavy-duty is fine (most common)", "Need actual crash-rated — source a pre-engineered product"],
+            "required": false,
+            "hint": "Standard 6\" schedule 40 pipe bollards filled with concrete provide substantial vehicle resistance for low-speed impacts (parking lots). High-speed anti-ram requires K-rated pre-engineered products.",
+            "depends_on": "bollard_purpose",
+            "branches": null
+        },
+        {
+            "id": "pipe_size",
+            "text": "What pipe diameter?",
+            "type": "choice",
+            "options": ["4\" schedule 40 (light duty)", "6\" schedule 40 (standard — most common)", "6\" schedule 80 (heavy duty)", "8\" schedule 40 (large / commercial)", "Custom size"],
+            "required": true,
+            "hint": "6\" schedule 40 is the industry standard for parking lot bollards. 4\" for decorative or bike parking.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bollard_height",
+            "text": "Bollard height above grade?",
+            "type": "choice",
+            "options": ["30\" (low profile)", "36\" (standard)", "42\" (tall — better visibility)", "48\" (extra tall)", "Custom height"],
+            "required": true,
+            "hint": "36\" is standard. ADA requires detectable bollards — consider adding reflective tape or contrasting color.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "fixed_or_removable",
+            "text": "Fixed or removable?",
+            "type": "choice",
+            "options": ["Fixed — set in concrete (permanent)", "Removable — drop-in sleeve (can be pulled out)", "Fold-down (hinged at base)", "Surface mount (bolt-on base plate)"],
+            "required": true,
+            "hint": "Removable bollards need a receiver sleeve set in concrete + padlock to prevent unauthorized removal. Adds $50-100 per unit for the sleeve and hardware.",
+            "depends_on": null,
+            "branches": {
+                "Removable — drop-in sleeve (can be pulled out)": ["sleeve_type"],
+                "Surface mount (bolt-on base plate)": ["base_plate_size"]
+            }
+        },
+        {
+            "id": "sleeve_type",
+            "text": "Receiver sleeve details?",
+            "type": "choice",
+            "options": ["Standard sleeve with padlock hasp", "Sleeve with chain/pin retention (bollard stays attached)", "Flush-mount cover plate when bollard removed"],
+            "required": false,
+            "hint": "Flush cover plates prevent trip hazards when bollards are removed. Chain retention prevents the bollard from being lost.",
+            "depends_on": "fixed_or_removable",
+            "branches": null
+        },
+        {
+            "id": "base_plate_size",
+            "text": "Base plate dimensions?",
+            "type": "choice",
+            "options": ["8\" x 8\" (standard for 4\" pipe)", "10\" x 10\" (standard for 6\" pipe)", "12\" x 12\" (heavy duty)", "Custom — specify"],
+            "required": false,
+            "hint": "Base plate needs to be large enough for 4 anchor bolts minimum. 1/2\" thick plate is standard.",
+            "depends_on": "fixed_or_removable",
+            "branches": null
+        },
+        {
+            "id": "cap_style",
+            "text": "Bollard cap/top style?",
+            "type": "choice",
+            "options": ["Flat plate cap (welded on)", "Domed / mushroom cap", "Ball top (decorative)", "Open top (no cap)", "Rounded / rolled edge"],
+            "required": false,
+            "hint": "Caps keep water out of the pipe. Open-top bollards should be concrete-filled to prevent water collection and freeze damage.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "concrete_fill",
+            "text": "Concrete filled?",
+            "type": "choice",
+            "options": ["Yes — concrete fill for impact resistance", "No — hollow", "Customer will fill on-site"],
+            "required": false,
+            "hint": "Concrete fill significantly increases impact resistance. A 6\" schedule 40 bollard filled with concrete can stop a 5,000 lb vehicle at low speed.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized", "Stainless steel (no coating)", "Bollard cover/sleeve (plastic — by others)", "Raw steel"],
+            "required": true,
+            "hint": "Safety yellow is standard for parking lot bollards. Black or architectural colors for decorative applications.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Safety yellow (most common)", "Black", "Red", "Gray", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation (core drill + set + concrete)", "Fabrication + delivery only", "Shop pickup"],
+            "required": false,
+            "hint": "Installation requires core drilling into existing concrete (typically 10-12\" deep). New concrete pours are easier.",
+            "depends_on": null,
+            "branches": {
+                "Full installation (core drill + set + concrete)": ["site_location", "surface_type"]
+            }
+        },
+        {
+            "id": "surface_type",
+            "text": "What is the existing ground surface?",
+            "type": "choice",
+            "options": ["Concrete slab", "Asphalt", "New concrete (not yet poured)", "Pavers / brick", "Dirt / gravel (new footing needed)"],
+            "required": false,
+            "hint": "Core drilling into concrete: ~$50-75 per hole. Asphalt requires larger excavation. New concrete is easiest — set bollards before pour.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        }
+    ]
+}

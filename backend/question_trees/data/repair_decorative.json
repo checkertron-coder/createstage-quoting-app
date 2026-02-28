@@ -1,0 +1,177 @@
+{
+    "job_type": "repair_decorative",
+    "version": "1.0",
+    "display_name": "Decorative / Ornamental Iron Repair",
+    "category": "repair",
+    "required_fields": [
+        "repair_photos", "repair_type", "item_type", "material_type",
+        "is_structural", "can_remove", "finish"
+    ],
+    "questions": [
+        {
+            "id": "repair_photos",
+            "text": "Please upload photos of the damage. (This is the most important input for repair quoting — show us close-ups and wide shots)",
+            "type": "photo",
+            "required": true,
+            "hint": "Take photos from multiple angles: 1) Overall view of the full piece, 2) Close-up of the damaged area, 3) Any visible rust or deterioration. Good photos can save you a site visit fee.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "repair_type",
+            "text": "What needs to be repaired?",
+            "type": "multi_choice",
+            "options": ["Broken weld (piece detached)", "Bent or deformed section", "Rust-through (holes from corrosion)", "Missing piece or section", "Cracked or split metal", "Loose/wobbly posts or anchors", "Other"],
+            "required": true,
+            "hint": "Select all that apply. Multiple issues are common with older ornamental iron.",
+            "depends_on": null,
+            "branches": {
+                "Missing piece or section": ["matching_required"]
+            }
+        },
+        {
+            "id": "matching_required",
+            "text": "Does the replacement piece need to match the existing design exactly?",
+            "type": "choice",
+            "options": ["Yes — must match exactly (may require custom forming/forging)", "Close match is fine", "No — just make it functional"],
+            "required": false,
+            "hint": "Exact matching of old ornamental work can be significantly more labor-intensive than a close approximation.",
+            "depends_on": "repair_type",
+            "branches": null
+        },
+        {
+            "id": "item_type",
+            "text": "What type of item is this?",
+            "type": "choice",
+            "options": ["Gate (swing or sliding)", "Fence section", "Railing (stair or flat)", "Balcony railing or guard", "Window grate/bars", "Decorative panel or screen", "Other"],
+            "required": true,
+            "hint": "This helps us scope the repair and understand the structural requirements.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material_type",
+            "text": "What is the material? (if known)",
+            "type": "choice",
+            "options": ["Mild steel / carbon steel", "Wrought iron (older, pre-1970s)", "Aluminum", "Stainless steel", "Not sure"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Not sure": ["material_clue"]
+            }
+        },
+        {
+            "id": "material_clue",
+            "text": "Can you see any rust? (This helps identify the material)",
+            "type": "choice",
+            "options": ["Yes — orange/brown rust (mild steel or wrought iron)", "No rust but looks dark/aged (could be aluminum or coated steel)", "No rust, shiny silver (stainless or aluminum)", "Heavy flaking rust (likely old wrought iron)"],
+            "required": false,
+            "hint": "Orange rust = ferrous metal (steel or iron). No rust ever = likely aluminum or stainless. Galvanized steel gets white/gray corrosion.",
+            "depends_on": "material_type",
+            "branches": null
+        },
+        {
+            "id": "damage_dimensions",
+            "text": "Approximate dimensions of the damaged area?",
+            "type": "text",
+            "required": false,
+            "hint": "Length x width of the area that needs work. Even a rough estimate helps — e.g., '2 feet of railing' or 'a 6-inch section of the post'.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "is_structural",
+            "text": "Is this structural or cosmetic?",
+            "type": "choice",
+            "options": ["Structural — load-bearing or safety-critical (railing you lean on, gate that holds weight)", "Cosmetic — visual only (decorative scroll, finial, non-structural piece)", "Both — structural integrity is compromised AND it looks bad", "Not sure"],
+            "required": true,
+            "hint": "Structural repairs must meet code. Cosmetic repairs focus on appearance match. If in doubt, we'll treat it as structural.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish_match",
+            "text": "Will matching the existing finish be required?",
+            "type": "choice",
+            "options": ["Yes — need to match existing paint/patina", "No — refinish the entire piece", "No — just repair, don't worry about finish", "Not sure yet"],
+            "required": false,
+            "hint": "Matching old patina or paint is harder and more expensive than refinishing the whole piece. If the existing finish is failing anyway, refinishing everything often makes more sense.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "age_of_work",
+            "text": "Approximate age of the existing ironwork?",
+            "type": "choice",
+            "options": ["Under 10 years", "10-30 years", "30-50 years", "Over 50 years (historic)", "No idea"],
+            "required": false,
+            "hint": "Older ironwork may have hidden deterioration, different alloys, or lead paint. This affects repair approach and cost.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "can_remove",
+            "text": "Can the piece be removed and brought to the shop, or is it on-site only?",
+            "type": "choice",
+            "options": ["Can be removed — bring to shop", "Must stay in place — on-site repair only", "Not sure — need assessment"],
+            "required": true,
+            "hint": "Shop repair is usually better quality and cheaper. On-site repair is necessary for large/fixed pieces but costs more (on-site rate applies).",
+            "depends_on": null,
+            "branches": {
+                "Must stay in place — on-site repair only": ["site_access_constraints"],
+                "Not sure — need assessment": ["site_visit"]
+            }
+        },
+        {
+            "id": "site_access_constraints",
+            "text": "Any access constraints at the site?",
+            "type": "multi_choice",
+            "options": ["Work at height (ladder/scaffold needed)", "Tight/confined space", "Indoor work (ventilation needed for welding)", "Outdoor with weather exposure", "Limited parking/equipment access", "No constraints"],
+            "required": false,
+            "hint": "Welding at height or in confined spaces adds significant time and may require additional safety equipment.",
+            "depends_on": "can_remove",
+            "branches": null
+        },
+        {
+            "id": "site_visit",
+            "text": "Would you like a site visit to assess before quoting? (1-1.5 hours at shop rate)",
+            "type": "choice",
+            "options": ["Yes — schedule a site visit", "No — quote from photos", "Maybe — let me see the photo-based estimate first"],
+            "required": false,
+            "hint": "Complex repairs often benefit from an in-person look. The site visit fee is typically credited toward the job if you proceed.",
+            "depends_on": "can_remove",
+            "branches": null
+        },
+        {
+            "id": "surrounding_damage",
+            "text": "Is there damage beyond the primary repair area?",
+            "type": "choice",
+            "options": ["No — just the one spot", "Yes — some additional issues nearby", "Yes — widespread deterioration (may need full replacement discussion)", "Haven't checked thoroughly"],
+            "required": false,
+            "hint": "This is a common scope creep flag. Better to know upfront than discover it mid-repair.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish for the repaired area?",
+            "type": "choice",
+            "options": ["Match existing (blend repair into existing finish)", "Refinish entire piece (strip and recoat everything)", "Powder coat entire piece", "Prime only (customer will paint)", "No finish (structural fix only)"],
+            "required": true,
+            "hint": "Spot-matching is tricky and may show. Refinishing the whole piece gives the best result.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "budget_range",
+            "text": "Do you have a budget range in mind?",
+            "type": "choice",
+            "options": ["Under $500", "$500-$1,500", "$1,500-$3,000", "$3,000+", "No budget in mind — just need it fixed", "Want to compare repair vs. replacement cost"],
+            "required": false,
+            "hint": "This helps us calibrate between a quick functional fix and a full restoration. Sometimes replacement is more cost-effective than repair.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

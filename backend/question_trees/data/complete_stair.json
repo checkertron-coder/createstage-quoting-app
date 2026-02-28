@@ -1,0 +1,246 @@
+{
+    "job_type": "complete_stair",
+    "version": "1.0",
+    "display_name": "Complete Staircase (Stringers + Treads + Landing)",
+    "category": "architectural",
+    "required_fields": [
+        "total_rise", "stair_width", "application", "code_requirement",
+        "stringer_type", "tread_type", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "total_rise",
+            "text": "What is the total rise? (floor-to-floor height or ground to landing)",
+            "type": "measurement",
+            "unit": "inches",
+            "required": true,
+            "hint": "Measure from finished floor to finished floor. Typical story height: 108-120 inches (9-10 ft).",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "stair_width",
+            "text": "What stair width?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": true,
+            "hint": "Residential minimum: 36\". Commercial minimum: 44\". Fire escape: 44\" minimum. Wider is better for moving furniture.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "application",
+            "text": "What is this staircase for?",
+            "type": "choice",
+            "options": ["Exterior deck access", "Exterior fire escape / egress", "Rooftop access", "Interior feature staircase", "Industrial / equipment access", "Basement access"],
+            "required": true,
+            "hint": "Application determines code requirements, material choices, and finish needs.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "code_requirement",
+            "text": "Residential or commercial code?",
+            "type": "choice",
+            "options": ["Residential (IRC R311)", "Commercial (IBC 1011)", "Industrial (OSHA 1910.25)", "Not sure — describe the building type"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Residential (IRC R311)": ["code_info_residential"],
+                "Commercial (IBC 1011)": ["code_info_commercial"]
+            }
+        },
+        {
+            "id": "code_info_residential",
+            "text": "Residential code note: IRC R311 allows max 7-3/4\" rise and min 10\" run. We'll design to these dimensions unless you specify otherwise. Does this work?",
+            "type": "choice",
+            "options": ["Yes — use standard residential dimensions", "No — I have specific rise/run requirements"],
+            "required": false,
+            "hint": "Standard residential: 7.5\" rise x 10.5\" run is comfortable and code-compliant.",
+            "depends_on": "code_requirement",
+            "branches": {
+                "No — I have specific rise/run requirements": ["custom_rise", "custom_run"]
+            }
+        },
+        {
+            "id": "code_info_commercial",
+            "text": "Commercial code note: IBC 1011 requires max 7\" rise and min 11\" run. We'll design to these dimensions. Does this work?",
+            "type": "choice",
+            "options": ["Yes — use standard commercial dimensions", "No — I have specific rise/run requirements"],
+            "required": false,
+            "hint": null,
+            "depends_on": "code_requirement",
+            "branches": {
+                "No — I have specific rise/run requirements": ["custom_rise", "custom_run"]
+            }
+        },
+        {
+            "id": "custom_rise",
+            "text": "Individual riser height?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": false,
+            "hint": "Must comply with applicable code. Residential max: 7.75\". Commercial max: 7\".",
+            "depends_on": "code_requirement",
+            "branches": null
+        },
+        {
+            "id": "custom_run",
+            "text": "Individual tread depth (run)?",
+            "type": "measurement",
+            "unit": "inches",
+            "required": false,
+            "hint": "Residential min: 10\". Commercial min: 11\".",
+            "depends_on": "code_requirement",
+            "branches": null
+        },
+        {
+            "id": "stringer_type",
+            "text": "What stringer type?",
+            "type": "choice",
+            "options": ["C-channel stringers (most common for steel stairs)", "Flat plate cut stringers (exposed/decorative)", "HSS rectangular tube stringers", "Mono-stringer (single center — architectural feature)"],
+            "required": true,
+            "hint": "C-channel (C6x8.2 or C8x11.5) is the workhorse for most steel stairs. Mono-stringer is dramatic but requires heavier engineering.",
+            "depends_on": null,
+            "branches": {
+                "Mono-stringer (single center — architectural feature)": ["structural_engineering"]
+            }
+        },
+        {
+            "id": "tread_type",
+            "text": "What tread type?",
+            "type": "choice",
+            "options": ["Bar grating (industrial, non-slip)", "Checker plate / diamond plate", "Solid steel plate (1/4\" or 3/8\")", "Steel pan (filled with concrete by others)", "Open (no treads — stringers only, customer adds wood/composite)"],
+            "required": true,
+            "hint": "Bar grating and checker plate are standard for exterior. Steel pans are common for commercial (concrete fill by others).",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "risers_open_closed",
+            "text": "Open risers or closed risers?",
+            "type": "choice",
+            "options": ["Open risers (typical for steel stairs)", "Closed risers (solid plate between treads)", "Code requires closed risers (some commercial/residential)"],
+            "required": false,
+            "hint": "Some codes require closed risers if the stair is over 30\" above grade. Commercial code typically allows open risers with max 4\" opening.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "landing_count",
+            "text": "How many landing platforms are needed?",
+            "type": "choice",
+            "options": ["None — straight run", "1 landing (L-shape or switchback)", "2 landings (U-shape or multi-flight)", "3+ landings (tall structure)"],
+            "required": false,
+            "hint": "Landings are often forgotten in initial estimates. Each landing is essentially a small steel platform that adds significant material and labor.",
+            "depends_on": null,
+            "branches": {
+                "1 landing (L-shape or switchback)": ["landing_dimensions"],
+                "2 landings (U-shape or multi-flight)": ["landing_dimensions"],
+                "3+ landings (tall structure)": ["landing_dimensions"]
+            }
+        },
+        {
+            "id": "landing_dimensions",
+            "text": "Landing platform dimensions?",
+            "type": "text",
+            "required": false,
+            "hint": "Minimum landing depth = stair width (code requirement). Typical: 4'x4' for residential, 5'x5' for commercial. List each landing if different.",
+            "depends_on": "landing_count",
+            "branches": null
+        },
+        {
+            "id": "railing_included",
+            "text": "Is railing included in this quote?",
+            "type": "choice",
+            "options": ["Yes — include railing", "No — railing quoted separately", "No — customer handles railing"],
+            "required": false,
+            "hint": "Railing is quoted using our stair railing pricing. If included, we'll add it as a line item based on the stair dimensions.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "attachment_method",
+            "text": "How will the staircase attach to the structure?",
+            "type": "choice",
+            "options": ["Weld to steel embed plates (new construction)", "Bolt to existing concrete (anchor bolts)", "Bolt to existing steel structure", "Cantilever from wall (no ground support)", "Freestanding with own footings"],
+            "required": false,
+            "hint": "Attachment method significantly affects engineering and install complexity.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "structural_engineering",
+            "text": "Will this staircase require a structural engineering stamp (PE stamp)?",
+            "type": "choice",
+            "options": ["Yes — PE stamp required", "No — not required", "Not sure — check with building department"],
+            "required": false,
+            "hint": "New staircases almost always require PE-stamped drawings for permit. This is typically an additional cost outside the fabrication scope.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "nosing_type",
+            "text": "Tread nosing type?",
+            "type": "choice",
+            "options": ["Bent nose (integral to tread)", "Abrasive safety nosing (bolt-on strip)", "No nosing (flush edge)", "Cast iron nosing"],
+            "required": false,
+            "hint": "Safety nosing is required by code on most commercial stairs. Adds visibility and traction.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized (hot-dip — best for exterior)", "Prime only (customer finishes)", "Raw steel"],
+            "required": true,
+            "hint": "Exterior steel stairs should be galvanized or powder coated. Galvanizing is most durable for weather exposure.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "Safety yellow", "Gray", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only (crane/rigging by others)", "Shop pickup"],
+            "required": true,
+            "hint": "Steel stair installation often requires a crane or forklift for placement. Include rigging costs.",
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have drawings, sketches, or reference photos?",
+            "type": "photo",
+            "required": false,
+            "hint": "Engineering drawings speed up the quote significantly. Even a rough sketch helps.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

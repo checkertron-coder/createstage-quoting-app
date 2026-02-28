@@ -1,0 +1,189 @@
+{
+    "job_type": "utility_enclosure",
+    "version": "1.0",
+    "display_name": "Utility Enclosure / Equipment Screen",
+    "category": "specialty",
+    "required_fields": [
+        "enclosure_purpose", "dimensions", "material", "gauge",
+        "access_type", "mounting", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "enclosure_purpose",
+            "text": "What is the enclosure for?",
+            "type": "choice",
+            "options": ["HVAC equipment screen", "Electrical panel / transformer enclosure", "Dumpster / trash enclosure", "Generator enclosure", "Mechanical equipment screen (pumps, compressors)", "Gas meter / utility meter protection", "Custom equipment housing"],
+            "required": true,
+            "hint": "Purpose determines ventilation requirements, access needs, and any code compliance (NEMA rating, fire separation, clearances).",
+            "depends_on": null,
+            "branches": {
+                "Electrical panel / transformer enclosure": ["nema_rating"],
+                "Generator enclosure": ["ventilation_requirements"]
+            }
+        },
+        {
+            "id": "nema_rating",
+            "text": "What NEMA rating is required?",
+            "type": "choice",
+            "options": ["NEMA 1 (indoor, general purpose)", "NEMA 3R (outdoor, rain/sleet proof)", "NEMA 4 (watertight — hose-down environments)", "NEMA 4X (watertight + corrosion resistant — stainless)", "Not sure — describe the environment"],
+            "required": false,
+            "hint": "NEMA rating drives material choice, gasket requirements, and door seal design. NEMA 4X requires stainless steel and adds significant cost.",
+            "depends_on": "enclosure_purpose",
+            "branches": null
+        },
+        {
+            "id": "ventilation_requirements",
+            "text": "What ventilation is needed?",
+            "type": "choice",
+            "options": ["Louvered panels (passive airflow)", "Perforated panels (visual screen + airflow)", "Forced ventilation (exhaust fan cutout)", "Sealed (no ventilation — weathertight)", "Not sure — describe what's inside"],
+            "required": false,
+            "hint": "Generators require significant airflow for cooling and exhaust. HVAC screens need airflow too. Undersizing ventilation causes equipment failure.",
+            "depends_on": "enclosure_purpose",
+            "branches": null
+        },
+        {
+            "id": "dimensions",
+            "text": "What are the enclosure dimensions? (length x width x height)",
+            "type": "text",
+            "required": true,
+            "hint": "Measure the equipment plus required clearances. Electrical code requires specific working clearances (NEC 110.26). Include door swing clearance.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "What material?",
+            "type": "choice",
+            "options": ["Mild steel (most common)", "Stainless steel (304)", "Stainless steel (316 — marine/corrosive)", "Aluminum", "Corten / weathering steel (architectural)"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "gauge",
+            "text": "What material thickness/gauge?",
+            "type": "choice",
+            "options": ["16 gauge (standard for screens/enclosures)", "14 gauge (heavy duty)", "12 gauge (very heavy — equipment protection)", "11 gauge (NEMA 4 / structural)", "10 gauge (extreme duty)"],
+            "required": true,
+            "hint": "16ga is standard for decorative screens. 12-14ga for equipment enclosures that may be bumped or require security. NEMA 4 typically requires 11-12ga.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "panel_style",
+            "text": "Panel infill style?",
+            "type": "choice",
+            "options": ["Solid flat panels", "Perforated metal (specify pattern)", "Louvered panels", "Expanded metal", "Wire mesh / woven wire", "Horizontal slat (privacy screen)", "Combination (some solid, some open)"],
+            "required": false,
+            "hint": "Perforated and louvered panels allow airflow while screening equipment from view.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "access_type",
+            "text": "How will the equipment be accessed for service?",
+            "type": "choice",
+            "options": ["Hinged door(s) — single", "Hinged doors — double (French door)", "Removable panels (bolt-on)", "Sliding panels", "Full side removable (lift-off)", "No access needed (permanent screen)"],
+            "required": true,
+            "hint": "Service access is frequently underquoted. Hinged doors need frames, hinges, latches, and weather seals. Removable panels need captive hardware (carriage bolts or quarter-turn fasteners).",
+            "depends_on": null,
+            "branches": {
+                "Hinged door(s) — single": ["door_hardware"],
+                "Hinged doors — double (French door)": ["door_hardware"]
+            }
+        },
+        {
+            "id": "door_hardware",
+            "text": "Door hardware requirements?",
+            "type": "multi_choice",
+            "options": ["Piano hinge (full length)", "Butt hinges (3 per door)", "Padlock hasp", "Keyed cam lock", "Magnetic catch", "Gas struts (for top-hinged panels)", "Weatherstrip / gasket seal"],
+            "required": false,
+            "hint": "Hardware is often forgotten in enclosure quotes. A single hinged door needs at minimum: 3 hinges + 1 latch + weather seal = $40-80 in hardware alone.",
+            "depends_on": "access_type",
+            "branches": null
+        },
+        {
+            "id": "frame_type",
+            "text": "Frame construction?",
+            "type": "choice",
+            "options": ["Angle iron frame with bolt-on panels", "Square tube frame with welded panels", "Self-framing (folded sheet metal edges)", "Channel frame (heavier duty)"],
+            "required": false,
+            "hint": "Angle iron frame + bolt-on panels is easiest to transport and field-assemble. Welded construction is stronger but requires crane/forklift to move.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "mounting",
+            "text": "How will the enclosure be mounted/anchored?",
+            "type": "choice",
+            "options": ["Concrete pad (anchor bolts)", "Steel posts in ground (concrete footings)", "Freestanding (weighted base)", "Wall-mounted brackets", "Bolt to existing structure"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "roof_cap",
+            "text": "Does the enclosure need a top/roof?",
+            "type": "choice",
+            "options": ["Open top (screen only)", "Solid roof panel", "Louvered top (rain protection + airflow)", "Peaked / sloped roof (water drainage)", "Not needed — equipment is under existing overhang"],
+            "required": false,
+            "hint": "Roofs add significant material and must handle snow/wind loads. Sloped roofs need drainage consideration.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized (hot-dip)", "Clear coat", "Raw steel", "Mill finish (aluminum/stainless — no coating)"],
+            "required": true,
+            "hint": "Exterior enclosures should be powder coated or galvanized. Corten steel is left raw by design.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black", "Gray", "Dark bronze", "Match building color (specify)", "Custom RAL color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only", "Shop pickup"],
+            "required": true,
+            "hint": "Large enclosures may require crane or forklift for placement. Verify site access.",
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have drawings, specs, or reference photos?",
+            "type": "photo",
+            "required": false,
+            "hint": "Photos of the equipment to be enclosed and the site help us design the right solution.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

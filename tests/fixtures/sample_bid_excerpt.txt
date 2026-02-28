@@ -1,0 +1,86 @@
+SECTION 05 50 00 — METAL FABRICATIONS
+
+PART 1 — GENERAL
+
+1.01 SUMMARY
+A. Section includes:
+   1. Steel railings and handrails
+   2. Steel pipe guardrails
+   3. Miscellaneous steel fabrications
+   4. Steel stairs
+   5. Ornamental iron gates
+   6. Bollards
+
+1.02 RELATED SECTIONS
+A. Section 03 30 00 — Cast-in-Place Concrete: Embed plates and anchor bolts cast into concrete.
+B. Section 05 12 00 — Structural Steel Framing: Primary structural steel by others.
+C. Section 09 91 00 — Painting: Field touch-up of shop-primed surfaces.
+
+1.03 REFERENCES
+A. ASTM A36/A36M — Standard Specification for Carbon Structural Steel
+B. ASTM A500/A500M — Standard Specification for Cold-Formed Welded and Seamless Carbon Steel Structural Tubing
+C. ASTM A53/A53M — Standard Specification for Pipe, Steel
+D. ASTM A123/A123M — Standard Specification for Zinc (Hot-Dip Galvanized) Coatings on Iron and Steel Products
+
+1.04 SUBMITTALS
+A. Shop Drawings: Submit for review prior to fabrication. Include all dimensions, connections, and material specifications.
+B. Product Data: Submit for each type of manufactured component.
+
+PART 2 — PRODUCTS
+
+2.01 MATERIALS
+A. Steel shapes, plates, and bars: ASTM A36
+B. Steel tubing: ASTM A500, Grade B
+C. Steel pipe: ASTM A53, Type E or S, Grade B
+D. Stainless steel: AISI Type 304
+
+2.02 FASTENERS
+A. Bolts: ASTM A325, hot-dip galvanized where exposed
+B. Anchors: Hilti HIT-HY 200 adhesive anchors or approved equal
+
+PART 3 — EXECUTION
+
+3.01 STAIR 1 — GROUND FLOOR TO SECOND FLOOR
+A. Provide steel stair with the following:
+   1. Total rise: 12'-0"
+   2. Width: 44" clear
+   3. Stringers: MC10x8.4
+   4. Treads: 1/4" diamond plate, 11" run
+   5. Risers: Open
+   6. Landings: 1 intermediate platform at mid-height, 5'-0" x 4'-6"
+   7. Railing: Both sides, 42" high, 1-1/2" round top rail, vertical pickets at 4" o.c.
+   8. Finish: Hot-dip galvanized per ASTM A123
+   See Detail S-301
+
+3.02 ORNAMENTAL IRON RAILING — STAIR 2
+A. Provide ornamental iron railing:
+   1. Linear footage: Approximately 65 LF
+   2. Height: 42"
+   3. Top rail: 1-1/2" square tube
+   4. Infill: 1/2" square bar vertical pickets at 4" o.c.
+   5. Posts: 2" square tube at 5'-0" o.c., surface mount
+   6. Finish: Powder coat, color to be selected by architect
+   See Detail A-12
+
+3.03 CANTILEVER GATE — PARKING ENTRANCE
+A. Provide cantilever sliding gate:
+   1. Clear opening: 16'-0"
+   2. Height: 6'-0"
+   3. Frame: 2" square tube
+   4. Infill: Expanded metal
+   5. Electric operator: LiftMaster CSW24U or approved equal
+   6. Finish: Powder coat black
+   See Detail S-105
+
+3.04 BOLLARDS — MAIN ENTRANCE
+A. Provide (6) fixed bollards:
+   1. Pipe: 6" schedule 40
+   2. Height above grade: 36"
+   3. Embed: 24" below grade in concrete footing
+   4. Finish: Powder coat safety yellow
+   5. Protective HDPE sleeve cover
+
+3.05 MISCELLANEOUS METALS
+A. Provide miscellaneous embed plates, connection brackets, and support angles as indicated on structural drawings. See sheets S-100 through S-115.
+
+END OF SECTION 05 50 00

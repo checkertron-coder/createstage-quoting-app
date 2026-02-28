@@ -1,0 +1,180 @@
+{
+    "job_type": "window_security_grate",
+    "version": "1.0",
+    "display_name": "Window Security Grate / Bars",
+    "category": "ornamental",
+    "required_fields": [
+        "window_count", "opening_dimensions", "bar_pattern",
+        "fixed_or_hinged", "finish", "installation"
+    ],
+    "questions": [
+        {
+            "id": "window_count",
+            "text": "How many windows/openings need grates?",
+            "type": "number",
+            "required": true,
+            "hint": "Pricing is per unit. Multiple identical units get a better per-unit price.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "opening_dimensions",
+            "text": "What are the opening dimensions? (width x height for each window)",
+            "type": "text",
+            "required": true,
+            "hint": "Measure the rough opening or frame-to-frame. List each size if different. Example: '3 units at 36\" x 48\", 2 units at 24\" x 36\"'.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bar_pattern",
+            "text": "What bar pattern/design?",
+            "type": "choice",
+            "options": ["Vertical bars only (simple/clean)", "Grid pattern (horizontal + vertical)", "Diagonal cross-hatch", "Decorative scrollwork", "Custom pattern"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Decorative scrollwork": ["design_reference"],
+                "Custom pattern": ["design_reference"]
+            }
+        },
+        {
+            "id": "bar_material",
+            "text": "What bar material?",
+            "type": "choice",
+            "options": ["1/2\" square bar", "5/8\" square bar", "3/4\" square bar (most common)", "1/2\" round bar", "5/8\" round bar", "1\" x 1/4\" flat bar"],
+            "required": false,
+            "hint": "3/4\" square bar provides good security and looks proportional on most windows.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bar_spacing",
+            "text": "Bar spacing?",
+            "type": "choice",
+            "options": ["4\" on-center (tighter security)", "5\" on-center (standard)", "6\" on-center (more open look)"],
+            "required": false,
+            "hint": "5\" is standard for security. Tighter for ground-floor vulnerable windows.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "frame_material",
+            "text": "What frame material?",
+            "type": "choice",
+            "options": ["1\" x 1\" angle iron", "1-1/4\" x 1-1/4\" angle iron", "1\" square tube", "1-1/2\" square tube"],
+            "required": false,
+            "hint": "Frame should be heavier than the bars to provide rigidity. 1\" angle iron minimum.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "fixed_or_hinged",
+            "text": "Fixed grates or hinged (operable)?",
+            "type": "choice",
+            "options": ["Fixed (welded/bolted in place)", "Hinged — swings open for cleaning/egress", "Quick-release (emergency egress — release from inside)"],
+            "required": true,
+            "hint": "IMPORTANT: IBC 1030 requires operable grates on egress windows (bedrooms, basement windows used for emergency exit). If the inspector requires hinged, the entire cost changes significantly (2-3x fixed cost).",
+            "depends_on": null,
+            "branches": {
+                "Hinged — swings open for cleaning/egress": ["hinge_side", "latch_type"],
+                "Quick-release (emergency egress — release from inside)": ["latch_type"]
+            }
+        },
+        {
+            "id": "hinge_side",
+            "text": "Which side for the hinges?",
+            "type": "choice",
+            "options": ["Left side", "Right side", "Top-hinged (swings up)", "Varies per window"],
+            "required": false,
+            "hint": "Side-hinged is most common. Top-hinged works for basement windows.",
+            "depends_on": "fixed_or_hinged",
+            "branches": null
+        },
+        {
+            "id": "latch_type",
+            "text": "Latch/lock type for operable grates?",
+            "type": "choice",
+            "options": ["Interior barrel bolt (accessible from inside only)", "Keyed padlock hasp", "Quick-release lever (egress compliant)", "Magnetic catch"],
+            "required": false,
+            "hint": "Egress-compliant latches must be operable from inside without tools or keys.",
+            "depends_on": "fixed_or_hinged",
+            "branches": null
+        },
+        {
+            "id": "mount_method",
+            "text": "How will grates be mounted?",
+            "type": "choice",
+            "options": ["Surface mount (lag bolts into wood/concrete frame)", "Set in masonry (anchors into brick or block)", "Weld to existing steel frame", "Bolt through wall (tamper-proof from outside)"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Set in masonry (anchors into brick or block)": ["masonry_type"]
+            }
+        },
+        {
+            "id": "masonry_type",
+            "text": "What type of masonry?",
+            "type": "choice",
+            "options": ["Brick", "Concrete block (CMU)", "Poured concrete", "Stone"],
+            "required": false,
+            "hint": "Masonry anchoring adds time — drilling into brick/block requires hammer drill and expansion anchors. Old brick can be fragile.",
+            "depends_on": "mount_method",
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized", "Clear coat", "Raw steel"],
+            "required": true,
+            "hint": "Exterior grates should be powder coated or galvanized. Interior can be painted or clear coated.",
+            "depends_on": null,
+            "branches": {
+                "Powder coat (most durable)": ["powder_coat_color"]
+            }
+        },
+        {
+            "id": "powder_coat_color",
+            "text": "Powder coat color?",
+            "type": "choice",
+            "options": ["Black (most common)", "White", "Bronze", "Match window frame color"],
+            "required": false,
+            "hint": null,
+            "depends_on": "finish",
+            "branches": null
+        },
+        {
+            "id": "installation",
+            "text": "Do you need installation?",
+            "type": "choice",
+            "options": ["Full installation", "Delivery only", "Shop pickup"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Full installation": ["site_location"]
+            }
+        },
+        {
+            "id": "site_location",
+            "text": "Where is the job site?",
+            "type": "text",
+            "required": false,
+            "hint": "City or zip code for travel time.",
+            "depends_on": "installation",
+            "branches": null
+        },
+        {
+            "id": "design_reference",
+            "text": "Do you have reference photos or design sketches?",
+            "type": "photo",
+            "required": false,
+            "hint": "Upload photos of the windows and any design inspiration.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

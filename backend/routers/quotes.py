@@ -4,6 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 from .. import models
+from ..auth import get_current_user
 from ..database import get_db
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
@@ -123,6 +124,10 @@ class QuoteCreate(BaseModel):
     line_items: List[LineItemCreate] = []
 
 
+class MarkupRequest(BaseModel):
+    markup_pct: int
+
+
 class QuoteUpdate(BaseModel):
     status: Optional[str] = None
     project_description: Optional[str] = None
@@ -176,12 +181,71 @@ def list_quotes(skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     return [_quote_to_dict(q) for q in quotes]
 
 
+@router.get("/mine")
+def list_my_quotes(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """List quotes for the authenticated user, newest first."""
+    from ..pdf_generator import generate_job_summary
+    quotes = db.query(models.Quote).filter(
+        models.Quote.user_id == current_user.id,
+    ).order_by(models.Quote.created_at.desc()).offset(skip).limit(limit).all()
+
+    results = []
+    for q in quotes:
+        outputs = q.outputs_json or {}
+        inputs = q.inputs_json or {}
+        fields = inputs.get("fields", {})
+        summary = generate_job_summary(q.job_type or "", fields)
+        results.append({
+            "id": q.id,
+            "quote_number": q.quote_number,
+            "job_type": q.job_type,
+            "status": q.status.value if q.status else "draft",
+            "subtotal": q.subtotal,
+            "total": q.total,
+            "selected_markup_pct": q.selected_markup_pct,
+            "summary": summary,
+            "created_at": q.created_at.isoformat() if q.created_at else None,
+        })
+    return results
+
+
 @router.get("/{quote_id}")
 def get_quote(quote_id: int, db: Session = Depends(get_db)):
     quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
     if not quote:
         raise HTTPException(status_code=404, detail="Quote not found")
     return _quote_to_dict(quote)
+
+
+@router.get("/{quote_id}/detail")
+def get_quote_detail(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Return full PricedQuote from outputs_json for the authenticated user."""
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your quote")
+    return {
+        "id": quote.id,
+        "quote_number": quote.quote_number,
+        "job_type": quote.job_type,
+        "status": quote.status.value if quote.status else "draft",
+        "subtotal": quote.subtotal,
+        "total": quote.total,
+        "selected_markup_pct": quote.selected_markup_pct,
+        "inputs": quote.inputs_json,
+        "outputs": quote.outputs_json,
+        "created_at": quote.created_at.isoformat() if quote.created_at else None,
+    }
 
 
 @router.patch("/{quote_id}")
@@ -204,6 +268,68 @@ def delete_quote(quote_id: int, db: Session = Depends(get_db)):
     db.delete(quote)
     db.commit()
     return {"ok": True}
+
+
+ALLOWED_MARKUPS = [0, 5, 10, 15, 20, 25, 30]
+
+
+@router.put("/{quote_id}/markup")
+def update_markup(
+    quote_id: int,
+    request: MarkupRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Update the markup percentage on a v2 pipeline quote.
+
+    Validates markup_pct is in [0, 5, 10, 15, 20, 25, 30].
+    Recalculates total from subtotal × (1 + markup_pct/100).
+    Updates the Quote record and outputs_json.
+    """
+    if request.markup_pct not in ALLOWED_MARKUPS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"markup_pct must be one of {ALLOWED_MARKUPS}, got {request.markup_pct}",
+        )
+
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your quote")
+
+    # Recalculate
+    from ..pricing_engine import PricingEngine
+    pricing_engine = PricingEngine()
+
+    subtotal = quote.subtotal or 0.0
+    new_total = round(subtotal * (1 + request.markup_pct / 100.0), 2)
+
+    quote.selected_markup_pct = request.markup_pct
+    quote.total = new_total
+    quote.updated_at = datetime.utcnow()
+
+    # Update outputs_json if present
+    if quote.outputs_json:
+        outputs = dict(quote.outputs_json)
+        outputs["selected_markup_pct"] = request.markup_pct
+        outputs["total"] = new_total
+        quote.outputs_json = outputs
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(quote, "outputs_json")
+
+    db.commit()
+    db.refresh(quote)
+
+    return {
+        "quote_id": quote.id,
+        "quote_number": quote.quote_number,
+        "subtotal": quote.subtotal,
+        "selected_markup_pct": request.markup_pct,
+        "total": new_total,
+        "markup_options": pricing_engine._build_markup_options(subtotal),
+    }
 
 
 @router.get("/{quote_id}/breakdown")
