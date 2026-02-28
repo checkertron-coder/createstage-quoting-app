@@ -1,0 +1,80 @@
+{
+    "job_type": "rock_slider",
+    "version": "1.0",
+    "display_name": "Rock Slider / Rocker Guard",
+    "category": "automotive",
+    "required_fields": [
+        "vehicle_make_model", "slider_style", "material_thickness", "finish"
+    ],
+    "questions": [
+        {
+            "id": "vehicle_make_model",
+            "text": "What vehicle? (year, make, model)",
+            "type": "text",
+            "required": true,
+            "hint": "Example: '2021 Toyota 4Runner', '2019 Jeep Gladiator'. We need this for cab length, pinch weld location, and mounting points.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "slider_style",
+            "text": "What style of slider?",
+            "type": "choice",
+            "options": ["Weld-on (strongest — welded to frame)", "Bolt-on (removable — uses frame bolts)", "Bolt-on with weld-on frame brackets"],
+            "required": true,
+            "hint": "Weld-on is strongest for rock crawling. Bolt-on is preferred if you might remove them or for lease vehicles.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "mounting_type",
+            "text": "Mounting style?",
+            "type": "choice",
+            "options": ["Frame mount (standard)", "Body mount + frame tie-in", "Integrated with frame stiffeners"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material_thickness",
+            "text": "Main rail tube / plate thickness?",
+            "type": "choice",
+            "options": ["1.75\" OD × 0.120\" wall DOM (standard)", "2\" OD × 0.120\" wall DOM (heavy duty)", "1.5\" OD × 0.120\" wall DOM (lighter weight)", "Plate-style (3/16\" or 1/4\" plate)"],
+            "required": true,
+            "hint": "1.75\" OD DOM tubing is the most common for rock sliders. DOM (Drawn Over Mandrel) is stronger than ERW for impact loads.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "kick_out",
+            "text": "Include kick-out step?",
+            "type": "choice",
+            "options": ["Yes — angled kick-out (easier entry/exit)", "No — straight rail only"],
+            "required": false,
+            "hint": "Kick-out extends the slider outward under the door, creating a step. Adds material and labor but very functional.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "top_plate",
+            "text": "Top plate / tread plate?",
+            "type": "choice",
+            "options": ["Diamond plate top (functional step)", "Flat plate with grip tape", "Open top (rail only)", "Expanded metal fill"],
+            "required": false,
+            "hint": "Diamond plate adds a functional step surface. Open top is lighter but less useful as a step.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Spray-on bedliner", "Raw steel"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

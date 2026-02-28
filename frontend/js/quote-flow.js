@@ -22,6 +22,16 @@ const JOB_TYPES = {
     bollard: 'Bollard',
     repair_structural: 'Repair (Structural)',
     custom_fab: 'Custom Fab',
+    offroad_bumper: 'Off-Road Bumper',
+    rock_slider: 'Rock Slider',
+    roll_cage: 'Roll Cage',
+    exhaust_custom: 'Custom Exhaust',
+    trailer_fab: 'Custom Trailer',
+    structural_frame: 'Structural Frame',
+    furniture_other: 'Furniture / Fixtures',
+    sign_frame: 'Sign Frame',
+    led_sign_custom: 'LED Sign',
+    product_firetable: 'FireTable',
 };
 
 const PROCESS_NAMES = {
@@ -43,6 +53,9 @@ const QuoteFlow = {
     quoteId: null,
     pricedQuote: null,
     currentStep: 'describe', // describe | clarify | processing | results
+    sessionPhotoUrls: [],
+    extractedFields: {},
+    allQuestions: [],
 
     renderQuoteView() {
         const el = document.getElementById('view-quote');
@@ -54,6 +67,7 @@ const QuoteFlow = {
             <div id="quote-step-processing" class="quote-step" style="display:none"></div>
             <div id="quote-step-results" class="quote-step" style="display:none"></div>
         `;
+        this._initPhotoUpload();
     },
 
     _renderDescribeStep() {
@@ -67,6 +81,15 @@ const QuoteFlow = {
                 <textarea id="job-description" class="job-textarea"
                     placeholder="Describe the job... e.g. '10 foot cantilever gate with motor, powder coat black, full install'"
                     rows="3"></textarea>
+
+                <div class="photo-upload-section">
+                    <input type="file" id="photo-input" accept="image/jpeg,image/png,image/webp,image/heic" multiple hidden>
+                    <button class="btn btn-secondary btn-sm" id="photo-upload-btn" onclick="document.getElementById('photo-input').click()">
+                        + Add Photos
+                    </button>
+                    <span class="photo-hint">Photos help us extract dimensions, materials, and damage</span>
+                    <div id="photo-previews" class="photo-previews"></div>
+                </div>
 
                 <div class="job-type-section">
                     <p class="job-type-label">Or pick a job type:</p>
@@ -96,6 +119,61 @@ const QuoteFlow = {
         `;
     },
 
+    _initPhotoUpload() {
+        const input = document.getElementById('photo-input');
+        if (!input) return;
+        input.addEventListener('change', async (e) => {
+            for (const file of e.target.files) {
+                QuoteFlow._showPhotoUploading(file.name);
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    const result = await API.uploadPhoto(formData);
+                    QuoteFlow.sessionPhotoUrls.push(result.photo_url);
+                    QuoteFlow._showPhotoPreview(result.photo_url, file.name);
+                } catch (err) {
+                    QuoteFlow._showPhotoError(file.name, err.message);
+                }
+            }
+            input.value = '';
+        });
+    },
+
+    _showPhotoUploading(name) {
+        const container = document.getElementById('photo-previews');
+        if (!container) return;
+        const el = document.createElement('div');
+        el.className = 'photo-preview uploading';
+        el.id = 'uploading-' + name.replace(/[^a-zA-Z0-9]/g, '_');
+        el.innerHTML = '<div class="spinner-sm"></div><span class="photo-name">' + name + '</span>';
+        container.appendChild(el);
+    },
+
+    _showPhotoPreview(url, name) {
+        const container = document.getElementById('photo-previews');
+        if (!container) return;
+        const uploading = document.getElementById('uploading-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
+        if (uploading) uploading.remove();
+        const el = document.createElement('div');
+        el.className = 'photo-preview';
+        el.innerHTML = `
+            <img src="${url}" alt="${name}" />
+            <span class="photo-name">${name}</span>
+            <button class="photo-remove" onclick="QuoteFlow._removePhoto(this, '${url}')">&times;</button>
+        `;
+        container.appendChild(el);
+    },
+
+    _showPhotoError(name, msg) {
+        const uploading = document.getElementById('uploading-' + name.replace(/[^a-zA-Z0-9]/g, '_'));
+        if (uploading) uploading.remove();
+    },
+
+    _removePhoto(btn, url) {
+        QuoteFlow.sessionPhotoUrls = QuoteFlow.sessionPhotoUrls.filter(u => u !== url);
+        btn.closest('.photo-preview').remove();
+    },
+
     toggleMoreTypes() {
         const el = document.getElementById('more-job-types');
         el.style.display = el.style.display === 'none' ? 'grid' : 'none';
@@ -114,10 +192,14 @@ const QuoteFlow = {
 
     async _startSession(description, jobType = null) {
         this._showStep('processing');
-        this._showProcessing('Starting quote...');
+        this._showProcessing(this.sessionPhotoUrls.length > 0
+            ? 'Analyzing photos and starting quote...'
+            : 'Starting quote...');
         try {
-            const data = await API.startSession(description, jobType);
+            const data = await API.startSession(description, jobType, this.sessionPhotoUrls);
             this.sessionId = data.session_id;
+            this.extractedFields = data.extracted_fields || {};
+            this.allQuestions = data.next_questions || [];
 
             if (data.completion && data.completion.is_complete) {
                 await this._runPipeline();
@@ -140,6 +222,12 @@ const QuoteFlow = {
         const answered = completion.total_answered || 0;
         const total = completion.required_total || 0;
         const extracted = data.extracted_fields || {};
+        const photoExtracted = data.photo_extracted_fields || {};
+        const photoObs = data.photo_observations || '';
+
+        // Merge all confirmed fields for display
+        const allConfirmed = Object.assign({}, extracted, photoExtracted);
+        this.extractedFields = allConfirmed;
 
         el.innerHTML = `
             <div class="clarify-card">
@@ -151,14 +239,14 @@ const QuoteFlow = {
                     <span class="progress-text">${answered}/${total} fields</span>
                 </div>
 
-                ${Object.keys(extracted).length > 0 ? `
-                    <div class="extracted-fields">
-                        <p class="extracted-title">Already captured:</p>
-                        ${Object.entries(extracted).map(([k, v]) => `
-                            <div class="extracted-item">&check; ${k.replace(/_/g, ' ')}: <strong>${v}</strong></div>
-                        `).join('')}
+                ${photoObs ? `
+                    <div class="photo-obs">
+                        <span class="photo-obs-icon">&#128247;</span>
+                        <span>${photoObs.split('\\n')[0]}</span>
                     </div>
                 ` : ''}
+
+                <div id="confirmed-fields"></div>
 
                 <div id="questions-container"></div>
 
@@ -170,7 +258,59 @@ const QuoteFlow = {
             </div>
         `;
 
+        this._showConfirmedFields(allConfirmed, photoExtracted, data.next_questions || []);
         this._renderQuestions(data.next_questions || []);
+    },
+
+    _showConfirmedFields(allConfirmed, photoExtracted, allQuestions) {
+        const el = document.getElementById('confirmed-fields');
+        if (!el) return;
+        el.innerHTML = '';
+
+        const keys = Object.keys(allConfirmed);
+        if (keys.length === 0) return;
+
+        const header = document.createElement('div');
+        header.className = 'confirmed-header';
+        header.textContent = 'Already captured';
+        el.appendChild(header);
+
+        for (const [fieldId, value] of Object.entries(allConfirmed)) {
+            const question = allQuestions.find(q => q.id === fieldId);
+            const label = question
+                ? question.text.split('?')[0].trim()
+                : fieldId.replace(/_/g, ' ');
+            const isPhoto = fieldId in (photoExtracted || {});
+
+            const fieldDiv = document.createElement('div');
+            fieldDiv.className = 'confirmed-field';
+            fieldDiv.innerHTML = `
+                <span class="confirmed-check">${isPhoto ? '&#128247; &#10003;' : '&#10003;'}</span>
+                <span class="confirmed-label">${label}:</span>
+                <span class="confirmed-value">${value}</span>
+                <button class="confirmed-edit" onclick="QuoteFlow.editExtractedField('${fieldId}')">Edit</button>
+            `;
+            el.appendChild(fieldDiv);
+        }
+    },
+
+    editExtractedField(fieldId) {
+        delete this.extractedFields[fieldId];
+        // Re-fetch session status to get updated questions
+        if (this.sessionId) {
+            API.submitAnswers(this.sessionId, {}).then(data => {
+                // The field will now appear in next_questions since we remove it client-side
+                // For now, just reload the clarify step
+                this._renderClarifyStep({
+                    job_type: document.querySelector('.clarify-header h2')?.textContent || '',
+                    completion: data.completion,
+                    extracted_fields: this.extractedFields,
+                    photo_extracted_fields: {},
+                    next_questions: data.next_questions,
+                });
+                this._showStep('clarify');
+            }).catch(() => {});
+        }
     },
 
     _renderQuestions(questions) {
@@ -227,8 +367,14 @@ const QuoteFlow = {
                     input = `<input type="text" id="q-${q.id}" class="text-input" placeholder="Enter text">`;
                     break;
                 case 'photo':
-                    input = `<div class="photo-placeholder">Photo upload coming soon — describe what you see instead</div>
-                             <input type="text" id="q-${q.id}" class="text-input" placeholder="Describe the photo or skip">`;
+                    input = `<div class="photo-question-upload">
+                        <input type="file" id="photo-q-${q.id}" accept="image/jpeg,image/png,image/webp" hidden>
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('photo-q-${q.id}').click()">
+                            + Upload Photo
+                        </button>
+                        <div id="photo-q-preview-${q.id}" class="photo-q-preview"></div>
+                    </div>
+                    <input type="text" id="q-${q.id}" class="text-input" placeholder="Or describe what you see">`;
                     break;
                 default:
                     input = `<input type="text" id="q-${q.id}" class="text-input" placeholder="Enter value">`;
@@ -572,6 +718,9 @@ const QuoteFlow = {
         this.sessionId = null;
         this.quoteId = null;
         this.pricedQuote = null;
+        this.sessionPhotoUrls = [];
+        this.extractedFields = {};
+        this.allQuestions = [];
         this.currentStep = 'describe';
         this.renderQuoteView();
     },

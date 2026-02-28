@@ -134,10 +134,23 @@ const API = {
         return result;
     },
 
+    // --- Photos ---
+    async uploadPhoto(formData) {
+        const resp = await fetch(`${this.base}/photos/upload`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${this._accessToken}` },
+            body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Photo upload failed');
+        return data;
+    },
+
     // --- Sessions ---
-    async startSession(description, jobType = null) {
+    async startSession(description, jobType, photoUrls) {
         const body = { description };
         if (jobType) body.job_type = jobType;
+        if (photoUrls && photoUrls.length) body.photo_urls = photoUrls;
         const resp = await this._fetch('/session/start', {
             method: 'POST',
             body: JSON.stringify(body),
@@ -147,10 +160,12 @@ const API = {
         return data;
     },
 
-    async submitAnswers(sessionId, answers) {
+    async submitAnswers(sessionId, answers, photoUrl) {
+        const body = { answers };
+        if (photoUrl) body.photo_url = photoUrl;
         const resp = await this._fetch(`/session/${sessionId}/answer`, {
             method: 'POST',
-            body: JSON.stringify({ answers }),
+            body: JSON.stringify(body),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Failed to submit answers');

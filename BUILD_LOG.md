@@ -4,7 +4,7 @@
 
 ---
 
-## Current Status: Session 8 complete — Seed Data Integration + CLAUDE.md Final Update + Test Suite Cleanup
+## Current Status: Session 3B-Hotfix complete — Photo Upload + Vision + Extraction Confirmation
 
 **Live URL:** createstage-quoting-app-production.up.railway.app
 **Repo:** github.com/checkertron-coder/createstage-quoting-app
@@ -767,6 +767,152 @@ Using keyword fallback (no Gemini API key in test environment):
   - Seed data (4): seeded_prices.json valid, profile key parser, seeded price lookup with source, fallback for unknown profiles
   - Meta-tests (5): CLAUDE.md completeness for job types, calculators, routers, question trees; V2_JOB_TYPES↔question tree files sync
 
+### Session 3B — 2026-02-28 (Opus 4.6)
+
+#### Completed
+- **Deliverable 1 — Expanded V2_JOB_TYPES to 25**
+  - `backend/models.py` — added 10 new job types in Priority D (automotive), E (industrial & signage), F (products)
+  - New types: offroad_bumper, rock_slider, roll_cage, exhaust_custom, trailer_fab, structural_frame, furniture_other, sign_frame, led_sign_custom, product_firetable
+
+- **Deliverable 2 — Keyword-Based Job Type Detection**
+  - `backend/question_trees/engine.py` — added `DETECTION_KEYWORDS` dict mapping all 25 job types to keyword lists
+  - Added `_detect_by_keywords(description)` function with multi-word scoring (multi-word keywords score higher)
+  - Updated `detect_job_type()`: keyword matching first → high confidence returns immediately → Gemini fallback → keyword fallback
+  - Faster detection for common descriptions without API calls
+
+- **Deliverable 3 — 10 New Question Tree JSON Files**
+  - `backend/question_trees/data/` — 10 new files following existing schema:
+    - `offroad_bumper.json` — vehicle make/model, bumper position, material thickness, winch mount, finish
+    - `rock_slider.json` — vehicle make/model, slider style, material thickness, mounting, finish
+    - `roll_cage.json` — vehicle type, cage style, tube size, door count, finish
+    - `exhaust_custom.json` — vehicle make/model, exhaust type, pipe diameter, material, finish
+    - `trailer_fab.json` — trailer type, length, width, axle count, material, finish
+    - `structural_frame.json` — frame type, span, height, load rating, material
+    - `furniture_other.json` — item type, material, approximate size, quantity, finish
+    - `sign_frame.json` — sign type, sign dimensions, mounting method, material, finish
+    - `led_sign_custom.json` — sign type, dimensions, letter height, material, lighting type
+    - `product_firetable.json` — configuration, fuel type, dimensions, material, finish
+
+- **Deliverable 4 — 20 New Calculator Files**
+  - All extend `BaseCalculator`, use `MaterialLookup()`, return `MaterialList` via `make_material_list()`
+  - Geometry-based calculators:
+    - `ornamental_fence.py` — panel-based: posts, rails, pickets per panel from total footage
+    - `complete_stair.py` — rise/run geometry: stringers (channels), treads (checker plate), support angles
+    - `spiral_stair.py` — center column (pipe), pie-shaped plate treads, spiral handrail, balusters
+    - `window_security_grate.py` — frame perimeter + vertical/horizontal bars, batch multiply
+    - `balcony_railing.py` — delegates railing to StraightRailingCalculator, adds structural frame
+    - `bollard.py` — pipe (height + embed), cap plate, base plate if surface-mount, sleeve if removable
+    - `offroad_bumper.py` — plate panels + tube structure + mounts, routes by bumper_position
+    - `rock_slider.py` — DOM tube rails + mount brackets + gussets, always qty 2 (pair)
+    - `roll_cage.py` — tube footage lookup by cage_style, foot plates + gussets
+    - `trailer_fab.py` — channel frame + cross members at 16" OC + tongue + axle mounts + deck
+    - `structural_frame.py` — routes by frame_type (mezzanine/canopy/portal), beams + columns
+  - Estimate-based calculators:
+    - `furniture_table.py` — 4 legs + top frame + stretchers + leveling feet
+    - `utility_enclosure.py` — sheet metal box (6 panels) + angle iron frame + door hardware
+    - `repair_structural.py` — routes by repair_type (trailer/chassis/beam), replacement + splice plates
+    - `exhaust_custom.py` — pipe runs + mandrel bends + flanges + hangers
+    - `sign_frame.py` — frame tube + mounting, routes by sign_type (post/wall/monument)
+    - `led_sign_custom.py` — channel letter returns + face sheets, or cabinet box
+    - `product_firetable.py` — BOM-based from data/raw/firetable_pro_bom.json, fallback estimates
+    - `furniture_other.py` — routes by item_type (shelving/bracket/generic), size parsing
+    - `custom_fab.py` — universal fallback, NEVER fails, parses approximate_size
+
+- **Deliverable 5 — Updated Calculator Registry**
+  - `backend/calculators/registry.py` — imports all 25 calculator classes
+  - `CALCULATOR_REGISTRY` maps all 25 job types
+  - `get_calculator()` falls back to `CustomFabCalculator` instead of raising `ValueError`
+  - Updated existing test `test_calculator_registry_unknown_type_raises` → `test_calculator_registry_unknown_type_falls_back`
+
+- **Deliverable 6 — Test Suite**
+  - `tests/test_session3b_all_calculators.py` — 35 tests:
+    - 20 tests: one per new calculator with field inputs and output assertions
+    - 3 tests: registry (25 types, fallback to CustomFab, list returns 25)
+    - 3 tests: detection keywords (correct type, multi-word, unknown fallback)
+    - 3 tests: question trees (all 25 have trees, new trees load, required fields exist)
+    - 1 test: V2_JOB_TYPES sync with registry and trees
+    - 2 tests: CustomFab fallback (minimal fields, empty fields)
+    - 1 test: FireTable BOM loading
+    - 2 tests: output contract validation for all 20 new calculators
+
+- **Deliverable 7 — Documentation Updates**
+  - CLAUDE.md updated: 25 job types, 25 calculators in file map, test count 238, keyword detection noted
+  - BUILD_LOG.md updated with Session 3B entry
+
+#### Not completed / blocked
+- None — all 7 deliverables complete
+
+#### Architectural decisions made
+- Keyword-based detection before Gemini API call — faster, works offline, reduces API costs
+- Multi-word keywords score higher than single-word for disambiguation
+- CustomFabCalculator as universal fallback — unknown job types never crash
+- BalconyRailingCalculator delegates to StraightRailingCalculator (same pattern as StairRailing)
+- ProductFiretableCalculator loads BOM from JSON with fallback estimates if file missing
+- RockSliderCalculator always produces qty 2 (pair) — domain knowledge
+
+#### Tests
+- pytest results: **238 passed, 0 failed** (11 S1 + 21 S2A + 23 S2B + 30 S3 + 35 S3B + 26 S4 + 26 S5 + 25 S6 + 26 S7 + 15 S8)
+- Test file: `tests/test_session3b_all_calculators.py`
+
+### Session 3B-Hotfix — 2026-02-28 (Opus 4.6)
+
+#### Completed
+- **Deliverable 1 — Photo Upload Endpoint (`backend/routers/photos.py`)**
+  - `POST /api/photos/upload` — multipart file upload with auth
+  - File type validation: jpg, jpeg, png, webp, heic only
+  - Size limit: 10MB max, rejects empty files
+  - Unique filename generation with optional session_id prefix
+  - Dual storage: Cloudflare R2 (boto3) when configured, local `uploads/` directory as fallback
+  - Registered router in `main.py`, added `/uploads` static mount for local serving
+
+- **Deliverable 2 — Gemini Vision Processing (`backend/question_trees/engine.py`)**
+  - `extract_from_photo()` method on QuestionTreeEngine
+  - Sends base64-encoded image to Gemini Vision with metal fab analysis prompt
+  - Prompt covers: measurements, material type, dimensions, condition/damage, hardware, design elements
+  - Returns structured dict: extracted_fields, photo_observations, material_detected, dimensions_detected, damage_assessment, confidence
+  - Graceful fallback: returns empty result (confidence 0.0) when Gemini unavailable or image unreadable
+  - Helper functions: `_read_image()`, `_empty_photo_result()`, `_build_vision_prompt()`, `_call_gemini_vision()`
+
+- **Deliverable 3 — Photos Wired into Session Flow**
+  - Updated `POST /api/session/start` to accept `photo_urls`, run vision extraction per photo
+  - Merge strategy: text-extracted fields applied first, photo-extracted fields only added if field not already present (text wins on conflict)
+  - Photo observations returned in response for UI display
+  - Updated `POST /api/session/{id}/answer` to accept `photo_url`, store in session, run vision extraction
+  - Updated Pydantic schemas (StartSessionRequest, AnswerRequest)
+
+- **Deliverable 4 — Frontend Extraction Confirmation UI**
+  - Photo upload UI in describe step (file input + upload button + previews)
+  - `_initPhotoUpload()`, `_showPhotoPreview()`, `_removePhoto()` helper methods
+  - Confirmed fields section above questions with edit buttons (camera icon for photo-extracted)
+  - Photo observations display in clarify step
+  - All 25 job types in frontend JOB_TYPES dict (added 10 new automotive/industrial/signage/product types)
+  - Updated `api.js`: `uploadPhoto(formData)`, updated `startSession` and `submitAnswers` signatures
+  - CSS: `.photo-upload-section`, `.photo-preview`, `.confirmed-field`, `.confirmed-edit`, `.photo-obs`
+
+- **Deliverable 5 — Tests (`tests/test_photo_extraction.py`)**
+  - 20 tests covering all deliverables:
+    - Photo upload (7): endpoint exists, accepts image, rejects non-image, rejects empty, size limit, requires auth, session_id in filename
+    - Vision extraction (3): returns structure, graceful without Gemini, all 25 job types
+    - Extraction confirmation (6): start returns extracted_fields, start returns photo_fields, extracted fields skip questions, text wins over photo, edit re-adds question, answer with photo_url
+    - Frontend (4): uploadPhoto in api.js, confirmed-field CSS, photo previews in quote-flow.js, all 25 job types in frontend
+
+#### Not completed / blocked
+- None — all 5 deliverables complete
+
+#### Dependencies added
+- `boto3==1.34.69` — Cloudflare R2 / S3 storage client
+
+#### Architectural decisions made
+- Dual photo storage: R2 when CLOUDFLARE_R2_ACCOUNT_ID is set, local `uploads/` fallback for dev/testing
+- Vision extraction never crashes the session — all photo operations wrapped in try/except
+- Text extraction wins over photo extraction on field conflicts (higher confidence from explicit text)
+- Photo observations are informational only — shown in UI but not used for calculations
+- `flag_modified(session, "photo_urls")` for proper SQLite JSON column mutation tracking
+
+#### Tests
+- pytest results: **258 passed, 0 failed** (11 S1 + 21 S2A + 23 S2B + 30 S3 + 35 S3B + 26 S4 + 26 S5 + 25 S6 + 26 S7 + 15 S8 + 20 Photo)
+- Test file: `tests/test_photo_extraction.py`
+
 ---
 
 ## Architectural Decisions (append here when made)
@@ -820,4 +966,13 @@ Using keyword fallback (no Gemini API key in test environment):
 | 2026-02-27 | Price fallback chain: seeded → hardcoded → 0.0 | Always returns a price; real data overlays market averages |
 | 2026-02-27 | Meta-tests verify CLAUDE.md stays in sync with code | Job types, calculators, routers, question trees checked in CI |
 | 2026-02-27 | CLAUDE.md as definitive reference (19 sections) | Single source of truth for anyone (human or AI) working on codebase |
+| 2026-02-28 | Keyword-based job detection before Gemini | Faster, works offline, reduces API costs; multi-word scores higher |
+| 2026-02-28 | CustomFabCalculator as universal fallback | Unknown job types never crash; get_calculator() returns CustomFab for unknowns |
+| 2026-02-28 | BalconyRailing delegates to StraightRailing | Same DRY pattern as StairRailing; adds structural frame optionally |
+| 2026-02-28 | ProductFiretable loads BOM from JSON | Known product with known materials; fallback estimates if file missing |
+| 2026-02-28 | RockSlider always produces qty 2 (pair) | Domain knowledge — rock sliders are always sold/installed as pairs |
+| 2026-02-28 | Dual photo storage: R2 or local fallback | R2 when configured, local uploads/ for dev; same API response either way |
+| 2026-02-28 | Vision extraction never crashes session | All photo ops in try/except; empty result on failure |
+| 2026-02-28 | Text extraction wins over photo on conflict | Text description is more explicit; photo fills in remaining fields only |
+| 2026-02-28 | Photo observations are informational only | Shown in UI for user context, not used in calculations |
 

@@ -1,0 +1,91 @@
+{
+    "job_type": "roll_cage",
+    "version": "1.0",
+    "display_name": "Roll Cage / Roll Bar",
+    "category": "automotive",
+    "required_fields": [
+        "vehicle_type", "cage_style", "tube_size", "finish"
+    ],
+    "questions": [
+        {
+            "id": "vehicle_type",
+            "text": "What type of vehicle?",
+            "type": "choice",
+            "options": ["Car / sedan (race or drift)", "Truck / SUV (off-road / prerunner)", "UTV / side-by-side (Polaris, Can-Am, etc.)", "Buggy / sand rail", "Jeep Wrangler / Bronco"],
+            "required": true,
+            "hint": "Vehicle type determines cage geometry, number of tubes, and mounting strategy.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "vehicle_details",
+            "text": "Vehicle details? (year, make, model if applicable)",
+            "type": "text",
+            "required": false,
+            "hint": "Helps us determine interior dimensions and mounting points.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "cage_style",
+            "text": "What style of cage?",
+            "type": "choice",
+            "options": ["Roll bar only (behind seats — minimal)", "4-point cage (main hoop + down tubes)", "6-point cage (4-point + door bars)", "Full cage (multi-point, A-pillar to rear)", "Custom — describe your needs"],
+            "required": true,
+            "hint": "Roll bar = simple behind-seat hoop. 4-point adds down tubes to floor. 6-point adds door bars. Full cage is competition-spec.",
+            "depends_on": null,
+            "branches": {
+                "Custom — describe your needs": ["custom_cage_notes"]
+            }
+        },
+        {
+            "id": "custom_cage_notes",
+            "text": "Describe what you need for the cage design.",
+            "type": "text",
+            "required": false,
+            "hint": "Include: sanctioning body requirements (SCCA, NHRA, SFI, FIA), specific tube specs, any unique requirements.",
+            "depends_on": "cage_style",
+            "branches": null
+        },
+        {
+            "id": "tube_size",
+            "text": "Tube size and spec?",
+            "type": "choice",
+            "options": ["1.5\" × 0.120\" wall DOM (UTV / light use)", "1.625\" × 0.120\" wall DOM (SCCA / NASA)", "1.75\" × 0.120\" wall DOM (most common — street/trail)", "2\" × 0.120\" wall DOM (prerunner / heavy duty)", "1.75\" × 0.095\" wall 4130 chromoly (race — lightest)"],
+            "required": true,
+            "hint": "1.75\" × 0.120\" DOM is most common for street/trail. Check your sanctioning body rules for competition cages. 4130 chromoly must be TIG welded and normalized.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "door_count",
+            "text": "Number of doors (affects door bar count)?",
+            "type": "choice",
+            "options": ["2-door", "4-door", "No doors (buggy/UTV)"],
+            "required": false,
+            "hint": "Door bars protect occupants in a T-bone impact. More doors = more bars.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "gussets",
+            "text": "Gussets at joints?",
+            "type": "choice",
+            "options": ["Yes — gussets at all major joints (recommended)", "Gussets at critical joints only (main hoop feet, A-pillar)", "No gussets (weight savings — race only)"],
+            "required": false,
+            "hint": "Gussets significantly strengthen joints. Required by most sanctioning bodies.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Raw steel (customer will paint)", "Clearcoat only"],
+            "required": true,
+            "hint": "Cages installed in vehicles are often painted to match interior. 4130 chromoly should NOT be powder coated (heat can weaken).",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

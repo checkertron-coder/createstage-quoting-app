@@ -1,0 +1,91 @@
+{
+    "job_type": "product_firetable",
+    "version": "1.0",
+    "display_name": "FireTable Product",
+    "category": "product",
+    "required_fields": [
+        "configuration", "fuel_type", "dimensions", "material", "finish"
+    ],
+    "questions": [
+        {
+            "id": "configuration",
+            "text": "Which FireTable configuration?",
+            "type": "choice",
+            "options": ["FireTable Pro System (base + basin + stand)", "FireTable base only (basin + stand)", "FireTable Grill add-on", "Custom dimensions / design"],
+            "required": true,
+            "hint": "The Pro System includes everything needed for a complete fire table. Base only is for customers who want to add their own top.",
+            "depends_on": null,
+            "branches": {
+                "Custom dimensions / design": ["custom_dimensions"]
+            }
+        },
+        {
+            "id": "custom_dimensions",
+            "text": "What custom dimensions do you need?",
+            "type": "text",
+            "required": false,
+            "hint": "Standard FireTable Pro is 24\" × 34\" basin. Specify your desired dimensions.",
+            "depends_on": "configuration",
+            "branches": null
+        },
+        {
+            "id": "fuel_type",
+            "text": "Fuel type?",
+            "type": "choice",
+            "options": ["Propane (most common — portable)", "Natural gas (plumbed — permanent install)", "Wood burning"],
+            "required": true,
+            "hint": "Propane is portable and most popular. Natural gas requires a gas line connection.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "dimensions",
+            "text": "Table top dimensions?",
+            "type": "choice",
+            "options": ["Standard (24\" × 34\")", "Large (30\" × 48\")", "Round 36\" diameter", "Custom — specify above"],
+            "required": true,
+            "hint": "Standard size fits the FireTable Pro BOM exactly.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "Primary material?",
+            "type": "choice",
+            "options": ["304 stainless steel (standard FireTable Pro)", "Mild steel (budget option)", "Corten / weathering steel (rustic look)"],
+            "required": true,
+            "hint": "304 stainless is standard for fire tables — heat and corrosion resistant.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "accessories",
+            "text": "Which accessories?",
+            "type": "multi_choice",
+            "options": ["FireTable Lid", "Locking Casters", "Hanger Bracket", "Suspension System", "None"],
+            "required": false,
+            "hint": "Lid keeps debris out when not in use. Casters make it portable.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Brushed stainless (standard for FireTable Pro)", "Mirror polished stainless", "Powder coat over steel", "Patina / aged corten"],
+            "required": true,
+            "hint": "Brushed stainless is standard for the FireTable Pro line.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "quantity",
+            "text": "How many units?",
+            "type": "number",
+            "required": false,
+            "hint": "Batch pricing available for 5+ units. Material costs drop significantly at 10+ units.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

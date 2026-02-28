@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 from .database import engine, Base
-from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser
+from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser, photos
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -34,6 +34,12 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(quote_session.router, prefix="/api")
 app.include_router(pdf.router, prefix="/api")
 app.include_router(bid_parser.router, prefix="/api")
+app.include_router(photos.router, prefix="/api")
+
+# Serve uploaded photos (local fallback when R2 not configured)
+uploads_path = os.path.join(os.path.dirname(__file__), "..", "uploads")
+if os.path.exists(uploads_path):
+    app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
 
 # Serve frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")

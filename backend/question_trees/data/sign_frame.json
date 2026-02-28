@@ -1,0 +1,79 @@
+{
+    "job_type": "sign_frame",
+    "version": "1.0",
+    "display_name": "Sign Frame / Bracket",
+    "category": "signage",
+    "required_fields": [
+        "sign_type", "sign_dimensions", "mounting_method", "material", "finish"
+    ],
+    "questions": [
+        {
+            "id": "sign_type",
+            "text": "What type of sign structure?",
+            "type": "choice",
+            "options": ["Post-mount sign frame (street/parking lot)", "Wall-mount bracket / blade sign arm", "Monument sign frame (ground-level)", "Hanging sign bracket (projecting from wall)", "Pylon / pole sign frame (tall freestanding)"],
+            "required": true,
+            "hint": "Monument signs are ground-level structures. Post-mount is for elevated signs. Blade signs project from a wall face.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "sign_dimensions",
+            "text": "Sign panel dimensions (width × height)?",
+            "type": "text",
+            "required": true,
+            "hint": "Example: '4 ft × 3 ft', '24\" × 36\"'. This determines the frame size and wind load.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "sign_weight",
+            "text": "Approximate sign panel weight (if known)?",
+            "type": "text",
+            "required": false,
+            "hint": "Aluminum composite panel is ~1.5 lb/sq ft. Acrylic is ~3 lb/sq ft. Heavy signs need stronger frames.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "mounting_method",
+            "text": "How will the sign be mounted to the frame?",
+            "type": "choice",
+            "options": ["Bolt-through (sign bolts to frame)", "Channel / track (sign slides in)", "Clip / clamp system", "Welded studs (sign manufacturer provides)"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "height_above_grade",
+            "text": "Bottom of sign height above ground?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "Most municipal codes require minimum 7-8 ft clearance for projecting signs over walkways.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "Frame material?",
+            "type": "choice",
+            "options": ["Mild steel (paint or powder coat)", "Aluminum (lightweight — no rust)", "Stainless steel (premium)"],
+            "required": true,
+            "hint": "Mild steel is standard. Aluminum for coastal environments or weight-sensitive applications.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat", "Paint (in-house)", "Galvanized", "Anodized (aluminum only)", "Raw / brushed"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

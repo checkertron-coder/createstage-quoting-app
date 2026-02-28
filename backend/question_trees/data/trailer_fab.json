@@ -1,0 +1,102 @@
+{
+    "job_type": "trailer_fab",
+    "version": "1.0",
+    "display_name": "Custom Trailer",
+    "category": "industrial",
+    "required_fields": [
+        "trailer_type", "length", "width", "axle_count", "finish"
+    ],
+    "questions": [
+        {
+            "id": "trailer_type",
+            "text": "What type of trailer?",
+            "type": "choice",
+            "options": ["Flatbed / utility trailer", "Car hauler / equipment trailer", "Dump trailer", "Enclosed trailer frame", "Specialty (boat, motorcycle, ATV)", "Repair / modification of existing trailer"],
+            "required": true,
+            "hint": "Flatbed and car hauler are the most common custom trailer builds.",
+            "depends_on": null,
+            "branches": {
+                "Repair / modification of existing trailer": ["repair_description"]
+            }
+        },
+        {
+            "id": "repair_description",
+            "text": "Describe the repair or modification needed.",
+            "type": "text",
+            "required": false,
+            "hint": "What's wrong? What needs to change? Include photos if possible.",
+            "depends_on": "trailer_type",
+            "branches": null
+        },
+        {
+            "id": "length",
+            "text": "Overall trailer length (bed/deck)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Common sizes: 8', 10', 12', 14', 16', 18', 20'. Note: trailers over 16' typically need tandem axles.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "width",
+            "text": "Trailer width?",
+            "type": "choice",
+            "options": ["5' (narrow — motorcycle/ATV)", "6' (standard single axle)", "6.5' (standard utility)", "7' (wide — car hauler)", "8' (max legal without permit)", "8.5' (max legal enclosed)"],
+            "required": true,
+            "hint": "8' is the maximum legal width without oversize permits in most states.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "axle_count",
+            "text": "How many axles?",
+            "type": "choice",
+            "options": ["Single axle (up to 3,500 lb capacity)", "Tandem axle (up to 7,000 lb capacity)", "Triple axle (up to 10,500 lb capacity)"],
+            "required": true,
+            "hint": "Single axle for trailers under 14'. Tandem for 14'+. Triple for heavy equipment haulers.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "axle_rating",
+            "text": "Axle rating?",
+            "type": "choice",
+            "options": ["2,000 lb (light duty)", "3,500 lb (standard)", "5,200 lb (medium duty)", "7,000 lb (heavy duty)"],
+            "required": false,
+            "hint": "3,500 lb is standard. Car haulers typically use 5,200 lb or 7,000 lb axles.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "deck_type",
+            "text": "Deck/floor type?",
+            "type": "choice",
+            "options": ["Expanded metal deck", "Diamond plate steel deck", "Wood deck (pressure treated)", "No deck (frame only — customer will deck)", "Channel or angle open deck"],
+            "required": false,
+            "hint": "Wood decking is cheapest. Steel is more durable. Expanded metal allows drainage.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "Frame material?",
+            "type": "choice",
+            "options": ["Mild steel channel (standard — most common)", "Mild steel tube frame", "Aluminum (lightweight — premium)"],
+            "required": false,
+            "hint": "Channel iron is standard for trailer frames. Tube frame is lighter but more labor.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Galvanized (best corrosion protection)", "Primer only", "Raw steel"],
+            "required": true,
+            "hint": "Galvanized is best for trailers exposed to road salt and weather.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

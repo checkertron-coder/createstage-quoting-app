@@ -438,6 +438,103 @@ body {
 .history-empty h2 { margin-bottom: 8px; }
 .history-empty p { color: var(--text-secondary); margin-bottom: 16px; }
 
+/* --- Photo Upload --- */
+.photo-upload-section {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; flex-wrap: wrap;
+}
+.photo-hint {
+    font-size: 0.8rem; color: var(--text-secondary);
+}
+.photo-previews {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    width: 100%; margin-top: 4px;
+}
+.photo-preview {
+    position: relative;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 4px; display: flex; align-items: center; gap: 6px;
+    background: var(--surface); font-size: 0.8rem;
+}
+.photo-preview.uploading { opacity: 0.6; }
+.photo-preview img {
+    width: 48px; height: 48px; object-fit: cover; border-radius: 4px;
+}
+.photo-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-remove {
+    position: absolute; top: -4px; right: -4px;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--error); color: white; border: none;
+    cursor: pointer; font-size: 12px; line-height: 16px; text-align: center;
+    padding: 0;
+}
+.spinner-sm {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.photo-q-preview { display: flex; gap: 4px; margin-top: 4px; }
+.photo-question-upload { margin-bottom: 6px; }
+
+/* --- Confirmed Fields (extraction) --- */
+.confirmed-header {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 1rem 0 0.5rem;
+    text-align: center;
+}
+.confirmed-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    background: var(--bg);
+    border-radius: 6px;
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+}
+.confirmed-check {
+    color: var(--success);
+    font-weight: bold;
+}
+.confirmed-label {
+    color: var(--text-secondary);
+}
+.confirmed-value {
+    color: var(--primary);
+    font-weight: 500;
+}
+.confirmed-edit {
+    margin-left: auto;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-family: var(--font);
+}
+.confirmed-edit:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* --- Photo Observations --- */
+.photo-obs {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    color: #1e40af;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.photo-obs-icon { font-size: 1.1rem; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
     .app-nav { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }

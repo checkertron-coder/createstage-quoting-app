@@ -1,0 +1,93 @@
+{
+    "job_type": "offroad_bumper",
+    "version": "1.0",
+    "display_name": "Off-Road Bumper",
+    "category": "automotive",
+    "required_fields": [
+        "vehicle_make_model", "bumper_position", "material_thickness", "finish"
+    ],
+    "questions": [
+        {
+            "id": "vehicle_make_model",
+            "text": "What vehicle is this bumper for? (year, make, model)",
+            "type": "text",
+            "required": true,
+            "hint": "Example: '2020 Toyota Tacoma', '2018 Jeep Wrangler JL'. We need this for mounting bolt pattern and body line fitment.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "bumper_position",
+            "text": "Front or rear bumper?",
+            "type": "choice",
+            "options": ["Front bumper", "Rear bumper", "Both front and rear"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Front bumper": ["winch_mount", "light_provisions"],
+                "Both front and rear": ["winch_mount", "light_provisions"]
+            }
+        },
+        {
+            "id": "bumper_style",
+            "text": "What style of bumper?",
+            "type": "choice",
+            "options": ["Full-width plate bumper (maximum protection)", "Mid-width / stubby (better approach angle)", "Tube bumper / pre-runner style", "Hybrid (plate center + tube wings)"],
+            "required": false,
+            "hint": "Full-width offers maximum protection. Stubby/mid-width improves approach angle for rock crawling.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material_thickness",
+            "text": "Steel plate thickness?",
+            "type": "choice",
+            "options": ["3/16\" (light duty / weight savings)", "1/4\" (standard — most common)", "3/8\" (heavy duty — comp/rock crawling)"],
+            "required": true,
+            "hint": "1/4\" is standard for most off-road bumpers. 3/16\" saves weight, 3/8\" is overkill for anything but competition use.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "winch_mount",
+            "text": "Include winch mount plate?",
+            "type": "choice",
+            "options": ["Yes — standard winch plate (up to 12,000 lb winch)", "Yes — heavy duty (up to 17,500 lb winch)", "No winch mount"],
+            "required": false,
+            "hint": "Winch plate adds 3/8\" reinforced plate with standard 10\" x 4.5\" bolt pattern (fits Warn, Smittybilt, etc.).",
+            "depends_on": "bumper_position",
+            "branches": null
+        },
+        {
+            "id": "light_provisions",
+            "text": "Light bar or auxiliary light provisions?",
+            "type": "choice",
+            "options": ["20\" light bar cutout in bumper", "Fog light pod mounts (pair)", "Light bar + fog lights", "No light provisions"],
+            "required": false,
+            "hint": null,
+            "depends_on": "bumper_position",
+            "branches": null
+        },
+        {
+            "id": "d_ring_mounts",
+            "text": "D-ring / shackle mounts?",
+            "type": "choice",
+            "options": ["Yes — pair of 3/4\" D-ring mounts", "No D-ring mounts"],
+            "required": false,
+            "hint": "D-ring mounts are welded 3/4\" shackle receivers — standard for recovery.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat (most durable)", "Paint (in-house)", "Spray-on bedliner (Line-X / Rhino)", "Raw steel (customer will finish)"],
+            "required": true,
+            "hint": "Powder coat is most common. Bedliner texture is popular for off-road — very durable but typically outsourced.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

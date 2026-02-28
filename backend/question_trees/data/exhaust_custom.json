@@ -1,0 +1,80 @@
+{
+    "job_type": "exhaust_custom",
+    "version": "1.0",
+    "display_name": "Custom Exhaust",
+    "category": "automotive",
+    "required_fields": [
+        "vehicle_make_model", "exhaust_type", "pipe_diameter", "material", "finish"
+    ],
+    "questions": [
+        {
+            "id": "vehicle_make_model",
+            "text": "What vehicle? (year, make, model)",
+            "type": "text",
+            "required": true,
+            "hint": "Example: '2019 Ford Mustang GT', '2022 Subaru WRX'. We need this for routing, hanger locations, and clearance.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "exhaust_type",
+            "text": "What type of exhaust work?",
+            "type": "choice",
+            "options": ["Full custom exhaust (headers/manifold back)", "Cat-back exhaust (catalytic converter back)", "Downpipe / turbo piping only", "Header fabrication only", "Repair / patch existing exhaust"],
+            "required": true,
+            "hint": "Cat-back is the most common custom exhaust work. Full custom includes header fabrication which is significantly more labor.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "pipe_diameter",
+            "text": "Pipe diameter?",
+            "type": "choice",
+            "options": ["2\" (4-cylinder NA)", "2.25\" (4-cylinder turbo / small V6)", "2.5\" (V6 / small V8)", "3\" (V8 / performance)", "3.5\" (high HP V8 / forced induction)", "4\" (diesel / big HP builds)", "Dual exhaust — specify per side"],
+            "required": true,
+            "hint": "Match pipe diameter to engine output. Oversized pipe kills low-end torque on NA engines.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "Pipe material?",
+            "type": "choice",
+            "options": ["Mild steel (cheapest — will rust eventually)", "Aluminized steel (good balance — lasts longer)", "304 stainless steel (premium — long-lasting)", "321 stainless steel (turbo applications — heat resistant)"],
+            "required": true,
+            "hint": "Mild steel is fine for off-road/race vehicles. 304 stainless is best for street vehicles. 321 is needed only for high-heat turbo exhaust manifolds.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "muffler_type",
+            "text": "Muffler preference?",
+            "type": "choice",
+            "options": ["Straight-through / race (loudest)", "Chambered (muscle car rumble)", "Resonated (moderate — street friendly)", "No muffler / straight pipe", "Customer will supply muffler"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "tips",
+            "text": "Exhaust tip style?",
+            "type": "choice",
+            "options": ["Polished stainless rolled tip", "Black coated tip", "Turndown (points down — off-road)", "Dump / side exit", "No tip / flush cut", "Customer will supply tips"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish on fabricated components?",
+            "type": "choice",
+            "options": ["High-temp ceramic coat (most durable for exhaust)", "Raw (will patina/rust)", "High-temp paint", "Thermal wrap (customer installs)"],
+            "required": true,
+            "hint": "Ceramic coating is the gold standard for exhaust. Regular powder coat will burn off at exhaust temperatures.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

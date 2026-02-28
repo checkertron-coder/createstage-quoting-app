@@ -35,10 +35,12 @@ class StartSessionRequest(BaseModel):
     description: str
     job_type: Optional[str] = None
     photos: Optional[list] = None
+    photo_urls: Optional[list] = None
 
 
 class AnswerRequest(BaseModel):
     answers: dict  # {field_id: value, ...}
+    photo_url: Optional[str] = None
 
 
 # --- Endpoints ---
@@ -67,35 +69,66 @@ def start_session(
         detection_confidence = detection.get("confidence", 0.0)
         ambiguous = detection.get("ambiguous", True)
 
+    # Merge photo_urls from both fields (backward compat + new field)
+    photo_urls = list(request.photo_urls or request.photos or [])
+
     # Validate that we have a question tree for this job type
     available = engine.list_available_trees()
     if job_type not in available:
-        # Fallback: if no tree exists, still create the session
-        # but flag it — Session 2B will add more trees
         tree_loaded = False
         extracted_fields = {}
+        photo_extracted_fields = {}
+        photo_observations = ""
         next_questions = []
     else:
         tree_loaded = True
         # Extract fields from the description
         extracted_fields = engine.extract_from_description(job_type, request.description)
-        # Get next questions (skipping extracted)
-        next_questions = engine.get_next_questions(job_type, extracted_fields)
+
+        # Extract fields from photos (if any)
+        photo_extracted_fields = {}
+        photo_observations = ""
+        for photo_url in photo_urls:
+            try:
+                photo_result = engine.extract_from_photo(
+                    job_type, photo_url, request.description
+                )
+                # Merge photo-extracted fields (text wins on conflict)
+                for field_id, value in photo_result.get("extracted_fields", {}).items():
+                    if field_id not in extracted_fields:
+                        photo_extracted_fields[field_id] = value
+                # Collect observations
+                obs = photo_result.get("photo_observations", "")
+                if obs:
+                    photo_observations = (photo_observations + "\n" + obs).strip()
+            except Exception:
+                pass  # Photo extraction failure should never block session start
+
+        # Merge: text fields first, then photo fields (text wins)
+        merged_fields = dict(extracted_fields)
+        merged_fields.update({k: v for k, v in photo_extracted_fields.items()
+                              if k not in merged_fields})
+
+        # Get next questions (skipping all extracted)
+        next_questions = engine.get_next_questions(job_type, merged_fields)
 
     # Create session record
     session_id = str(uuid.uuid4())
+    merged_for_storage = dict(extracted_fields)
+    merged_for_storage.update({k: v for k, v in photo_extracted_fields.items()
+                               if k not in merged_for_storage})
     session = models.QuoteSession(
         id=session_id,
         user_id=current_user.id,
         job_type=job_type,
         stage="clarify" if tree_loaded else "intake",
-        params_json=extracted_fields,
+        params_json=merged_for_storage,
         messages_json=[{
             "role": "user",
             "content": request.description,
             "timestamp": datetime.utcnow().isoformat(),
         }],
-        photo_urls=request.photos or [],
+        photo_urls=photo_urls,
         status="active",
     )
     db.add(session)
@@ -103,7 +136,7 @@ def start_session(
 
     # Build completion status
     if tree_loaded:
-        completion = engine.get_completion_status(job_type, extracted_fields)
+        completion = engine.get_completion_status(job_type, merged_for_storage)
     else:
         completion = {
             "is_complete": False,
@@ -121,6 +154,8 @@ def start_session(
         "ambiguous": ambiguous,
         "tree_loaded": tree_loaded,
         "extracted_fields": extracted_fields,
+        "photo_extracted_fields": photo_extracted_fields,
+        "photo_observations": photo_observations,
         "next_questions": _serialize_questions(next_questions),
         "completion": completion,
     }
@@ -154,6 +189,29 @@ def answer_questions(
     current_params = dict(session.params_json or {})
     current_params.update(request.answers)
 
+    # Handle photo answer if provided
+    photo_observations = ""
+    photo_extracted_fields = {}
+    if request.photo_url:
+        # Store the photo URL
+        current_photos = list(session.photo_urls or [])
+        current_photos.append(request.photo_url)
+        session.photo_urls = current_photos
+
+        # Run vision extraction on the new photo
+        try:
+            photo_result = engine.extract_from_photo(
+                job_type, request.photo_url,
+                description=str(request.answers.get("description", "")),
+            )
+            photo_observations = photo_result.get("photo_observations", "")
+            for field_id, value in photo_result.get("extracted_fields", {}).items():
+                if field_id not in current_params:
+                    current_params[field_id] = value
+                    photo_extracted_fields[field_id] = value
+        except Exception:
+            pass  # Photo extraction failure should not block answer submission
+
     # Log answers in message history
     messages = list(session.messages_json or [])
     messages.append({
@@ -169,6 +227,7 @@ def answer_questions(
     session.updated_at = datetime.utcnow()
     flag_modified(session, "params_json")
     flag_modified(session, "messages_json")
+    flag_modified(session, "photo_urls")
 
     # Check completion
     completion = engine.get_completion_status(job_type, current_params)
@@ -180,7 +239,7 @@ def answer_questions(
     # Get next questions
     next_questions = engine.get_next_questions(job_type, current_params)
 
-    return {
+    response = {
         "session_id": session_id,
         "answered_count": completion["total_answered"],
         "required_total": completion["required_total"],
@@ -188,6 +247,13 @@ def answer_questions(
         "is_complete": completion["is_complete"],
         "completion": completion,
     }
+
+    if photo_observations:
+        response["photo_observations"] = photo_observations
+    if photo_extracted_fields:
+        response["photo_extracted_fields"] = photo_extracted_fields
+
+    return response
 
 
 @router.get("/{session_id}/status")

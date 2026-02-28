@@ -1,0 +1,80 @@
+{
+    "job_type": "furniture_other",
+    "version": "1.0",
+    "display_name": "Custom Furniture / Fixtures",
+    "category": "specialty",
+    "required_fields": [
+        "item_type", "material", "approximate_size", "quantity", "finish"
+    ],
+    "questions": [
+        {
+            "id": "item_type",
+            "text": "What type of furniture or fixture?",
+            "type": "choice",
+            "options": ["Shelving / storage rack", "Wall bracket / shelf bracket", "Console / media stand", "Bench frame (indoor or outdoor)", "Display fixture / retail", "Custom — describe below"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": {
+                "Custom — describe below": ["custom_description"]
+            }
+        },
+        {
+            "id": "custom_description",
+            "text": "Describe the item you need.",
+            "type": "text",
+            "required": false,
+            "hint": "Include what it is, dimensions, and any specific requirements.",
+            "depends_on": "item_type",
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "What material?",
+            "type": "choice",
+            "options": ["Mild steel (most common / cheapest)", "Stainless steel (304)", "Aluminum", "Combination (steel frame + wood/glass top — by others)"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "approximate_size",
+            "text": "Approximate overall dimensions?",
+            "type": "text",
+            "required": true,
+            "hint": "Example: '48\" wide × 18\" deep × 72\" tall' or '3 ft × 1 ft shelf brackets'",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "quantity",
+            "text": "How many units?",
+            "type": "number",
+            "required": true,
+            "hint": "Batch quantities reduce per-unit cost significantly.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "has_drawings",
+            "text": "Do you have drawings or reference images?",
+            "type": "choice",
+            "options": ["Yes — engineered/CAD drawings", "Yes — hand sketch or reference photos", "No — need design help"],
+            "required": false,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Powder coat", "Paint (in-house)", "Clear coat", "Brushed / polished (stainless or aluminum)", "Raw steel (industrial look)", "Patina / aged finish"],
+            "required": true,
+            "hint": null,
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

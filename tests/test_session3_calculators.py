@@ -79,11 +79,11 @@ def test_calculator_registry_all_5_types():
         assert has_calculator(job_type)
 
 
-def test_calculator_registry_unknown_type_raises():
-    """Requesting a calculator for unknown type raises ValueError."""
-    import pytest
-    with pytest.raises(ValueError, match="No calculator registered"):
-        get_calculator("nonexistent_type")
+def test_calculator_registry_unknown_type_falls_back():
+    """Requesting a calculator for unknown type falls back to CustomFabCalculator."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = get_calculator("nonexistent_type")
+    assert isinstance(calc, CustomFabCalculator)
 
 
 # ============================================================

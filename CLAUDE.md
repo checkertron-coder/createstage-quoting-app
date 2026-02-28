@@ -1,6 +1,6 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: Session 8 (Feb 27, 2026) — all contracts verified against code.*
+*Last verified: Session 3B-Hotfix (Feb 28, 2026) — all contracts verified against code.*
 
 ---
 
@@ -12,31 +12,31 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 
 ---
 
-## 2. Current State (v2, Sessions 1-8 complete)
+## 2. Current State (v2, Sessions 1-8 + 3B + 3B-Hotfix complete)
 
-### What Works — Full 6-Stage Pipeline + Bid Parser + Seed Data
-- **Stage 1 — Intake:** Job type detection via Gemini, field extraction from description
-- **Stage 2 — Clarify:** 15 question trees (all job types), branching logic, completion tracking
-- **Stage 3 — Calculate:** 5 deterministic calculators (cantilever_gate, swing_gate, straight_railing, stair_railing, repair_decorative)
+### What Works — Full 6-Stage Pipeline + Bid Parser + Seed Data + All 25 Calculators + Photo Upload + Vision
+- **Stage 1 — Intake:** Job type detection via keyword matching + Gemini fallback, field extraction from description + photos
+- **Stage 2 — Clarify:** 25 question trees (all job types), branching logic, completion tracking, extraction confirmation UI
+- **Stage 3 — Calculate:** 25 deterministic calculators (all job types covered, CustomFab as universal fallback)
 - **Stage 4 — Estimate:** AI labor estimation (Gemini 2.0 Flash) with rule-based fallback, finishing builder, historical validator
 - **Stage 5 — Price:** Hardware sourcing (25-item catalog), consumable estimation, pricing engine, markup options (0-30%)
 - **Stage 6 — Output:** Frontend UI (vanilla JS SPA), PDF generator (fpdf2), quote history, PDF download
 - **Bid Parser (Session 7):** PDF extraction (pdfplumber), scope extraction (Gemini + keyword fallback), CSI division mapping, job type mapping, dimension extraction, bid-to-session flow
 - **Seed Data (Session 8):** 35 material prices from Osorio/Wexler invoices, 6 historical actuals, profile key parser
+- **Session 3B:** All 25 calculators, 25 question trees, keyword-based job type detection, registry fallback to CustomFab
+- **Session 3B-Hotfix:** Photo upload (R2 or local fallback), Gemini Vision extraction, extraction confirmation UI with edit buttons, photo upload in frontend
 - **Auth:** JWT access/refresh tokens, guest/register/login, profile management
 - **Database:** PostgreSQL on Railway (SQLite for tests), all v2 tables implemented
-- **Tests:** 203 passing tests across 8 test files
+- **Tests:** 258 passing tests across 11 test files
 
 ### What's Still Needed
-- Photo upload/storage (Cloudflare R2 integration)
-- Calculators for remaining 10 job types (Priority B + C)
 - Live hardware pricing (web search / API)
 - ENITEO/SteelXML integration (Phase 3)
 - Fusion 360 parametric model generation (Phase 3)
 
 ---
 
-## 3. File Map (verified Session 8)
+## 3. File Map (verified Session 3B-Hotfix)
 
 ```
 createstage-quoting-app/
@@ -65,23 +65,44 @@ createstage-quoting-app/
 │   │   ├── pdf.py           — /api/quotes/{id}/pdf (download with query param auth)
 │   │   ├── bid_parser.py    — /api/bid/* (upload, parse-text, quote-items)
 │   │   ├── ai_quote.py      — /api/ai/* (legacy v1 AI estimation)
+│   │   ├── photos.py        — /api/photos/* (upload with R2 or local fallback)
 │   │   ├── customers.py     — /api/customers/* (CRUD)
 │   │   ├── materials.py     — /api/materials/* (seed, list, update) + DEFAULT_PRICES
 │   │   └── process_rates.py — /api/process-rates/* (seed, list, update) + DEFAULT_RATES
 │   ├── calculators/
 │   │   ├── __init__.py
-│   │   ├── base.py          — Abstract BaseCalculator + make_material_item/list/hardware helpers
-│   │   ├── material_lookup.py — Price lookup: seeded prices (35) → hardcoded defaults fallback
-│   │   ├── registry.py      — Calculator registry (5 job types → calculator classes)
-│   │   ├── cantilever_gate.py  — Cantilever gate geometry + materials
-│   │   ├── swing_gate.py       — Swing gate geometry + materials
-│   │   ├── straight_railing.py — Straight railing geometry + materials
-│   │   ├── stair_railing.py    — Stair railing geometry + materials
-│   │   └── repair_decorative.py — Decorative repair estimation
+│   │   ├── base.py              — Abstract BaseCalculator + make_material_item/list/hardware helpers
+│   │   ├── material_lookup.py   — Price lookup: seeded prices (35) → hardcoded defaults fallback
+│   │   ├── registry.py          — Calculator registry (25 job types → calculator classes, CustomFab fallback)
+│   │   ├── cantilever_gate.py   — Cantilever gate geometry + materials
+│   │   ├── swing_gate.py        — Swing gate geometry + materials
+│   │   ├── straight_railing.py  — Straight railing geometry + materials
+│   │   ├── stair_railing.py     — Stair railing geometry + materials
+│   │   ├── repair_decorative.py — Decorative repair estimation
+│   │   ├── ornamental_fence.py  — Panel-based fence (posts, rails, pickets)
+│   │   ├── complete_stair.py    — Stringer + treads + landing (rise/run geometry)
+│   │   ├── spiral_stair.py      — Center column + pie treads + spiral handrail
+│   │   ├── window_security_grate.py — Frame + bars, batch multiply
+│   │   ├── balcony_railing.py   — Delegates to StraightRailingCalculator + structural frame
+│   │   ├── furniture_table.py   — Legs + frame + stretchers
+│   │   ├── utility_enclosure.py — Sheet metal box + door hardware
+│   │   ├── bollard.py           — Pipe + cap + base plate, multiply by count
+│   │   ├── repair_structural.py — Conservative estimate by repair_type
+│   │   ├── custom_fab.py        — Universal fallback, NEVER fails
+│   │   ├── offroad_bumper.py    — Plate + tube structure by bumper_position
+│   │   ├── rock_slider.py       — DOM tube rails + mount brackets (always pair)
+│   │   ├── roll_cage.py         — Tube footage by cage_style
+│   │   ├── exhaust_custom.py    — Pipe runs + bends + flanges
+│   │   ├── trailer_fab.py       — Channel frame + cross members + deck
+│   │   ├── structural_frame.py  — Routes by frame_type (mezzanine/canopy/portal)
+│   │   ├── furniture_other.py   — Routes by item_type (shelving/bracket/generic)
+│   │   ├── sign_frame.py        — Frame tube + mounting by sign_type
+│   │   ├── led_sign_custom.py   — Channel letters / cabinet estimate
+│   │   └── product_firetable.py — BOM-based from firetable_pro_bom.json
 │   └── question_trees/
 │       ├── __init__.py
-│       ├── engine.py        — QuestionTreeEngine (load, detect_job_type, extract_fields, next_questions)
-│       └── data/            — 15 JSON question tree files (one per job type)
+│       ├── engine.py        — QuestionTreeEngine (load, detect_job_type, extract_fields, extract_from_photo, next_questions)
+│       └── data/            — 25 JSON question tree files (one per job type)
 │           ├── cantilever_gate.json    ├── ornamental_fence.json
 │           ├── swing_gate.json         ├── complete_stair.json
 │           ├── straight_railing.json   ├── spiral_stair.json
@@ -89,7 +110,12 @@ createstage-quoting-app/
 │           ├── repair_decorative.json  ├── balcony_railing.json
 │           ├── furniture_table.json    ├── utility_enclosure.json
 │           ├── bollard.json            ├── repair_structural.json
-│           └── custom_fab.json
+│           ├── custom_fab.json         ├── offroad_bumper.json
+│           ├── rock_slider.json        ├── roll_cage.json
+│           ├── exhaust_custom.json     ├── trailer_fab.json
+│           ├── structural_frame.json   ├── furniture_other.json
+│           ├── sign_frame.json         ├── led_sign_custom.json
+│           └── product_firetable.json
 ├── frontend/
 │   ├── index.html           — SPA shell (nav + 4 view containers)
 │   ├── css/style.css        — Responsive CSS with custom properties
@@ -117,12 +143,14 @@ createstage-quoting-app/
 │   ├── test_session1_schema.py         — 11 tests (DB schema, models)
 │   ├── test_session2a_question_trees.py — 21 tests (Priority A trees)
 │   ├── test_session2b_question_trees.py — 23 tests (Priority B+C trees)
-│   ├── test_session3_calculators.py     — 30 tests (5 calculators)
+│   ├── test_session3_calculators.py     — 30 tests (5 Priority A calculators)
+│   ├── test_session3b_all_calculators.py — 35 tests (20 new calculators, registry, detection, trees)
 │   ├── test_session4_labor.py           — 26 tests (labor estimation)
 │   ├── test_session5_pricing.py         — 26 tests (pricing engine)
 │   ├── test_session6_output.py          — 25 tests (PDF, frontend, auth)
 │   ├── test_session7_bid_parser.py      — 26 tests (bid parser)
 │   ├── test_session8_integration.py    — 15 tests (smoke, seed data, meta)
+│   ├── test_photo_extraction.py        — 20 tests (photo upload, vision, extraction confirmation)
 │   └── fixtures/
 │       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
 ├── alembic/                 — Database migrations
@@ -295,7 +323,7 @@ class PricedQuote(TypedDict):
 
 ---
 
-## 6. API Endpoint Reference (43 total — verified Session 8)
+## 6. API Endpoint Reference (44 total — verified Session 3B-Hotfix)
 
 ### Auth — `/api/auth`
 | Method | Path | Auth | Description |
@@ -307,11 +335,16 @@ class PricedQuote(TypedDict):
 | GET | `/api/auth/me` | Yes | Get current user profile |
 | PUT | `/api/auth/profile` | Yes | Update shop profile (name, rates, markup) |
 
+### Photos — `/api/photos`
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/photos/upload` | Yes | Upload photo (R2 or local), returns photo_url + filename |
+
 ### Quote Sessions — `/api/session` (the main v2 pipeline)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/session/start` | Yes | Start quote from description → detect job type, load tree |
-| POST | `/api/session/{id}/answer` | Yes | Submit field answers → get next questions |
+| POST | `/api/session/start` | Yes | Start quote from description + photos → detect job type, extract fields, run vision |
+| POST | `/api/session/{id}/answer` | Yes | Submit field answers + optional photo_url → get next questions |
 | GET | `/api/session/{id}/status` | Yes | Get session state, completion %, remaining questions |
 | POST | `/api/session/{id}/calculate` | Yes | Run Stage 3 calculator → MaterialList |
 | POST | `/api/session/{id}/estimate` | Yes | Run Stage 4 labor estimator → LaborEstimate + Finishing |
@@ -394,32 +427,45 @@ class PricedQuote(TypedDict):
 
 ---
 
-## 8. v2 Job Type List (15 types)
+## 8. v2 Job Type List (25 types — all have calculators + question trees)
 
 ```python
 V2_JOB_TYPES = [
-    # Priority A — most common, have calculators
+    # Priority A — gates & railings
     "cantilever_gate",          # sliding, with or without motor
     "swing_gate",               # hinged, single or double panel
     "straight_railing",         # flat platform / exterior / ADA
     "stair_railing",            # along stair stringer
     "repair_decorative",        # ornamental iron repair (photo-first)
-    # Priority B — have question trees, no dedicated calculators yet
+    # Priority B — structural & architectural
     "ornamental_fence",         # picket/flat bar fence sections
     "complete_stair",           # stringer + treads + landing
     "spiral_stair",             # center column, treads, handrail
     "window_security_grate",    # fixed or hinged security bar grate
     "balcony_railing",          # with or without structural balcony frame
-    # Priority C — specialty, have question trees, no dedicated calculators yet
+    # Priority C — specialty
     "furniture_table",          # steel base / frame
     "utility_enclosure",        # box fabrication, NEMA rating
     "bollard",                  # vehicle barrier, fixed or removable
     "repair_structural",        # chassis, trailer, structural repair (photo-first)
-    "custom_fab",               # freeform, AI-guided question tree
+    "custom_fab",               # freeform, universal fallback (NEVER fails)
+    # Priority D — automotive
+    "offroad_bumper",           # front/rear bumper for trucks/Jeeps
+    "rock_slider",              # rocker panel guards (always pair)
+    "roll_cage",                # roll bar / race cage / UTV cage
+    "exhaust_custom",           # headers, downpipes, full systems
+    # Priority E — industrial & signage
+    "trailer_fab",              # flatbed, utility, car hauler trailers
+    "structural_frame",         # mezzanine, canopy, portal frame
+    "furniture_other",          # shelving, brackets, racks, stands
+    "sign_frame",               # post-mount, wall-mount, monument signs
+    "led_sign_custom",          # channel letters, cabinet/box signs
+    # Priority F — products
+    "product_firetable",        # FireTable Pro (BOM-based)
 ]
 ```
 
-**Calculator status:** 5 calculators built (Priority A). The remaining 10 types use the base calculator with AI estimation only.
+**Calculator status:** All 25 types have dedicated calculators. Unknown types fall back to `CustomFabCalculator`.
 
 ---
 
@@ -588,12 +634,14 @@ pip install pytest-randomly && pytest tests/ -v -p randomly
 | `test_session2a_question_trees.py` | 21 |
 | `test_session2b_question_trees.py` | 23 |
 | `test_session3_calculators.py` | 30 |
+| `test_session3b_all_calculators.py` | 35 |
 | `test_session4_labor.py` | 26 |
 | `test_session5_pricing.py` | 26 |
 | `test_session6_output.py` | 25 |
 | `test_session7_bid_parser.py` | 26 |
 | `test_session8_integration.py` | 15 |
-| **Total** | **203** |
+| `test_photo_extraction.py` | 20 |
+| **Total** | **258** |
 
 ---
 
@@ -610,6 +658,7 @@ Key dependencies (from `requirements.txt`):
 - `passlib[bcrypt]==1.7.4` + `bcrypt==4.1.3` — password hashing
 - `fpdf2==2.8.4` — PDF generation
 - `pdfplumber==0.11.4` — PDF text extraction
+- `boto3==1.34.69` — Cloudflare R2 / S3 photo storage
 - `alembic==1.13.1` — DB migrations
 - `httpx==0.27.0` — async HTTP client (Gemini API)
 - `pytest==8.1.1` — testing

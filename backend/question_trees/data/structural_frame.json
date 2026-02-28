@@ -1,0 +1,114 @@
+{
+    "job_type": "structural_frame",
+    "version": "1.0",
+    "display_name": "Structural Steel Frame",
+    "category": "industrial",
+    "required_fields": [
+        "frame_type", "span", "height", "material"
+    ],
+    "questions": [
+        {
+            "id": "frame_type",
+            "text": "What type of structure?",
+            "type": "choice",
+            "options": ["Mezzanine / platform", "Canopy / shade structure", "Portal frame (beam + columns)", "Equipment support / dunnage", "Structural beam/column replacement"],
+            "required": true,
+            "hint": "Mezzanine and canopy are the most common structural fabrication requests.",
+            "depends_on": null,
+            "branches": {
+                "Mezzanine / platform": ["load_rating", "deck_type"],
+                "Canopy / shade structure": ["roof_material"]
+            }
+        },
+        {
+            "id": "span",
+            "text": "Clear span (longest unsupported distance)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "Clear span determines beam size. Longer spans need deeper beams.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "height",
+            "text": "Height (to underside of beam)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": true,
+            "hint": "For mezzanines, this is the clear height underneath. For canopies, height to eave.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "depth",
+            "text": "Depth (secondary dimension)?",
+            "type": "measurement",
+            "unit": "feet",
+            "required": false,
+            "hint": "For mezzanines: platform depth. For canopies: projection from wall. Leave blank for single-span beams.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "load_rating",
+            "text": "What loads will this support?",
+            "type": "choice",
+            "options": ["Light duty (125 PSF — office/storage)", "Medium duty (250 PSF — manufacturing)", "Heavy duty (500+ PSF — heavy equipment)", "Not sure — need engineering"],
+            "required": false,
+            "hint": "Load rating determines beam and column sizing. For anything supporting people or heavy loads, engineering stamps are required.",
+            "depends_on": "frame_type",
+            "branches": null
+        },
+        {
+            "id": "deck_type",
+            "text": "Mezzanine deck type?",
+            "type": "choice",
+            "options": ["Bar grating (open — allows light/sprinklers)", "Diamond plate (solid steel)", "Concrete on metal deck", "Plywood on steel frame", "No deck (frame only)"],
+            "required": false,
+            "hint": "Bar grating is most common for industrial mezzanines. Concrete deck for heavy loads.",
+            "depends_on": "frame_type",
+            "branches": null
+        },
+        {
+            "id": "roof_material",
+            "text": "Canopy roof material?",
+            "type": "choice",
+            "options": ["Standing seam metal roof", "Corrugated metal panel", "Polycarbonate / translucent panels", "Frame only (no roofing)", "Canvas / fabric (by others)"],
+            "required": false,
+            "hint": null,
+            "depends_on": "frame_type",
+            "branches": null
+        },
+        {
+            "id": "material",
+            "text": "Primary structural material?",
+            "type": "choice",
+            "options": ["Wide flange / I-beam (most common for structural)", "HSS tube (rectangular/square)", "Channel iron", "Angle iron frame"],
+            "required": true,
+            "hint": "Wide flange beams are standard for structural spans. HSS tube for lighter loads and cleaner aesthetics.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "connections",
+            "text": "Connection type?",
+            "type": "choice",
+            "options": ["Welded (permanent — strongest)", "Bolted (field-assembled — easier install)", "Combination (shop-weld + field-bolt)"],
+            "required": false,
+            "hint": "Bolted connections are easier to install but require more fabrication (holes, plates). Combination is most common for large structures.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "finish",
+            "text": "What finish?",
+            "type": "choice",
+            "options": ["Primer only (standard for structural)", "Powder coat", "Paint (in-house)", "Galvanized", "Fireproofing (intumescent coating)"],
+            "required": false,
+            "hint": "Structural steel is often just primed. Galvanized for outdoor exposure. Fireproofing if code requires.",
+            "depends_on": null,
+            "branches": null
+        }
+    ]
+}

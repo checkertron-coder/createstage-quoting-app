@@ -54,13 +54,13 @@ class ProcessType(str, enum.Enum):
 # Use as validation reference. Stored as VARCHAR, not enum.
 
 V2_JOB_TYPES = [
-    # Priority A — most common, highest data quality
+    # Priority A — gates & railings
     "cantilever_gate",
     "swing_gate",
     "straight_railing",
     "stair_railing",
     "repair_decorative",
-    # Priority B — common, slightly more complex
+    # Priority B — structural & architectural
     "ornamental_fence",
     "complete_stair",
     "spiral_stair",
@@ -72,6 +72,19 @@ V2_JOB_TYPES = [
     "bollard",
     "repair_structural",
     "custom_fab",
+    # Priority D — automotive
+    "offroad_bumper",
+    "rock_slider",
+    "roll_cage",
+    "exhaust_custom",
+    # Priority E — industrial & signage
+    "trailer_fab",
+    "structural_frame",
+    "furniture_other",
+    "sign_frame",
+    "led_sign_custom",
+    # Priority F — products
+    "product_firetable",
 ]
 
 
