@@ -161,22 +161,30 @@
 7. **Surface prep after all welding is done.** Not before.
 
 ### Furniture (Tables, Benches, Shelving)
-1. Layout and cut all tube stock (legs, aprons, stretchers)
+
+**Structural Frame:**
+1. Layout and cut all tube stock
 2. Deburr all cuts
-3. Cut and fit flat bar or sheet for decorative elements
-4. Fixture legs and aprons — use a flat welding table, check square
-5. Tack weld all four corners of frame
-6. Check square (diagonal measurement), adjust tacks as needed
-7. Complete apron welds (balanced — alternate sides to manage pull)
-8. Add stretchers and lower elements
-9. Fit decorative elements (flat bar pyramid, shelf, etc.)
-10. Complete decorative element welds
-11. Check for level and twist — correct with press or targeted heat if needed
-12. Grind welds if brushed/clear coat finish required
-13. Surface prep per finish spec (see Section 4)
-14. Apply finish
-15. Install glass or wood elements (after finish, NOT before)
-16. Install hardware (casters, levelers, etc.)
+3. Fixture and tack frame joints, check square
+4. Complete frame welds (balanced)
+5. Grind frame welds (if visible)
+
+**Decorative Elements:**
+6. Vinegar bath raw flat bar stock (full lengths — see Section 11)
+7. Heavy grind stock to finish surface
+8. Cut flat bar to final dimensions from prepped stock
+9. Cut spacer pieces if applicable
+10. Assemble spacers (stack and tack pairs)
+11. Fit decorative elements — measure, position, clamp each piece
+12. Tack, verify, weld
+13. Light cleanup on weld areas only
+
+**Final Finish:**
+14. Check level and twist
+15. Wipe with acetone
+16. Apply finish
+17. Install glass/wood elements
+18. Install hardware
 
 ### Railings (Interior and Exterior)
 1. Measure in-field — do not trust drawings alone for existing structures
@@ -269,7 +277,7 @@
 | TIG fillet weld | 4-6 in/min travel speed |
 | Grind weld flush | 5-10 min/foot of weld |
 | Brush finish | 15-30 min/sq ft |
-| Vinegar bath (small part) | 0.5 hr handle + 24 hr soak + 0.5 hr rinse/dry |
+| Vinegar bath | 0.75-1.25 hr active handling only. Soak time (12-24 hr) is UNATTENDED and must NOT be counted as labor hours. |
 | Powder coat transport | 3-4 hr minimum (round trip) |
 
 ### Flat Bar Pyramid — TRUE 3D Design (Not Flat Concentric Squares)
@@ -321,6 +329,13 @@ Burton's shop with jig/spacer method runs ~3-4 min/piece for practiced patterns.
 **Key insight for AI estimation:** A 30-layer × 4-piece flat bar pyramid = 120 precision
 placements. This dominates the weld time on decorative furniture jobs. Do not
 underestimate by treating these as simple tack welds.
+
+### Stacked Spacer Fabrication
+Cut list must show INDIVIDUAL pieces, not assembled spacers.
+- Each spacer location = 2 pieces (if "two stacked")
+- Example: 32 locations × 2 pieces = 64 individual cuts at 1/2" long
+- Assembly time: pair, align, tack each set: 2-3 min per pair
+- 32 pairs × 2.5 min = ~1.3 hours spacer assembly labor (separate line item)
 
 ### Weld Deposition Rate for Labor Calc
 - MIG 0.035" wire, 250A, 28V: ~3.5 lb/hr deposition
@@ -383,5 +398,49 @@ Is finish POWDER COAT or PAINT?
 
 ---
 
-*Last updated: 2026-02-28*
+## 11. DECORATIVE STOCK PREP — PROCESS ORDER
+
+### Why This Matters
+You CANNOT grind tiny cut pieces to a furniture-grade finish. Small pieces move, flex, and are impossible to hold steady against a flap disc. The finish will be inconsistent and you'll waste hours fighting the material. The solution: do ALL finish work on full-length raw stock BEFORE cutting to size.
+
+### The Correct Sequence (Decorative Flat Bar, Visible Steel)
+
+**Phase 1 — Stock Prep (BEFORE any cutting)**
+1. Vinegar bath full-length raw stock — submerge as much as fits in the bath
+2. Soak 12-24 hours (UNATTENDED — this is not labor time)
+3. Pull stock, rinse immediately, neutralize with baking soda/water
+4. Dry instantly with compressed air (prevents flash rust)
+5. Heavy grind with flap disc — 80 grit then 120 grit on ALL faces
+6. This is where the BULK of grind time happens (60-70% of total grind hours)
+7. Stock is now finish-ready — smooth, scale-free, consistent surface
+
+**Phase 2 — Cut to Size**
+8. Transfer cut list dimensions to the prepped stock
+9. Cut all pieces to final length — chop saw or band saw
+10. Light deburr on cut ends only (faces are already finished)
+
+**Phase 3 — Assembly**
+11. Fit, tack, and weld per build sequence
+12. Light cleanup pass on WELD AREAS ONLY — die grinder or small flap disc
+13. Do NOT re-grind entire pieces — only blend the weld spots
+
+**Phase 4 — Final Finish**
+14. Wipe entire assembly with acetone
+15. Apply clear coat / paint / finish
+
+### When This Applies vs When It Doesn't
+- **APPLIES:** Any job with visible flat bar, clear coat/raw/brushed/patina finish, ornamental elements where surface consistency matters
+- **DOES NOT APPLY:** Structural-only work, powder coat jobs (coater preps), tube/pipe frames
+
+### Labor Split
+Split grind hours into TWO line items:
+- **Stock Prep & Grind:** Heavy grinding on raw stock before cutting. 60-70% of total grind time.
+- **Post-Weld Cleanup:** Light blending of weld areas only after assembly. 1-2 hours max.
+
+### Vinegar Bath Labor
+Soak is NOT labor. Active handling only: setup/submersion 15-30 min + pull/rinse/neutralize/dry 30-45 min = 0.75-1.25 hours total.
+
+---
+
+*Last updated: 2026-03-01*
 *Source: CreateStage shop practices + AWS D1.1 field experience + welding engineering fundamentals*
