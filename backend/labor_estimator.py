@@ -49,7 +49,10 @@ class LaborEstimator:
 
     def estimate(self, material_list: dict, quote_params: dict, user_rates: dict) -> dict:
         """
-        Main entry point.
+        Main entry point — deterministic labor calculation from cut list.
+
+        No AI involved. Hours are calculated from cut list analysis using
+        shop time standards from FAB_KNOWLEDGE.md.
 
         Args:
             material_list: MaterialList from Stage 3
@@ -57,24 +60,96 @@ class LaborEstimator:
             user_rates: {"rate_inshop": float, "rate_onsite": float} from user profile
 
         Returns:
-            LaborEstimate dict matching CLAUDE.md contract
+            LaborEstimate dict matching CLAUDE.md contract (11 processes)
         """
+        from .calculators.labor_calculator import calculate_labor_hours
+
         is_onsite = self._is_onsite_job(quote_params)
+        fields = quote_params.get("fields", {})
+        job_type = quote_params.get("job_type", "custom_fab")
+        finish = str(fields.get("finish", "raw")).lower()
 
-        # Try Gemini first, fall back to rule-based
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            logger.warning("No GEMINI_API_KEY — using rule-based fallback for labor estimate")
-            return self._fallback_estimate(material_list, quote_params, user_rates)
+        # Prefer per-piece cut list; fall back to consolidated items
+        cut_list = material_list.get("cut_list", material_list.get("items", []))
 
-        try:
-            prompt = self._build_prompt(material_list, quote_params)
-            response_text = self._call_gemini(prompt)
-            estimate = self._parse_response(response_text, user_rates, is_onsite)
-            return estimate
-        except Exception as e:
-            logger.warning(f"Gemini labor estimation failed: {e} — using fallback")
-            return self._fallback_estimate(material_list, quote_params, user_rates)
+        # --- Deterministic core calculation (8 keys) ---
+        labor_hours = calculate_labor_hours(job_type, cut_list, fields)
+
+        # --- Map coating_application → clearcoat / paint ---
+        coating = labor_hours["coating_application"]
+        if "clear" in finish:
+            clearcoat_hrs = coating
+            paint_hrs = 0.0
+        elif "paint" in finish and "powder" not in finish:
+            clearcoat_hrs = 0.0
+            paint_hrs = coating
+        else:
+            clearcoat_hrs = 0.0
+            paint_hrs = 0.0
+
+        # --- Hardware install (deterministic rule-based) ---
+        hardware = material_list.get("hardware", [])
+        hardware_count = sum(h.get("quantity", 1) for h in hardware)
+        hardware_install = max(0.0, hardware_count * 0.4)  # ~25 min/item
+        for h in hardware:
+            desc = str(h.get("description", "")).lower()
+            if "operator" in desc or "motor" in desc:
+                hardware_install += 1.5
+
+        # --- Site install (deterministic rule-based) ---
+        install_str = str(fields.get("installation",
+                          fields.get("install_included", "no"))).lower()
+        is_install = "install" in install_str or "yes" in install_str
+        site_install = 0.0
+        if is_install:
+            weight = material_list.get("total_weight_lbs", 0)
+            if weight < 200:
+                site_install = 3.0
+            elif weight < 500:
+                site_install = 5.0
+            elif weight < 1000:
+                site_install = 7.0
+            else:
+                site_install = 10.0
+            if ("concrete" in str(fields.get("post_concrete", "")).lower()
+                    or "full installation" in install_str):
+                site_install += 2.0
+
+        # --- Assemble 11-process list ---
+        hours_map = {
+            "layout_setup": labor_hours["layout_setup"],
+            "cut_prep": labor_hours["cut_prep"],
+            "fit_tack": labor_hours["fit_tack"],
+            "full_weld": labor_hours["full_weld"],
+            "grind_clean": labor_hours["grind_clean"],
+            "finish_prep": labor_hours["finish_prep"],
+            "clearcoat": clearcoat_hrs,
+            "paint": paint_hrs,
+            "hardware_install": round(hardware_install, 2),
+            "site_install": round(site_install, 2),
+            "final_inspection": labor_hours["final_inspection"],
+        }
+
+        note = "Deterministic — calculated from cut list and shop standards"
+        processes = []
+        for process_name in LABOR_PROCESSES:
+            hours = round(max(hours_map.get(process_name, 0.0), 0.0), 2)
+            rate = self._get_rate_for_process(process_name, is_onsite, user_rates)
+            processes.append({
+                "process": process_name,
+                "hours": hours,
+                "rate": rate,
+                "notes": note,
+            })
+
+        total_hours = round(sum(p["hours"] for p in processes), 2)
+
+        return {
+            "processes": processes,
+            "total_hours": total_hours,
+            "flagged": False,
+            "flag_reason": None,
+        }
 
     def _build_prompt(self, material_list: dict, quote_params: dict) -> str:
         """

@@ -121,7 +121,8 @@ createstage-quoting-app/
 │   │   ├── led_sign_custom.py   — Channel letters / cabinet estimate
 │   │   ├── product_firetable.py — BOM-based from firetable_pro_bom.json
 │   │   ├── ai_cut_list.py      — AI-assisted cut list + build instructions (Gemini)
-│   │   └── fab_knowledge.py    — FAB_KNOWLEDGE.md parser, targeted section injection into AI prompts
+│   │   ├── fab_knowledge.py    — FAB_KNOWLEDGE.md parser, targeted section injection into AI prompts
+│   │   └── labor_calculator.py — Deterministic labor hours from cut list (replaces AI labor estimation)
 │   └── question_trees/
 │       ├── __init__.py
 │       ├── engine.py        — QuestionTreeEngine (load, detect_job_type, extract_fields, extract_from_photo, next_questions)
