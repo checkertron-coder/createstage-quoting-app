@@ -2,6 +2,7 @@
 Custom furniture / fixtures calculator.
 
 Generic furniture items — routes by item_type (shelf, bracket, rack, etc.).
+Uses BaseCalculator AI methods — logging, price fallbacks, consistent behavior.
 """
 
 import re
@@ -15,24 +16,30 @@ lookup = MaterialLookup()
 class FurnitureOtherCalculator(BaseCalculator):
 
     def calculate(self, fields: dict) -> dict:
+        assumptions = [
+            "Material prices based on market averages — update with supplier quotes for accuracy.",
+        ]
+
+        # Try AI cut list when description exists
+        if self._has_description(fields):
+            ai_result = self._try_ai_cut_list("furniture_other", fields)
+            if ai_result is not None:
+                return self._build_from_ai_cuts("furniture_other", ai_result, fields, assumptions)
+
+        return self._template_calculate(fields, assumptions)
+
+    def _template_calculate(self, fields: dict, assumptions: list) -> dict:
+        """Template-based calculation when AI is unavailable."""
         items = []
         hardware = []
         total_weight = 0.0
         total_sq_ft = 0.0
         total_weld_inches = 0.0
-        assumptions = [
-            "Material prices based on market averages — update with supplier quotes for accuracy.",
-        ]
-
-        # Try AI cut list for custom designs
-        ai_cuts = self._try_ai_cut_list(fields)
-        if ai_cuts is not None:
-            return self._build_from_ai_cuts(ai_cuts, fields, assumptions)
 
         # Parse inputs
         item_type = fields.get("item_type", "Shelving / storage rack")
         material_str = fields.get("material", "Mild steel (most common / cheapest)")
-        size_str = fields.get("approximate_size", "48\" × 18\" × 72\"")
+        size_str = fields.get("approximate_size", "48\" x 18\" x 72\"")
         quantity = self.parse_int(fields.get("quantity"), default=1)
         if quantity < 1:
             quantity = 1
@@ -66,7 +73,7 @@ class FurnitureOtherCalculator(BaseCalculator):
             upright_weight = self.get_weight_lbs(frame_profile, upright_total_ft)
 
             items.append(self.make_material_item(
-                description="Uprights — %s × %d (%.0f\" each)" % (
+                description="Uprights — %s x %d (%.0f\" each)" % (
                     frame_profile, upright_count, height_in),
                 material_type=mat_type,
                 profile=frame_profile,
@@ -84,7 +91,7 @@ class FurnitureOtherCalculator(BaseCalculator):
             shelf_weight = self.get_weight_lbs(frame_profile, shelf_total_ft)
 
             items.append(self.make_material_item(
-                description="Shelf frames — %s × %d shelves" % (frame_profile, shelf_count),
+                description="Shelf frames — %s x %d shelves" % (frame_profile, shelf_count),
                 material_type=mat_type,
                 profile=frame_profile,
                 length_inches=shelf_perim_in,
@@ -110,7 +117,7 @@ class FurnitureOtherCalculator(BaseCalculator):
             bracket_weight = self.get_weight_lbs(bracket_profile, bracket_total_ft)
 
             items.append(self.make_material_item(
-                description="Brackets — %s × %d (%.0f\" each, 2 per unit)" % (
+                description="Brackets — %s x %d (%.0f\" each, 2 per unit)" % (
                     bracket_profile, quantity * 2, bracket_length_in),
                 material_type="flat_bar",
                 profile=bracket_profile,
@@ -133,7 +140,7 @@ class FurnitureOtherCalculator(BaseCalculator):
             frame_weight = self.get_weight_lbs(frame_profile, total_frame_ft)
 
             items.append(self.make_material_item(
-                description="Frame material — %s (%.1f ft per unit × %d)" % (
+                description="Frame material — %s (%.1f ft per unit x %d)" % (
                     frame_profile, self.inches_to_feet(frame_perim_in + internal_in), quantity),
                 material_type=mat_type,
                 profile=frame_profile,
@@ -153,7 +160,7 @@ class FurnitureOtherCalculator(BaseCalculator):
         total_sq_ft = self.sq_ft_from_dimensions(length_in, width_in) * quantity
 
         assumptions.append(
-            "%s: %.0f\" × %.0f\" × %.0f\", %d unit(s)." % (
+            "%s: %.0f\" x %.0f\" x %.0f\", %d unit(s)." % (
                 item_type.split("/")[0].strip() if "/" in item_type else item_type.split("(")[0].strip(),
                 length_in, width_in, height_in, quantity))
 
@@ -161,66 +168,6 @@ class FurnitureOtherCalculator(BaseCalculator):
             job_type="furniture_other",
             items=items,
             hardware=hardware,
-            total_weight_lbs=total_weight,
-            total_sq_ft=total_sq_ft,
-            weld_linear_inches=total_weld_inches,
-            assumptions=assumptions,
-        )
-
-    def _try_ai_cut_list(self, fields):
-        """Try AI cut list when any description text exists."""
-        description = fields.get("description", "")
-        notes = fields.get("notes", "")
-        combined = (str(description) + " " + str(notes)).strip()
-        if not combined:
-            return None
-        try:
-            from .ai_cut_list import AICutListGenerator
-            generator = AICutListGenerator()
-            return generator.generate_cut_list("furniture_other", fields)
-        except Exception:
-            return None
-
-    def _build_from_ai_cuts(self, ai_cuts, fields, assumptions):
-        """Build MaterialList from AI-generated cut list."""
-        items = []
-        total_weight = 0.0
-        total_weld_inches = 0.0
-
-        for cut in ai_cuts:
-            profile = cut.get("profile", "sq_tube_1.5x1.5_11ga")
-            length_in = cut.get("length_inches", 12.0)
-            quantity = cut.get("quantity", 1)
-            price_ft = lookup.get_price_per_foot(profile)
-            if price_ft == 0.0:
-                price_ft = 2.75
-            length_ft = self.inches_to_feet(length_in)
-            weight = self.get_weight_lbs(profile, length_ft * quantity)
-            if weight == 0.0:
-                weight = length_ft * quantity * 2.0
-
-            items.append(self.make_material_item(
-                description=cut.get("description", "Cut piece"),
-                material_type=cut.get("material_type", "mild_steel"),
-                profile=profile,
-                length_inches=length_in,
-                quantity=self.apply_waste(quantity, self.WASTE_TUBE),
-                unit_price=round(length_ft * price_ft, 2),
-                cut_type=cut.get("cut_type", "square"),
-                waste_factor=self.WASTE_TUBE,
-            ))
-            total_weight += weight
-            total_weld_inches += quantity * 6
-
-        size_str = fields.get("approximate_size", "")
-        length_in, width_in, _ = self._parse_size(size_str)
-        total_sq_ft = self.sq_ft_from_dimensions(length_in, width_in)
-        assumptions.append("Cut list generated by AI from custom design description.")
-
-        return self.make_material_list(
-            job_type="furniture_other",
-            items=items,
-            hardware=[],
             total_weight_lbs=total_weight,
             total_sq_ft=total_sq_ft,
             weld_linear_inches=total_weld_inches,

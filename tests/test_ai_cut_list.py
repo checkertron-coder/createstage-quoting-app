@@ -202,42 +202,42 @@ def test_furniture_table_ai_fires_on_any_description():
     """AI cut list fires on ANY description text, not just keywords."""
     calc = FurnitureTableCalculator()
     # No description — should NOT trigger AI
-    result = calc._try_ai_cut_list({})
+    result = calc._try_ai_cut_list("furniture_table", {})
     assert result is None
 
     # Empty description — should NOT trigger
-    result = calc._try_ai_cut_list({"description": "", "notes": ""})
+    result = calc._try_ai_cut_list("furniture_table", {"description": "", "notes": ""})
     assert result is None
 
     # ANY description text — should trigger (returns None because no API key)
     with patch.dict("os.environ", {}, clear=True):
-        result = calc._try_ai_cut_list({"description": "pyramid flat bar pattern"})
+        result = calc._try_ai_cut_list("furniture_table", {"description": "pyramid flat bar pattern"})
     assert result is None  # None from no API key, not from keyword filter
 
     # "standard dining table" — should ALSO trigger now (no keywords needed)
     with patch.dict("os.environ", {}, clear=True):
-        result = calc._try_ai_cut_list({"description": "standard dining table"})
+        result = calc._try_ai_cut_list("furniture_table", {"description": "standard dining table"})
     assert result is None  # None from no API key
 
 
 def test_all_calculators_fire_ai_on_description():
     """All 6 AI-integrated calculators fire AI on any description text."""
     calculators = [
-        FurnitureTableCalculator(),
-        FurnitureOtherCalculator(),
-        LedSignCustomCalculator(),
-        RepairDecorativeCalculator(),
-        RepairStructuralCalculator(),
-        CustomFabCalculator(),
+        ("furniture_table", FurnitureTableCalculator()),
+        ("furniture_other", FurnitureOtherCalculator()),
+        ("led_sign_custom", LedSignCustomCalculator()),
+        ("repair_decorative", RepairDecorativeCalculator()),
+        ("repair_structural", RepairStructuralCalculator()),
+        ("custom_fab", CustomFabCalculator()),
     ]
-    for calc in calculators:
+    for job_type, calc in calculators:
         # No description — should return None without trying AI
-        assert calc._try_ai_cut_list({}) is None, (
+        assert calc._try_ai_cut_list(job_type, {}) is None, (
             "%s should not trigger AI with no description" % type(calc).__name__
         )
         # With description — should try AI (returns None due to no API key)
         with patch.dict("os.environ", {}, clear=True):
-            result = calc._try_ai_cut_list({"description": "some design"})
+            result = calc._try_ai_cut_list(job_type, {"description": "some design"})
         assert result is None
 
 
@@ -245,12 +245,12 @@ def test_custom_fab_always_tries_ai_with_description():
     """Custom fab tries AI when description is present."""
     calc = CustomFabCalculator()
     # No description — should not trigger
-    result = calc._try_ai_cut_list({})
+    result = calc._try_ai_cut_list("custom_fab", {})
     assert result is None
 
     # With description — tries but fails (no API key)
     with patch.dict("os.environ", {}, clear=True):
-        result = calc._try_ai_cut_list({"description": "custom bracket"})
+        result = calc._try_ai_cut_list("custom_fab", {"description": "custom bracket"})
     assert result is None
 
 

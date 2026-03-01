@@ -2,6 +2,7 @@
 Custom LED / illuminated sign calculator.
 
 Channel letter / cabinet estimate. Routes by sign_type.
+Uses BaseCalculator AI methods — logging, price fallbacks, consistent behavior.
 """
 
 import re
@@ -16,23 +17,29 @@ lookup = MaterialLookup()
 class LedSignCustomCalculator(BaseCalculator):
 
     def calculate(self, fields: dict) -> dict:
+        assumptions = [
+            "Material prices based on market averages — update with supplier quotes for accuracy.",
+        ]
+
+        # Try AI cut list when description exists
+        if self._has_description(fields):
+            ai_result = self._try_ai_cut_list("led_sign_custom", fields)
+            if ai_result is not None:
+                return self._build_from_ai_cuts("led_sign_custom", ai_result, fields, assumptions)
+
+        return self._template_calculate(fields, assumptions)
+
+    def _template_calculate(self, fields: dict, assumptions: list) -> dict:
+        """Template-based calculation when AI is unavailable."""
         items = []
         hardware = []
         total_weight = 0.0
         total_sq_ft = 0.0
         total_weld_inches = 0.0
-        assumptions = [
-            "Material prices based on market averages — update with supplier quotes for accuracy.",
-        ]
-
-        # Try AI cut list for complex custom signs
-        ai_cuts = self._try_ai_cut_list(fields)
-        if ai_cuts is not None:
-            return self._build_from_ai_cuts(ai_cuts, fields, assumptions)
 
         # Parse inputs
         sign_type = fields.get("sign_type", "Channel letters (individual 3D letters)")
-        dims_str = fields.get("dimensions", "8 ft × 2 ft")
+        dims_str = fields.get("dimensions", "8 ft x 2 ft")
         letter_height_str = fields.get("letter_height", "18")
         letter_count = self.parse_int(fields.get("letter_count"), default=8)
         material_str = fields.get("material", "Aluminum (standard for sign fabrication)")
@@ -45,24 +52,19 @@ class LedSignCustomCalculator(BaseCalculator):
 
         if "channel" in str(sign_type).lower() or "halo" in str(sign_type).lower():
             # Channel letters — individual 3D fabricated letters
-            # Each letter: face + return + back
-
-            # Average letter width ≈ letter_height × 0.6
             avg_letter_width_in = letter_height_in * 0.6
-            return_depth_in = 5.0  # Standard 5" deep channel letter
+            return_depth_in = 5.0
 
-            # Return material (aluminum coil / flat bar bent to shape)
             return_profile = "flat_bar_1x0.25" if not is_aluminum else "flat_bar_1x0.1875"
             return_price_ft = lookup.get_price_per_foot(return_profile)
 
-            # Perimeter per letter ≈ 2 × (height + width)
             avg_perim_in = 2 * (letter_height_in + avg_letter_width_in)
             total_return_in = avg_perim_in * letter_count
             total_return_ft = self.inches_to_feet(total_return_in)
             return_weight = self.get_weight_lbs(return_profile, total_return_ft)
 
             items.append(self.make_material_item(
-                description="Channel letter returns — %s × %d letters (%.0f\" avg perimeter)" % (
+                description="Channel letter returns — %s x %d letters (%.0f\" avg perimeter)" % (
                     return_profile, letter_count, avg_perim_in),
                 material_type="flat_bar" if not is_aluminum else "aluminum_6061",
                 profile=return_profile,
@@ -74,9 +76,8 @@ class LedSignCustomCalculator(BaseCalculator):
             ))
             total_weight += return_weight
 
-            # Face / back sheet material
             face_area_sqin = letter_height_in * avg_letter_width_in * letter_count
-            face_area_sqft = face_area_sqin / 144.0 * 2  # Face + back
+            face_area_sqft = face_area_sqin / 144.0 * 2
             sheet_profile = "sheet_16ga"
             sheet_price_sqft = lookup.get_price_per_sqft(sheet_profile)
             if sheet_price_sqft == 0.0:
@@ -87,7 +88,7 @@ class LedSignCustomCalculator(BaseCalculator):
                 sheet_price_sqft *= 3.0
 
             sheet_count = self.apply_waste(math.ceil(face_area_sqft / 32.0), self.WASTE_SHEET)
-            face_weight = face_area_sqft * 1.5  # Approx weight
+            face_weight = face_area_sqft * 1.5
 
             items.append(self.make_material_item(
                 description="Letter faces + backs — %s %s (%.1f sq ft total)" % (
@@ -104,7 +105,7 @@ class LedSignCustomCalculator(BaseCalculator):
             ))
             total_weight += face_weight
 
-            total_weld_inches = total_return_in * 0.3  # Tack welds along returns
+            total_weld_inches = total_return_in * 0.3
             total_sq_ft = face_area_sqft
 
             assumptions.append(
@@ -114,15 +115,13 @@ class LedSignCustomCalculator(BaseCalculator):
 
         elif "cabinet" in str(sign_type).lower() or "box" in str(sign_type).lower() or \
              "light box" in str(sign_type).lower():
-            # Cabinet / box sign
             cabinet_depth_in = 6.0
 
-            # Sheet for cabinet (4 sides + back)
             front_sqft = self.sq_ft_from_dimensions(overall_width_in, overall_height_in)
             side_sqft = self.sq_ft_from_dimensions(cabinet_depth_in, overall_height_in) * 2
             top_bottom_sqft = self.sq_ft_from_dimensions(overall_width_in, cabinet_depth_in) * 2
             back_sqft = front_sqft
-            total_sheet_sqft = side_sqft + top_bottom_sqft + back_sqft  # Front is translucent — not steel
+            total_sheet_sqft = side_sqft + top_bottom_sqft + back_sqft
 
             sheet_profile = "sheet_16ga"
             sheet_price_sqft = lookup.get_price_per_sqft(sheet_profile)
@@ -135,7 +134,7 @@ class LedSignCustomCalculator(BaseCalculator):
             cabinet_weight = total_sheet_sqft * 1.5
 
             items.append(self.make_material_item(
-                description="Cabinet box — %s (%.0f\" × %.0f\" × %.0f\" deep)" % (
+                description="Cabinet box — %s (%.0f\" x %.0f\" x %.0f\" deep)" % (
                     sheet_profile, overall_width_in, overall_height_in, cabinet_depth_in),
                 material_type="aluminum_6061" if is_aluminum else "plate",
                 profile=sheet_profile,
@@ -147,7 +146,6 @@ class LedSignCustomCalculator(BaseCalculator):
             ))
             total_weight += cabinet_weight
 
-            # Internal frame
             frame_profile = "angle_1.5x1.5x0.125"
             frame_price_ft = lookup.get_price_per_foot(frame_profile)
             frame_in = self.perimeter_inches(overall_width_in, overall_height_in) * 2
@@ -171,12 +169,11 @@ class LedSignCustomCalculator(BaseCalculator):
             total_sq_ft = total_sheet_sqft + front_sqft
 
             assumptions.append(
-                "Cabinet sign: %.0f\" × %.0f\" × %.0f\" deep. "
+                "Cabinet sign: %.0f\" x %.0f\" x %.0f\" deep. "
                 "Front face panel (acrylic/polycarbonate) and LED modules NOT included." % (
                     overall_width_in, overall_height_in, cabinet_depth_in))
 
         else:
-            # Generic — estimate similar to cabinet
             frame_profile = "sq_tube_1.5x1.5_11ga"
             frame_price_ft = lookup.get_price_per_foot(frame_profile)
             frame_in = self.perimeter_inches(overall_width_in, overall_height_in) + overall_height_in
@@ -184,7 +181,7 @@ class LedSignCustomCalculator(BaseCalculator):
             frame_weight = self.get_weight_lbs(frame_profile, frame_ft)
 
             items.append(self.make_material_item(
-                description="Sign frame — %s (%.0f\" × %.0f\")" % (
+                description="Sign frame — %s (%.0f\" x %.0f\")" % (
                     frame_profile, overall_width_in, overall_height_in),
                 material_type="square_tubing",
                 profile=frame_profile,
@@ -198,7 +195,7 @@ class LedSignCustomCalculator(BaseCalculator):
             total_weight += frame_weight
             total_weld_inches = 4 * 3.0
             total_sq_ft = self.sq_ft_from_dimensions(overall_width_in, overall_height_in)
-            assumptions.append("Custom LED sign frame — %.0f\" × %.0f\"." % (
+            assumptions.append("Custom LED sign frame — %.0f\" x %.0f\"." % (
                 overall_width_in, overall_height_in))
 
         # Raceway (if building-mounted)
@@ -228,67 +225,6 @@ class LedSignCustomCalculator(BaseCalculator):
             job_type="led_sign_custom",
             items=items,
             hardware=hardware,
-            total_weight_lbs=total_weight,
-            total_sq_ft=total_sq_ft,
-            weld_linear_inches=total_weld_inches,
-            assumptions=assumptions,
-        )
-
-    def _try_ai_cut_list(self, fields):
-        """Try AI cut list when any description text exists."""
-        description = fields.get("description", "")
-        notes = fields.get("notes", "")
-        combined = (str(description) + " " + str(notes)).strip()
-        if not combined:
-            return None
-        try:
-            from .ai_cut_list import AICutListGenerator
-            generator = AICutListGenerator()
-            return generator.generate_cut_list("led_sign_custom", fields)
-        except Exception:
-            return None
-
-    def _build_from_ai_cuts(self, ai_cuts, fields, assumptions):
-        """Build MaterialList from AI-generated cut list."""
-        items = []
-        total_weight = 0.0
-        total_weld_inches = 0.0
-
-        for cut in ai_cuts:
-            profile = cut.get("profile", "sq_tube_1.5x1.5_11ga")
-            length_in = cut.get("length_inches", 12.0)
-            quantity = cut.get("quantity", 1)
-            price_ft = lookup.get_price_per_foot(profile)
-            if price_ft == 0.0:
-                price_ft = 2.75
-            length_ft = self.inches_to_feet(length_in)
-            weight = self.get_weight_lbs(profile, length_ft * quantity)
-            if weight == 0.0:
-                weight = length_ft * quantity * 1.5
-
-            items.append(self.make_material_item(
-                description=cut.get("description", "Cut piece"),
-                material_type=cut.get("material_type", "mild_steel"),
-                profile=profile,
-                length_inches=length_in,
-                quantity=self.apply_waste(quantity, self.WASTE_TUBE),
-                unit_price=round(length_ft * price_ft, 2),
-                cut_type=cut.get("cut_type", "square"),
-                waste_factor=self.WASTE_TUBE,
-            ))
-            total_weight += weight
-            total_weld_inches += quantity * 4
-
-        dims_str = fields.get("dimensions", "8 ft x 2 ft")
-        w, h = self._parse_dims(dims_str)
-        total_sq_ft = self.sq_ft_from_dimensions(w, h)
-        assumptions.append("Cut list generated by AI from custom sign description.")
-        assumptions.append("LED modules, power supplies, and wiring NOT included.")
-
-        return self.make_material_list(
-            job_type="led_sign_custom",
-            items=items,
-            hardware=[],
             total_weight_lbs=total_weight,
             total_sq_ft=total_sq_ft,
             weld_linear_inches=total_weld_inches,
