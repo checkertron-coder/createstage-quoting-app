@@ -235,18 +235,23 @@ CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
 CRITICAL RULES FOR CUSTOM FEATURES:
 - If the description mentions a PATTERN (pyramid, grid, cross-hatch, inlay, layers, concentric squares), you MUST calculate and include ALL pieces for that pattern in the cut list.
 - NEVER describe a custom feature only in notes — it must appear as real line items with quantities and lengths.
+- Before generating ANY repeating pattern, work out the geometry step by step in the "notes" field of the FIRST item in that pattern group: what is the available space, what is the step interval, how many iterations fit, and what is each piece's length. Show the math.
+- A square has exactly 4 sides. The quantity for any square layer is ALWAYS 4. Not 5, not 3 — exactly 4.
+- Each piece in a single square layer must have the SAME length (all 4 sides of a square are equal).
 - For pyramid/concentric patterns: calculate each layer separately. Start with the outermost square, step inward by the specified spacing, repeat until no more full squares fit. Each layer = 4 pieces.
-- Example: 20" inside frame, 1/4" inset first layer = 19.5" square. Next layer = 19" square. Continue until minimum viable.
+- Example: 20" inside frame, 1/4" spacing per side. Layer 1: 4 pcs at 19.5". Layer 2: 4 pcs at 19.0". Layer 3: 4 pcs at 18.5". Continue until pieces are too small to be practical (< 3").
+- Do NOT invent structural pieces (tabs, supports, connectors, spacers) that were not mentioned in the description. Only include pieces the user asked for.
 
 RULES:
 1. Every piece must have a SPECIFIC length in inches — no "TBD" or "varies".
 2. Group related pieces (e.g., all frame members in "frame" group, all pickets in "infill" group).
 3. List each UNIQUE piece separately with its quantity — don't combine different pieces.
-4. For tables/furniture: 4 legs (not 5), list each rail separately (2 long + 2 short).
-5. Include connection plates, gussets, and brackets — these are real pieces that get cut.
+4. For tables/furniture: exactly 4 legs per table (not 5). List each rail separately (2 long + 2 short).
+5. Only include connection plates, gussets, and brackets if the user mentioned them or if they are structurally required for the design described.
 6. Use miter_45 for visible frame corners. Use cope for tube-to-tube T-joints.
 7. Be practical — use sizes a real fab shop would stock and cut.
 8. Include piece_name for what the part IS (e.g., "leg", "top_rail", "picket").
+9. Quantity means the number of IDENTICAL pieces to cut. Waste factor is handled separately — do not inflate quantity to account for waste.
 
 Return ONLY valid JSON — an array of objects:
 [
