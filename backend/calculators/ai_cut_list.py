@@ -350,34 +350,42 @@ Return ONLY valid JSON — an array of objects:
 
         # Detect finish type to determine mill scale removal and build sequence
         all_fields_lower = " ".join(str(v) for v in fields.values()).lower()
-        bare_metal_finishes = ["clear coat", "clearcoat", "brushed", "raw steel",
-                               "raw metal", "patina", "natural", "bare"]
-        coating_finishes = ["powder coat", "powdercoat", "paint", "galvanized",
-                            "galvanize", "primer", "enamel"]
-        needs_mill_scale_removal = any(f in all_fields_lower for f in bare_metal_finishes)
-        has_coating = any(f in all_fields_lower for f in coating_finishes)
-        # If neither detected, default to no mill scale removal (coating assumed)
-        if needs_mill_scale_removal and has_coating:
-            needs_mill_scale_removal = False  # coating wins
+        bare_metal_keywords = [
+            "clear_coat", "clear coat", "clearcoat",
+            "raw", "waxed", "raw_steel", "raw steel",
+            "brushed", "brushed_steel", "brushed steel",
+            "patina", "chemical_patina",
+        ]
+        coating_keywords = [
+            "powder_coat", "powder coat", "powdercoat",
+            "paint", "painted",
+            "galvanized", "galvanize",
+        ]
+        has_coating = any(k in all_fields_lower for k in coating_keywords)
+        needs_mill_scale_removal = (
+            not has_coating
+            and any(k in all_fields_lower for k in bare_metal_keywords)
+        )
 
         if needs_mill_scale_removal:
             build_sequence = """
-BUILD SEQUENCE (bare metal finish — mill scale removal required):
-Mill scale removal is recommended before assembly. Options: vinegar bath, acid wash, or needle scaler. Consider bath/tank size as a constraint when cutting pieces.
+BUILD SEQUENCE (bare metal finish — mill scale removal AFTER welding):
+This project has a bare metal finish (clear coat, brushed, raw, or patina). Mill scale must be removed for proper adhesion and appearance. Do this AFTER all welding is complete.
 1. Layout and mark all pieces
-2. Cut all pieces (consider bath/tank size — pieces must fit your soaking container)
-3. Mill scale removal on all cut pieces (vinegar bath, acid wash, or needle scaler — use what you have)
-4. Wire brush, clean, and dry all pieces immediately after mill scale removal
-5. Surface prep / grinder cleanup on individual pieces WHILE they are accessible (before assembly)
-6. Build and fully weld main structural frame (MIG)
-7. Grind frame welds smooth
-8. Attach decorative/thin elements (TIG) using physical spacers where needed
-9. Final finish (clear coat, brushed finish, patina treatment, etc.)
+2. Cut all pieces
+3. Fit, tack, and weld main structural frame (MIG)
+4. Grind frame welds smooth
+5. Attach decorative/thin elements (TIG) using physical spacers where needed
+6. Grind and blend all remaining welds
+7. Mill scale removal on the completed assembly (vinegar bath, acid wash, flap disc grind, or needle scaler — use what you have available)
+8. Wire brush, clean, and dry immediately after mill scale removal
+9. Final finish (clear coat, wax, brushed finish, patina treatment, etc.)
+Do NOT place mill scale removal before welding — it goes AFTER all welding and grinding is done.
 """
         else:
             build_sequence = """
-BUILD SEQUENCE (paint/powder coat/galvanized finish — no mill scale removal needed):
-Paint and powder coat bond fine over mill scale with proper surface prep (scuff, sand, degrease). Do NOT include vinegar bath or acid wash steps.
+BUILD SEQUENCE (paint/powder coat/galvanized finish — NO mill scale removal):
+This project will be painted, powder coated, or galvanized. Mill scale removal is NOT needed. Do NOT include vinegar bath, acid wash, or mill scale removal steps.
 1. Layout and mark all pieces
 2. Cut all pieces
 3. Degrease and scuff all pieces
