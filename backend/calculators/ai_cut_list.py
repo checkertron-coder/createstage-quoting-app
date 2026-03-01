@@ -179,7 +179,8 @@ AVAILABLE PROFILES (use ONLY these):
   Square tube: sq_tube_1x1_14ga, sq_tube_1.5x1.5_11ga, sq_tube_2x2_11ga, sq_tube_2x2_14ga, sq_tube_3x3_11ga, sq_tube_4x4_11ga
   Rectangular tube: rect_tube_2x3_11ga, rect_tube_2x4_11ga
   Round tube: round_tube_1.5_14ga, round_tube_2_11ga
-  Flat bar: flat_bar_1x0.25, flat_bar_1.5x0.25, flat_bar_2x0.25, flat_bar_3x0.25
+  Flat bar: flat_bar_1x0.125, flat_bar_1x0.1875, flat_bar_1x0.25, flat_bar_1.5x0.25, flat_bar_2x0.25, flat_bar_3x0.25
+  NOTE on flat bar naming: width x thickness. flat_bar_1x0.125 = 1" wide x 1/8" thick (your "1x1/8" flat bar)
   Angle: angle_1.5x1.5x0.125, angle_2x2x0.1875, angle_2x2x0.25
   Square bar: sq_bar_0.5, sq_bar_0.625, sq_bar_0.75
   Round bar: round_bar_0.5, round_bar_0.625
@@ -191,6 +192,12 @@ AVAILABLE PROFILES (use ONLY these):
 MATERIAL TYPES: square_tubing, round_tubing, flat_bar, angle_iron, channel, pipe, plate, mild_steel, stainless_304, aluminum_6061, dom_tubing
 
 CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
+
+CRITICAL RULES FOR CUSTOM FEATURES:
+- If the description mentions a PATTERN (pyramid, grid, cross-hatch, inlay, layers, concentric squares), you MUST calculate and include ALL pieces for that pattern in the cut list.
+- NEVER describe a custom feature only in notes — it must appear as real line items with quantities and lengths.
+- For pyramid/concentric patterns: calculate each layer separately. Start with the outermost square, step inward by the specified spacing, repeat until no more full squares fit. Each layer = 4 pieces.
+- Example: 20" inside frame, 1/4" inset first layer = 19.5" square. Next layer = 19" square. Continue until minimum viable.
 
 RULES:
 1. Every piece must have a SPECIFIC length in inches — no "TBD" or "varies".

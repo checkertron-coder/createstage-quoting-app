@@ -62,6 +62,7 @@ PRICE_PER_FOOT = {
     "round_bar_0.625": 1.10,
     "round_bar_0.75": 1.50,
     # Flat bar
+    "flat_bar_1x0.125": 1.10,  # 1" x 1/8" flat bar — $/ft
     "flat_bar_1x0.25": 1.75,
     "flat_bar_1.5x0.25": 2.50,
     "flat_bar_1x0.1875": 1.40,

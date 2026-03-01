@@ -51,8 +51,25 @@ class FurnitureTableCalculator(BaseCalculator):
             quantity = 1
 
         leg_style = fields.get("leg_style", "Straight legs")
-        leg_profile = "sq_tube_2x2_11ga"
-        frame_profile = "sq_tube_1.5x1.5_11ga"
+
+        # Respect user-specified profile — check leg_material_profile field and description
+        user_profile = str(fields.get("leg_material_profile", "") or "").lower()
+        description = str(fields.get("description", "") or "").lower()
+        combined = user_profile + " " + description
+
+        # Default based on specified size
+        if '1"' in combined or "1 inch" in combined or "1x1" in combined or "1\" square" in combined or "1 sq" in combined:
+            leg_profile = "sq_tube_1x1_14ga"
+            frame_profile = "sq_tube_1x1_14ga"
+        elif "1.5" in combined or "1-1/2" in combined or "1½" in combined:
+            leg_profile = "sq_tube_1.5x1.5_11ga"
+            frame_profile = "sq_tube_1.5x1.5_11ga"
+        elif "2 inch" in combined or "2\" square" in combined or "2x2" in combined:
+            leg_profile = "sq_tube_2x2_11ga"
+            frame_profile = "sq_tube_1.5x1.5_11ga"
+        else:
+            leg_profile = "sq_tube_2x2_11ga"
+            frame_profile = "sq_tube_1.5x1.5_11ga"
 
         if "round" in str(leg_style).lower() or "hairpin" in str(leg_style).lower():
             leg_profile = "round_tube_1.5_14ga"
