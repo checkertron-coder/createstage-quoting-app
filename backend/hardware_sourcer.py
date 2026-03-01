@@ -14,6 +14,7 @@ Phase 3: McMaster-Carr eProcurement API + web search for live prices.
 """
 
 import math
+import urllib.parse
 
 from .calculators.material_lookup import HARDWARE_CATALOG
 
@@ -348,8 +349,13 @@ class HardwareSourcer:
             # Try to match to a catalog key
             matched_key = self._match_catalog_key(desc, item)
             if matched_key and matched_key in HARDWARE_PRICES:
-                upgraded["options"] = HARDWARE_PRICES[matched_key]["options"]
-            # else: keep the options from Stage 3 (material_lookup.py stubs)
+                upgraded["options"] = [dict(o) for o in HARDWARE_PRICES[matched_key]["options"]]
+            else:
+                # Deep-copy options so we don't mutate originals
+                upgraded["options"] = [dict(o) for o in upgraded.get("options", [])]
+
+            # Fill empty URLs with McMaster search links
+            self._fill_missing_urls(upgraded)
 
             if quantity_multiplier > 1:
                 upgraded["quantity"] = item.get("quantity", 1) * quantity_multiplier
@@ -357,6 +363,27 @@ class HardwareSourcer:
             priced.append(upgraded)
 
         return priced
+
+    @staticmethod
+    def _fill_missing_urls(item: dict):
+        """Fill empty URL fields with McMaster search URLs based on item description."""
+        desc = item.get("description", "hardware")
+        for option in item.get("options", []):
+            if option.get("url"):
+                continue
+            supplier = option.get("supplier", "").lower()
+            if "mcmaster" in supplier:
+                search_term = urllib.parse.quote_plus(desc)
+                option["url"] = "https://www.mcmaster.com/%s" % search_term
+            elif "amazon" in supplier:
+                search_term = urllib.parse.quote_plus(desc)
+                option["url"] = "https://www.amazon.com/s?k=%s" % search_term
+            elif "grainger" in supplier:
+                search_term = urllib.parse.quote_plus(desc)
+                option["url"] = "https://www.grainger.com/search?searchQuery=%s" % search_term
+            elif "gate depot" in supplier:
+                search_term = urllib.parse.quote_plus(desc)
+                option["url"] = "https://www.gatedepot.com/search?q=%s" % search_term
 
     def estimate_consumables(self, weld_linear_inches: float, total_sq_ft: float,
                              finish_type: str = "raw") -> list:
@@ -449,13 +476,30 @@ class HardwareSourcer:
         Priority: upgraded catalog → Session 3 stubs → generic estimate.
         """
         if item_key in HARDWARE_PRICES:
-            return HARDWARE_PRICES[item_key]["options"]
-        if item_key in HARDWARE_CATALOG:
-            return HARDWARE_CATALOG[item_key]["options"]
-        return [
-            {"supplier": "Estimated", "price": 50.00, "part_number": None,
-             "url": "", "lead_days": None},
-        ]
+            options = [dict(o) for o in HARDWARE_PRICES[item_key]["options"]]
+        elif item_key in HARDWARE_CATALOG:
+            options = [dict(o) for o in HARDWARE_CATALOG[item_key]["options"]]
+        else:
+            search_term = urllib.parse.quote_plus(item_key.replace("_", " "))
+            options = [
+                {"supplier": "McMaster-Carr", "price": 50.00, "part_number": None,
+                 "url": "https://www.mcmaster.com/%s" % search_term, "lead_days": 3},
+            ]
+
+        # Fill missing URLs
+        desc = item_key.replace("_", " ")
+        for option in options:
+            if not option.get("url"):
+                supplier = option.get("supplier", "").lower()
+                search = urllib.parse.quote_plus(desc)
+                if "mcmaster" in supplier:
+                    option["url"] = "https://www.mcmaster.com/%s" % search
+                elif "amazon" in supplier:
+                    option["url"] = "https://www.amazon.com/s?k=%s" % search
+                elif "grainger" in supplier:
+                    option["url"] = "https://www.grainger.com/search?searchQuery=%s" % search
+
+        return options
 
     def suggest_bulk_discount(self, total_hardware_cost: float) -> dict:
         """

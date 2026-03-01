@@ -25,6 +25,12 @@ class BollardCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("bollard", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("bollard", ai_cuts, fields, assumptions)
+
         # Parse inputs
         bollard_count = self.parse_int(fields.get("bollard_count",
                                                    fields.get("quantity")), default=1)

@@ -88,7 +88,7 @@ def test_smoke_calculate(client, auth_headers, db):
     # Pre-populate ALL required fields directly in the DB
     # cantilever_gate requires: clear_width, height, frame_material, frame_gauge,
     #   infill_type, post_count, finish, installation
-    params = session.params_json or {}
+    params = dict(session.params_json or {})
     params.update({
         "clear_width": 16,
         "height": 6,
@@ -130,7 +130,7 @@ def test_smoke_estimate(client, auth_headers, db):
     ).first()
     # straight_railing requires: linear_footage, location, application, railing_height,
     #   top_rail_profile, infill_style, post_mount_type, finish, installation
-    params = session.params_json or {}
+    params = dict(session.params_json or {})
     params.update({
         "linear_footage": 10,
         "location": "Exterior",
@@ -181,7 +181,7 @@ def test_smoke_full_pipeline(client, auth_headers, db):
     session = db.query(models.QuoteSession).filter(
         models.QuoteSession.id == session_id
     ).first()
-    params = session.params_json or {}
+    params = dict(session.params_json or {})
     params.update({
         "clear_width": 5,
         "height": 5,

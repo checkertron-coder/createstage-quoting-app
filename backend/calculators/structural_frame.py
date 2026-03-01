@@ -25,6 +25,12 @@ class StructuralFrameCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("structural_frame", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("structural_frame", ai_cuts, fields, assumptions)
+
         # Parse inputs
         frame_type = fields.get("frame_type", "Portal frame (beam + columns)")
         span_ft = self.parse_feet(fields.get("span"), default=20.0)

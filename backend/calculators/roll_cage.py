@@ -33,6 +33,12 @@ class RollCageCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("roll_cage", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("roll_cage", ai_cuts, fields, assumptions)
+
         # Parse inputs
         cage_style = fields.get("cage_style", "4-point cage (main hoop + down tubes)")
         tube_str = fields.get("tube_size",

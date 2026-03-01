@@ -228,12 +228,11 @@ class RepairDecorativeCalculator(BaseCalculator):
     # --- AI integration ---
 
     def _try_ai_cut_list(self, fields):
-        """Try AI cut list for complex repairs with description."""
+        """Try AI cut list when any description text exists."""
         description = fields.get("description", "")
         notes = fields.get("notes", "")
-        combined = (str(description) + " " + str(notes)).lower()
-        ai_triggers = ["custom", "fabricate new", "replicate", "match design", "ornate"]
-        if not any(t in combined for t in ai_triggers):
+        combined = (str(description) + " " + str(notes)).strip()
+        if not combined:
             return None
         try:
             from .ai_cut_list import AICutListGenerator

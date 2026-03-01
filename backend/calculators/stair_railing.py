@@ -35,6 +35,12 @@ class StairRailingCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("stair_railing", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("stair_railing", ai_cuts, fields, assumptions)
+
         # --- Parse inputs ---
         linear_footage = self.parse_feet(fields.get("linear_footage"), default=12.0)
 

@@ -29,6 +29,12 @@ class SwingGateCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("swing_gate", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("swing_gate", ai_cuts, fields, assumptions)
+
         # --- Parse inputs ---
         clear_width_ft = self.parse_feet(fields.get("clear_width"), default=8.0)
         height_ft = self.parse_feet(fields.get("height"), default=6.0)

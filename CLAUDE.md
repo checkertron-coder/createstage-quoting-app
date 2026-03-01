@@ -1,6 +1,6 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: AI Cut List Hotfix (Feb 28, 2026) — all contracts verified against code.*
+*Last verified: Session 10 (Feb 28, 2026) — all contracts verified against code.*
 
 ---
 
@@ -12,22 +12,21 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 
 ---
 
-## 2. Current State (v2, Sessions 1-8 + 3B + 3B-Hotfix complete)
+## 2. Current State (v2, Sessions 1-10 complete)
 
-### What Works — Full 6-Stage Pipeline + Bid Parser + Seed Data + All 25 Calculators + Photo Upload + Vision
+### What Works — Full 6-Stage Pipeline + Intelligence Layer
 - **Stage 1 — Intake:** Job type detection via keyword matching + Gemini fallback, field extraction from description + photos
 - **Stage 2 — Clarify:** 25 question trees (all job types), branching logic, completion tracking, extraction confirmation UI
-- **Stage 3 — Calculate:** 25 deterministic calculators (all job types covered, CustomFab as universal fallback), AI-assisted cut list generation for custom/complex designs
-- **Stage 4 — Estimate:** AI labor estimation (Gemini 2.0 Flash) with rule-based fallback, finishing builder, historical validator
+- **Stage 3 — Calculate:** 25 calculators with AI-first pattern (all try AI cut list from description, fall back to deterministic template math), CustomFab as universal fallback
+- **Stage 4 — Estimate:** AI labor estimation with weld process reasoning (TIG/MIG detection, material-specific multipliers), rule-based fallback, finishing builder, historical validator
 - **Stage 5 — Price:** Hardware sourcing (25-item catalog), consumable estimation, pricing engine, markup options (0-30%)
 - **Stage 6 — Output:** Frontend UI (vanilla JS SPA), PDF generator (fpdf2), quote history, PDF download
+- **Intelligence Layer (Session 10):** Description flows to all calculators, AI cut list with 4-step design thinking, weld process reasoning in labor estimation, expanded cut list schema (piece_name, group, weld_process, weld_type, cut_angle)
 - **Bid Parser (Session 7):** PDF extraction (pdfplumber), scope extraction (Gemini + keyword fallback), CSI division mapping, job type mapping, dimension extraction, bid-to-session flow
 - **Seed Data (Session 8):** 35 material prices from Osorio/Wexler invoices, 6 historical actuals, profile key parser
-- **Session 3B:** All 25 calculators, 25 question trees, keyword-based job type detection, registry fallback to CustomFab
-- **Session 3B-Hotfix:** Photo upload (R2 or local fallback), Gemini Vision extraction, extraction confirmation UI with edit buttons, photo upload in frontend
 - **Auth:** JWT access/refresh tokens, guest/register/login, profile management
 - **Database:** PostgreSQL on Railway (SQLite for tests), all v2 tables implemented
-- **Tests:** 258 passing tests across 11 test files
+- **Tests:** 324 passing tests across 13 test files
 
 ### What's Still Needed
 - Live hardware pricing (web search / API)
@@ -36,7 +35,7 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 
 ---
 
-## 3. File Map (verified Session 3B-Hotfix)
+## 3. File Map (verified Session 10)
 
 ```
 createstage-quoting-app/
@@ -71,7 +70,7 @@ createstage-quoting-app/
 │   │   └── process_rates.py — /api/process-rates/* (seed, list, update) + DEFAULT_RATES
 │   ├── calculators/
 │   │   ├── __init__.py
-│   │   ├── base.py              — Abstract BaseCalculator + make_material_item/list/hardware helpers
+│   │   ├── base.py              — Abstract BaseCalculator + make_material_item/list/hardware + AI-first helpers (_has_description, _try_ai_cut_list, _build_from_ai_cuts)
 │   │   ├── material_lookup.py   — Price lookup: seeded prices (35) → hardcoded defaults fallback
 │   │   ├── registry.py          — Calculator registry (25 job types → calculator classes, CustomFab fallback)
 │   │   ├── cantilever_gate.py   — Cantilever gate geometry + materials
@@ -153,6 +152,7 @@ createstage-quoting-app/
 │   ├── test_session8_integration.py    — 15 tests (smoke, seed data, meta)
 │   ├── test_photo_extraction.py        — 20 tests (photo upload, vision, extraction confirmation)
 │   ├── test_ai_cut_list.py             — 20 tests (AI cut list, furniture fixes, PDF sections)
+│   ├── test_session10_intelligence.py  — 39 tests (intelligence layer, AI-first, weld process)
 │   └── fixtures/
 │       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
 ├── alembic/                 — Database migrations
@@ -188,8 +188,8 @@ User Input (text / photo)
     │
     ▼
 [Stage 3: CALCULATE]  ── calculators/{job_type}.py
-    Pure Python math — geometry, piece counts, material quantities, weights, sq footage
-    NO AI INVOLVEMENT HERE
+    AI-first: if description exists, try AI cut list (Gemini) → fallback to deterministic template math
+    AI cut list includes design thinking, pattern geometry, weld process determination
     Output: MaterialList { items, hardware, weight, sq_ft, weld_inches, assumptions }
     │
     ▼
@@ -210,7 +210,7 @@ User Input (text / photo)
     Output: QuoteDocument + PDFBytes
 ```
 
-**AI is ONLY in Stages 1 (detection), 2 (clarify), and 4 (labor). Stages 3, 5, 6 are deterministic code.**
+**AI is in Stages 1 (detection), 2 (clarify), 3 (cut list generation, with deterministic fallback), and 4 (labor). Stages 5, 6 are deterministic code.**
 
 ---
 
@@ -644,7 +644,8 @@ pip install pytest-randomly && pytest tests/ -v -p randomly
 | `test_session8_integration.py` | 15 |
 | `test_photo_extraction.py` | 20 |
 | `test_ai_cut_list.py` | 20 |
-| **Total** | **278** |
+| `test_session10_intelligence.py` | 39 |
+| **Total** | **324** |
 
 ---
 

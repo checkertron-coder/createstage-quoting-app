@@ -117,6 +117,10 @@ def start_session(
     merged_for_storage = dict(extracted_fields)
     merged_for_storage.update({k: v for k, v in photo_extracted_fields.items()
                                if k not in merged_for_storage})
+    # Preserve the original description so calculators can use it for AI cut lists
+    merged_for_storage["description"] = request.description
+    if photo_observations:
+        merged_for_storage["photo_observations"] = photo_observations
     session = models.QuoteSession(
         id=session_id,
         user_id=current_user.id,
@@ -453,9 +457,26 @@ def estimate_labor(
             2,
         )
 
+        # Generate build instructions from material list
+        build_instructions = None
+        try:
+            from ..calculators.ai_cut_list import AICutListGenerator
+            ai_gen = AICutListGenerator()
+            build_instructions = ai_gen.generate_build_instructions(
+                session.job_type,
+                {k: v for k, v in current_params.items() if not k.startswith("_")},
+                material_list.get("items", []),
+            )
+        except Exception:
+            pass  # Build instructions are optional — don't block the pipeline
+
         # Store results in session
         current_params["_labor_estimate"] = labor_estimate
         current_params["_finishing"] = finishing
+        if build_instructions:
+            current_params["_build_instructions"] = build_instructions
+        # Store detailed cut list from material items
+        current_params["_detailed_cut_list"] = material_list.get("items", [])
         session.params_json = current_params
         session.stage = "price"  # Ready for Stage 5
         session.updated_at = datetime.utcnow()
@@ -485,6 +506,7 @@ def estimate_labor(
         # Store results in session
         current_params["_labor_estimate"] = labor_estimate
         current_params["_finishing"] = finishing
+        current_params["_detailed_cut_list"] = material_list.get("items", [])
         session.params_json = current_params
         session.stage = "price"  # Ready for Stage 5
         session.updated_at = datetime.utcnow()
@@ -558,6 +580,8 @@ def price_quote(
         "material_list": material_list,
         "labor_estimate": labor_estimate,
         "finishing": finishing,
+        "detailed_cut_list": current_params.get("_detailed_cut_list", []),
+        "build_instructions": current_params.get("_build_instructions", []),
     }
 
     # Build user dict for PricingEngine

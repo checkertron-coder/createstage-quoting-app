@@ -24,6 +24,12 @@ class BalconyRailingCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("balcony_railing", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("balcony_railing", ai_cuts, fields, assumptions)
+
         # Delegate railing to StraightRailingCalculator
         railing_calc = StraightRailingCalculator()
         railing_result = railing_calc.calculate(fields)

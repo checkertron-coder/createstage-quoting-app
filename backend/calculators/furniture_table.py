@@ -261,24 +261,22 @@ class FurnitureTableCalculator(BaseCalculator):
         return None
 
     def _try_ai_cut_list(self, fields: dict):
-        """Try AI cut list for custom designs. Returns list or None."""
-        # Only use AI if there's a description suggesting custom work
+        """Try AI cut list when any description text exists. Returns list or None."""
         description = fields.get("description", "")
         notes = fields.get("notes", "")
-        combined = (str(description) + " " + str(notes)).lower()
+        combined = (str(description) + " " + str(notes)).strip()
 
-        # Trigger AI for keywords suggesting non-standard design
-        ai_triggers = [
-            "custom", "unique", "curved", "bent", "welded art",
-            "sculptural", "asymmetric", "live edge", "industrial",
-            "modern", "mid-century", "trestle", "pedestal",
-        ]
-        if not any(trigger in combined for trigger in ai_triggers):
+        # If the user described the table in words, send to AI.
+        # Only use the template for jobs with zero description.
+        if not combined:
             return None
 
-        from .ai_cut_list import AICutListGenerator
-        generator = AICutListGenerator()
-        return generator.generate_cut_list("furniture_table", fields)
+        try:
+            from .ai_cut_list import AICutListGenerator
+            generator = AICutListGenerator()
+            return generator.generate_cut_list("furniture_table", fields)
+        except Exception:
+            return None
 
     def _build_from_ai_cuts(self, ai_cuts, fields, assumptions):
         """Build MaterialList from AI-generated cut list."""

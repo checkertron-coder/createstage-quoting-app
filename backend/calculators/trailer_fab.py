@@ -25,6 +25,12 @@ class TrailerFabCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("trailer_fab", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("trailer_fab", ai_cuts, fields, assumptions)
+
         # Parse inputs
         length_ft = self.parse_feet(fields.get("length"), default=16.0)
         width_str = fields.get("width", "6.5' (standard utility)")

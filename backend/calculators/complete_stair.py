@@ -24,6 +24,12 @@ class CompleteStairCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("complete_stair", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("complete_stair", ai_cuts, fields, assumptions)
+
         # Parse inputs
         total_rise_ft = self.parse_feet(fields.get("total_rise",
                                                     fields.get("height")), default=10.0)

@@ -80,6 +80,9 @@ class LaborEstimator:
         """
         Build the Gemini prompt. Provides structured context and demands
         structured JSON output with per-process hour breakdowns.
+
+        Includes weld process reasoning — TIG vs MIG determination affects
+        labor hours significantly (TIG is 2.5-3.5x slower than MIG).
         """
         fields = quote_params.get("fields", {})
         job_type = quote_params.get("job_type", "custom_fab")
@@ -96,98 +99,214 @@ class LaborEstimator:
         # Key dimensions
         dimensions_summary = []
         for key in ["clear_width", "height", "linear_footage", "railing_height",
-                     "panel_config", "stair_angle", "num_risers"]:
+                     "panel_config", "stair_angle", "num_risers", "description"]:
             if key in fields:
-                dimensions_summary.append(f"  - {key}: {fields[key]}")
+                val = fields[key]
+                # Truncate long descriptions
+                val_str = str(val)
+                if len(val_str) > 200:
+                    val_str = val_str[:200] + "..."
+                dimensions_summary.append("  - %s: %s" % (key, val_str))
 
-        # Material descriptions
+        # Material descriptions with weld process info
         material_lines = []
-        for item in items[:15]:  # Cap at 15 to keep prompt reasonable
+        for item in items[:20]:
+            desc = item.get("description", "unknown")
+            qty = item.get("quantity", 1)
+            cut = item.get("cut_type", "square")
+            weld_proc = item.get("weld_process", "")
+            weld_info = " [%s]" % weld_proc.upper() if weld_proc else ""
             material_lines.append(
-                f"  - {item.get('description', 'unknown')} "
-                f"(qty: {item.get('quantity', 1)}, cut: {item.get('cut_type', 'square')})"
+                "  - %s (qty: %d, cut: %s)%s" % (desc, qty, cut, weld_info)
             )
 
         # Hardware descriptions
         hardware_lines = []
         for h in hardware:
-            hardware_lines.append(f"  - {h.get('description', 'unknown')} (qty: {h.get('quantity', 1)})")
+            hardware_lines.append("  - %s (qty: %d)" % (
+                h.get("description", "unknown"), h.get("quantity", 1)))
 
         # Finish type
         finish = fields.get("finish", "raw")
         install = fields.get("installation", fields.get("install_included", "No"))
         is_install = "install" in str(install).lower() or "yes" in str(install).lower()
 
+        # Detect weld process from material list items (set by AI cut list)
+        has_tig_items = any(
+            item.get("weld_process", "").lower() == "tig" for item in items
+        )
+
+        # Also detect TIG from field values
+        all_fields_text = " ".join(str(v) for v in fields.values()).lower()
+        tig_indicators = [
+            "ground smooth", "blended", "furniture finish", "show quality",
+            "visible welds", "tig", "glass top", "grind flush", "grind smooth",
+            "seamless", "showroom", "polished", "mirror finish",
+            "stainless", "aluminum", "chrome", "brushed finish",
+        ]
+        needs_tig = has_tig_items or any(ind in all_fields_text for ind in tig_indicators)
+
+        # Stainless / aluminum detection
+        is_stainless = "stainless" in all_fields_text or "304" in all_fields_text
+        is_aluminum = "aluminum" in all_fields_text or "6061" in all_fields_text
+
+        # Build weld process section
+        weld_section = self._build_weld_process_section(
+            needs_tig, is_stainless, is_aluminum, weld_inches)
+
         # Is this on-site work?
         is_onsite = self._is_onsite_job(quote_params)
 
-        prompt = f"""You are an expert metal fabrication labor estimator with 20+ years of shop experience.
+        prompt = """You are an expert metal fabrication labor estimator with 20+ years of shop experience.
 
-TASK: Estimate labor hours per process for a {job_type} fabrication job.
+TASK: Estimate labor hours per process for a %s fabrication job.
 
 JOB SUMMARY:
-  Job type: {job_type}
-  Total material pieces: {piece_count}
-  Total weight: {total_weight:.1f} lbs
-  Total weld linear inches: {weld_inches:.1f}
-  Total surface area (for finishing): {total_sq_ft:.1f} sq ft
-  Hardware items to install: {hardware_count}
-  Finish type: {finish}
-  Installation included: {"Yes" if is_install else "No"}
-  On-site work (entire job): {"Yes" if is_onsite else "No"}
+  Job type: %s
+  Total material pieces: %d
+  Total weight: %.1f lbs
+  Total weld linear inches: %.1f
+  Total surface area (for finishing): %.1f sq ft
+  Hardware items to install: %d
+  Finish type: %s
+  Installation included: %s
+  On-site work (entire job): %s
 
-KEY DIMENSIONS:
-{chr(10).join(dimensions_summary) if dimensions_summary else "  (none specified)"}
+KEY DIMENSIONS AND DESCRIPTION:
+%s
 
 MATERIAL LIST:
-{chr(10).join(material_lines) if material_lines else "  (no materials)"}
+%s
 
 HARDWARE:
-{chr(10).join(hardware_lines) if hardware_lines else "  (no hardware)"}
+%s
 
-DOMAIN GUIDANCE — use these rules of thumb:
-  - layout_setup: 0.5-2.0 hours depending on job complexity. Simple railing = 0.5, complex gate with motor = 1.5-2.0.
-  - cut_prep: ~3-5 minutes per cut for tube, longer for thick material or miter cuts. Scale with piece count.
-  - fit_tack: Most variable process. Simple frame = 1-2 hrs, complex assembly with multiple pieces = 4-8 hrs.
-  - full_weld: Roughly 8-15 linear inches per hour for MIG on mild steel. Slower for TIG, thick material, or overhead/vertical position.
-  - grind_clean: ~30-50% of weld time for standard finish. More for mirror/polish finish. Less for raw.
-  - finish_prep: 0.5-1.0 hr for paint/clear coat prep (sanding, degreasing). 0 for raw steel.
-  - clearcoat: ~0.5 hr per 50 sq ft. 0 if not clear coat finish.
-  - paint: ~0.75 hr per 50 sq ft (primer + topcoat). 0 if not paint finish.
-  - hardware_install: ~15-30 min per simple item (latch, hinge). 1-2 hrs for motor/operator install.
-  - site_install: Highly variable. 2-4 hrs for railing, 4-8 hrs for gate with concrete, 6-12 hrs for stairs. 0 if no installation.
-  - final_inspection: 0.25-0.5 hrs always. Includes function test, touch-up, client walkthrough.
+=== WELD PROCESS DETERMINATION ===
+%s
+
+=== LABOR ESTIMATION GUIDANCE ===
+
+PROCESS-BY-PROCESS RULES OF THUMB:
+
+1. layout_setup (0.5-2.0 hrs):
+   - Simple railing/fence = 0.5 hr
+   - Complex gate/stair = 1.0-1.5 hrs
+   - Custom furniture with patterns = 1.5-2.0 hrs
+   - Includes: reading drawings, measuring, marking, squaring table
+
+2. cut_prep:
+   - Square cuts: ~3 min per cut (chop saw)
+   - Miter cuts: ~5 min per cut (requires angle setup)
+   - Cope cuts: ~8-10 min per cut (requires notcher or hand work)
+   - Compound cuts: ~10-15 min per cut
+   - Scale with piece count: %d pieces total
+
+3. fit_tack (MOST VARIABLE — think carefully):
+   - Simple rectangular frame = 1-2 hrs
+   - Complex assembly (gate with infill) = 3-5 hrs
+   - Pattern work (repeating pickets/slats) = add 2-3 min per piece
+   - Furniture with precision fits = 4-8 hrs
+   - Stair with multiple treads = 4-8 hrs
+
+4. full_weld:
+   - MIG on mild steel: 8-15 linear inches per hour
+   - TIG on mild steel: 4-8 linear inches per hour (2-3x slower)
+   - TIG on stainless: 3-6 linear inches per hour (add back-purge time)
+   - Overhead/vertical position: reduce rate by 30-40%%
+   - Total weld inches for this job: %.1f
+
+5. grind_clean:
+   - Standard (MIG, painted finish): 30-40%% of weld time
+   - Ground smooth (TIG visible): 75-100%% of weld time
+   - Blended/seamless joints: 100-150%% of weld time
+   - Raw steel (no finish): 20-30%% of weld time (just cleanup)
+
+6. finish_prep: 0.5-1.0 hr for paint prep. 0 for raw. 0.25 for powder coat prep (outsourced).
+7. clearcoat: ~0.5 hr per 50 sq ft. 0 if not clearcoat.
+8. paint: ~0.75 hr per 50 sq ft (primer + topcoat). 0 if not paint.
+9. hardware_install: ~15-30 min per simple item. 1-2 hrs for motor/operator.
+10. site_install: 2-4 hrs railing, 4-8 hrs gate w/ concrete, 6-12 hrs stairs. 0 if no install.
+11. final_inspection: 0.25-0.5 hrs always.
 
 REASONABLENESS CHECK:
-  - Typical residential cantilever gate with motor and install: 16-28 total hours.
-  - 40 linear feet of railing with install: 12-20 total hours.
-  - Stair railing (12 ft) with install: 10-16 total hours.
-  - Decorative repair (weld + refinish): 2-6 total hours.
-  If your estimate is significantly outside these ranges, include a note explaining why.
+  - Cantilever gate with motor + install: 16-28 total hours
+  - 40 LF railing with install: 12-20 total hours
+  - Stair railing 12 ft with install: 10-16 total hours
+  - Custom table (TIG, ground smooth): 12-20 total hours
+  - Decorative repair: 2-6 total hours
+  If your estimate is significantly outside these ranges, explain why.
 
 CRITICAL RULES:
-  1. Return hours for ALL 11 processes listed below. Use 0.0 if not applicable.
-  2. Do NOT return a total. Do NOT sum the hours. The system computes the total.
-  3. Include a brief "notes" string for each process explaining your reasoning.
-  4. If finish is "raw", set clearcoat=0, paint=0, finish_prep=0.
-  5. If finish is "powder_coat" or "galvanized", set clearcoat=0, paint=0 (outsourced, handled separately).
-  6. If no installation, set site_install=0.
+  1. Return hours for ALL 11 processes. Use 0.0 if not applicable.
+  2. Do NOT return a total. The system computes the total.
+  3. Include a brief "notes" for each process explaining your reasoning.
+  4. If finish is "raw": clearcoat=0, paint=0, finish_prep=0.
+  5. If finish is "powder_coat" or "galvanized": clearcoat=0, paint=0 (outsourced).
+  6. If no installation: site_install=0.
 
-Return ONLY valid JSON in this exact format:
-{{
-    "layout_setup": {{"hours": 1.5, "notes": "reason"}},
-    "cut_prep": {{"hours": 2.0, "notes": "reason"}},
-    "fit_tack": {{"hours": 3.0, "notes": "reason"}},
-    "full_weld": {{"hours": 4.0, "notes": "reason"}},
-    "grind_clean": {{"hours": 1.5, "notes": "reason"}},
-    "finish_prep": {{"hours": 1.0, "notes": "reason"}},
-    "clearcoat": {{"hours": 0.0, "notes": "reason"}},
-    "paint": {{"hours": 0.0, "notes": "reason"}},
-    "hardware_install": {{"hours": 2.0, "notes": "reason"}},
-    "site_install": {{"hours": 6.0, "notes": "reason"}},
-    "final_inspection": {{"hours": 0.5, "notes": "reason"}}
-}}"""
+Return ONLY valid JSON:
+{
+    "layout_setup": {"hours": 1.5, "notes": "reason"},
+    "cut_prep": {"hours": 2.0, "notes": "reason"},
+    "fit_tack": {"hours": 3.0, "notes": "reason"},
+    "full_weld": {"hours": 4.0, "notes": "reason"},
+    "grind_clean": {"hours": 1.5, "notes": "reason"},
+    "finish_prep": {"hours": 1.0, "notes": "reason"},
+    "clearcoat": {"hours": 0.0, "notes": "reason"},
+    "paint": {"hours": 0.0, "notes": "reason"},
+    "hardware_install": {"hours": 2.0, "notes": "reason"},
+    "site_install": {"hours": 6.0, "notes": "reason"},
+    "final_inspection": {"hours": 0.5, "notes": "reason"}
+}""" % (
+            job_type, job_type,
+            piece_count, total_weight, weld_inches, total_sq_ft,
+            hardware_count, finish,
+            "Yes" if is_install else "No",
+            "Yes" if is_onsite else "No",
+            "\n".join(dimensions_summary) if dimensions_summary else "  (none specified)",
+            "\n".join(material_lines) if material_lines else "  (no materials)",
+            "\n".join(hardware_lines) if hardware_lines else "  (no hardware)",
+            weld_section,
+            piece_count, weld_inches,
+        )
         return prompt
+
+    def _build_weld_process_section(self, needs_tig, is_stainless, is_aluminum, weld_inches):
+        """Build weld process reasoning section for labor prompt."""
+        lines = []
+
+        if needs_tig:
+            lines.append("** THIS JOB REQUIRES TIG WELDING **")
+            lines.append("")
+            if is_stainless:
+                lines.append("Material: STAINLESS STEEL")
+                lines.append("  - TIG required — MIG on stainless produces poor corrosion resistance")
+                lines.append("  - Back-purge required on closed joints (adds 20-30%% to weld time)")
+                lines.append("  - Stainless labor multiplier: 1.3x on ALL processes (harder to work with)")
+                lines.append("  - Post-weld passivation needed (add to finish_prep)")
+            elif is_aluminum:
+                lines.append("Material: ALUMINUM")
+                lines.append("  - TIG or pulse-MIG required — standard MIG won't work")
+                lines.append("  - Aluminum labor multiplier: 1.2x (different technique, more setup)")
+                lines.append("  - Requires AC TIG with argon gas, 4043 or 5356 filler")
+            else:
+                lines.append("Material: MILD STEEL with TIG finish requirements")
+                lines.append("  - Visible joints need TIG for clean appearance")
+                lines.append("  - Hidden structural joints can use MIG (faster)")
+                lines.append("  - Ground/blended welds add significant grind_clean time")
+
+            lines.append("")
+            lines.append("TIG WELDING RATE: 4-8 linear inches per hour (vs 8-15 for MIG)")
+            lines.append("GRIND TIME: 75-100%% of weld time for ground smooth finish")
+            lines.append("Estimated weld inches: %.0f → at TIG rate: %.1f-%.1f welding hours" % (
+                weld_inches, weld_inches / 8.0, weld_inches / 4.0))
+        else:
+            lines.append("Standard mild steel — MIG welding (default)")
+            lines.append("MIG WELDING RATE: 8-15 linear inches per hour")
+            lines.append("Estimated weld inches: %.0f → at MIG rate: %.1f-%.1f welding hours" % (
+                weld_inches, weld_inches / 15.0, weld_inches / 8.0))
+
+        return "\n".join(lines)
 
     def _call_gemini(self, prompt: str) -> str:
         """Call Gemini API. Raises on failure (caller handles fallback)."""

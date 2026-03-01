@@ -4,7 +4,7 @@
 
 ---
 
-## Current Status: AI Cut List Hotfix complete — AI-assisted cut lists + build instructions + PDF sections
+## Current Status: Session 10 complete — Intelligence layer: AI-first calculators, weld process reasoning, description handoff
 
 **Live URL:** createstage-quoting-app-production.up.railway.app
 **Repo:** github.com/checkertron-coder/createstage-quoting-app
@@ -973,6 +973,85 @@ Using keyword fallback (no Gemini API key in test environment):
 
 ---
 
+### Session 10 — 2026-02-28 (Opus 4.6)
+
+#### Completed
+- **Deliverable 1 — Description Handoff Fix (`backend/routers/quote_session.py`)**
+  - Fixed critical bug: user's original description was stored only in `messages_json` (audit log), never in `params_json` (what calculators receive)
+  - Added `description` and `photo_observations` to `merged_for_storage` in `start_session()`
+  - Now every calculator can access the original project description via `fields["description"]`
+
+- **Deliverable 2 — AI-First Pattern in All 25 Calculators (`backend/calculators/base.py` + 19 calculators)**
+  - Added 3 default AI methods to `BaseCalculator`:
+    - `_has_description(fields)` — checks if combined description+notes+photo_observations > 10 words
+    - `_try_ai_cut_list(job_type, fields)` — calls AICutListGenerator, returns list or None on failure
+    - `_build_from_ai_cuts(job_type, ai_cuts, fields, assumptions, hardware)` — builds MaterialList from AI output
+  - Added AI-first check to all 19 template-only calculators (the 6 existing AI calculators keep their own overridden methods)
+  - Pattern: if description exists → try AI cut list → if succeeds, return AI-generated MaterialList → else fall through to template math
+  - Deterministic template output is always the fallback — AI never crashes a calculator
+
+- **Deliverable 3 — AI Cut List Prompt Overhaul (`backend/calculators/ai_cut_list.py`)**
+  - Complete rewrite of prompt with 4-step design thinking process:
+    1. Design Analysis — structural requirements, load paths, critical dimensions
+    2. Pattern Geometry — repetition patterns, symmetry, nesting optimization
+    3. Weld Process Determination — TIG vs MIG based on finish/material/application
+    4. Generate Cut List — individual pieces with metadata
+  - Expanded output schema: added `piece_name`, `group`, `weld_process`, `weld_type`, `cut_angle`
+  - Added `_build_weld_guidance()` helper — detects TIG/stainless/aluminum requirements from fields
+  - Expanded profile list (added dom_tube_1.75x0.120, plate sizes, more tube sizes)
+  - Updated `_parse_response()` to normalize variant cut types and weld processes
+  - Updated build instructions with weld_process and safety_notes per step
+
+- **Deliverable 4 — Labor Estimator Weld Process Reasoning (`backend/labor_estimator.py`)**
+  - Rewrote `_build_prompt()` with description context and weld process detection
+  - Added `_build_weld_process_section()` — detects TIG/stainless/aluminum from material items and field values
+  - Labor multipliers in prompt: TIG 2.5-3.5x slower than MIG, stainless +30%, aluminum +20%
+  - Expanded TIG indicators: "grind smooth", "seamless", "showroom", "polished", etc.
+  - Piece count passed into estimation guidance for more accurate per-process calculations
+
+- **Deliverable 5 — Build Instructions Wiring**
+  - Build instructions prompt updated with weld_process and safety_notes per step
+  - Parser handles expanded schema fields
+  - Already wired end-to-end from Session AI Cut List Hotfix — verified still working
+
+- **Deliverable 6 — Pipeline Verification**
+  - Verified description flows from start_session() → params_json → calculator → AI prompt
+  - Verified all 25 calculators have _has_description check (19 via BaseCalculator, 6 via override)
+  - Verified weld process info flows from cut list → labor estimator prompt
+
+#### Not completed / blocked
+- None — all deliverables complete
+
+#### Bug Fixes During Development
+- **SQLAlchemy JSON mutation detection in tests:** Adding `description` to `params_json` in `start_session` made the dict non-empty. Test code `params = session.params_json or {}` returned the same dict object, and `params.update(...)` mutated in-place. SQLAlchemy didn't detect the change. Fixed by using `dict(session.params_json or {})` in 3 smoke tests.
+- **AI cut list test assertion:** Old prompt text `"WELD QUALITY"` changed to `"TIG WELDING"` in the overhauled prompt. Updated test assertion to match.
+
+#### Architectural decisions made
+- BaseCalculator provides default AI methods — subclasses inherit or override
+- 6 existing AI calculators keep their own `_try_ai_cut_list(self, fields)` signature; 19 new ones use base class `_try_ai_cut_list(self, job_type, fields)` — Python MRO resolves correctly
+- AI-first pattern: try AI → fallback to deterministic template, never the other way around
+- Description preserved in params_json so it's available at every pipeline stage
+- Weld process reasoning is embedded in both cut list generation AND labor estimation
+- TIG detection from finish requirements, material type, AND explicit keywords
+
+#### Tests
+- pytest results: **324 passed, 0 failed** (285 existing + 39 new)
+- Test file: `tests/test_session10_intelligence.py`
+- Coverage:
+  - Description handoff (2): description stored in params, photo_observations stored
+  - AI-first pattern (3): all 25 calculators have _has_description, 19 use base class, 6 override
+  - _has_description behavior (2): short text false, long text true
+  - AI cut list prompt (5): 4-step structure, weld guidance, TIG detection, expanded profiles, field filtering
+  - Parser schema (5): expanded fields parsed, normalized values, weld_process variants, cut_type variants, invalid handling
+  - Valid constants (3): VALID_CUT_TYPES, VALID_WELD_PROCESSES, VALID_WELD_TYPES
+  - Labor estimator (6): description in prompt, weld process section, TIG multiplier, piece count, stainless detection, process breakdown
+  - Build instructions (2): expanded schema, weld_process in steps
+  - BaseCalculator defaults (4): _has_description, _try_ai_cut_list no API, _build_from_ai_cuts, price fallback
+  - Pipeline wiring (3): description flow, all calculators accessible, weld process flow
+  - Integration (2): full pipeline with description, calculator with AI fallback
+
+---
+
 ## Architectural Decisions (append here when made)
 
 | Date | Decision | Rationale |
@@ -1033,4 +1112,9 @@ Using keyword fallback (no Gemini API key in test environment):
 | 2026-02-28 | Vision extraction never crashes session | All photo ops in try/except; empty result on failure |
 | 2026-02-28 | Text extraction wins over photo on conflict | Text description is more explicit; photo fills in remaining fields only |
 | 2026-02-28 | Photo observations are informational only | Shown in UI for user context, not used in calculations |
+| 2026-02-28 | AI-first pattern: try AI cut list, fallback to template | All 25 calculators try AI when description exists; deterministic template is always the fallback |
+| 2026-02-28 | Description preserved in params_json | User's original text flows to calculators and AI prompts at every stage |
+| 2026-02-28 | BaseCalculator provides default AI methods | Subclasses inherit _has_description, _try_ai_cut_list, _build_from_ai_cuts; can override |
+| 2026-02-28 | Weld process reasoning in both cut list and labor | TIG/MIG detection from finish, material, and keywords; labor multipliers applied |
+| 2026-02-28 | AI cut list 4-step design thinking | Design analysis → pattern geometry → weld process → cut list generation |
 

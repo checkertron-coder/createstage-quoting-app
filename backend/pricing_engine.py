@@ -8,6 +8,7 @@ Input: MaterialList + LaborEstimate + FinishingSection + hardware pricing
 Output: PricedQuote (per CLAUDE.md contract)
 """
 
+import os
 from datetime import datetime
 
 from .hardware_sourcer import HardwareSourcer
@@ -102,7 +103,11 @@ class PricingEngine:
                 f"Consider sourcing alternatives for cost savings."
             )
 
-        return {
+        # --- Optional AI sections ---
+        detailed_cut_list = session_data.get("detailed_cut_list", [])
+        build_instructions = session_data.get("build_instructions", [])
+
+        result = {
             "quote_id": None,  # Set when Quote record is created
             "user_id": user.get("id"),
             "job_type": job_type,
@@ -125,6 +130,13 @@ class PricingEngine:
             "assumptions": assumptions,
             "exclusions": exclusions,
         }
+
+        if detailed_cut_list:
+            result["detailed_cut_list"] = detailed_cut_list
+        if build_instructions:
+            result["build_instructions"] = build_instructions
+
+        return result
 
     def _calculate_material_subtotal(self, materials: list) -> float:
         """Sum of all material line_total values."""
@@ -186,8 +198,9 @@ class PricingEngine:
                 "AI estimator was unavailable. Consider re-running when available."
             )
         else:
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
             assumptions.append(
-                "Labor hours estimated by AI (Gemini 2.0 Flash) with domain guidance."
+                "Labor hours estimated by AI (%s) with domain guidance." % model_name
             )
 
         # Hardware pricing source

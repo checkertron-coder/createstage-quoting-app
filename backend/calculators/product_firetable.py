@@ -37,6 +37,12 @@ class ProductFiretableCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("product_firetable", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("product_firetable", ai_cuts, fields, assumptions)
+
         configuration = fields.get("configuration",
                                     "FireTable Pro System (base + basin + stand)")
         quantity = self.parse_int(fields.get("quantity"), default=1)

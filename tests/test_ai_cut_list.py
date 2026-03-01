@@ -2,14 +2,19 @@
 AI Cut List Generator tests.
 
 Tests:
-1-3.   AICutListGenerator class (prompt building, response parsing, fallback)
-4-6.   Furniture table fixes (4 legs, individual frame pieces, dimension parser)
-7-9.   AI integration in calculators (furniture_table, custom_fab, furniture_other)
-10-11. Build instructions generator
-12-13. PDF template updates (detailed cut list section, fabrication sequence section)
+1-4.   AICutListGenerator class (prompt building, response parsing, fallback, TIG detection)
+5-7.   Furniture table fixes (4 legs, individual frame pieces, dimension parser)
+8-11.  AI integration in calculators (always-fire triggers, custom_fab, all calculators work)
+12-14. Build instructions generator
+15-17. PDF template updates (detailed cut list section, fabrication sequence section)
+18-19. Hardware URL generation
+20.    Dynamic model name in pricing engine
+21.    Build instructions wiring to pricing engine
 """
 
 import json
+import os
+import urllib.parse
 from unittest.mock import patch, MagicMock
 
 from backend.calculators.ai_cut_list import AICutListGenerator
@@ -19,6 +24,8 @@ from backend.calculators.furniture_other import FurnitureOtherCalculator
 from backend.calculators.led_sign_custom import LedSignCustomCalculator
 from backend.calculators.repair_decorative import RepairDecorativeCalculator
 from backend.calculators.repair_structural import RepairStructuralCalculator
+from backend.hardware_sourcer import HardwareSourcer
+from backend.pricing_engine import PricingEngine
 from backend.pdf_generator import (
     generate_quote_pdf, JOB_TYPE_NAMES, generate_job_summary
 )
@@ -191,18 +198,47 @@ def test_furniture_table_dimension_parser_individual_fields():
 # AI integration in calculators
 # ============================================================
 
-def test_furniture_table_ai_trigger_keywords():
-    """AI cut list only triggers on custom design keywords."""
+def test_furniture_table_ai_fires_on_any_description():
+    """AI cut list fires on ANY description text, not just keywords."""
     calc = FurnitureTableCalculator()
-    # Standard request — should NOT trigger AI
-    result = calc._try_ai_cut_list({"description": "standard dining table"})
+    # No description — should NOT trigger AI
+    result = calc._try_ai_cut_list({})
     assert result is None
 
-    # Custom request — would trigger AI but no API key
-    with patch.dict("os.environ", {}, clear=True):
-        result = calc._try_ai_cut_list({"description": "custom curved trestle base"})
-    # Returns None because no API key
+    # Empty description — should NOT trigger
+    result = calc._try_ai_cut_list({"description": "", "notes": ""})
     assert result is None
+
+    # ANY description text — should trigger (returns None because no API key)
+    with patch.dict("os.environ", {}, clear=True):
+        result = calc._try_ai_cut_list({"description": "pyramid flat bar pattern"})
+    assert result is None  # None from no API key, not from keyword filter
+
+    # "standard dining table" — should ALSO trigger now (no keywords needed)
+    with patch.dict("os.environ", {}, clear=True):
+        result = calc._try_ai_cut_list({"description": "standard dining table"})
+    assert result is None  # None from no API key
+
+
+def test_all_calculators_fire_ai_on_description():
+    """All 6 AI-integrated calculators fire AI on any description text."""
+    calculators = [
+        FurnitureTableCalculator(),
+        FurnitureOtherCalculator(),
+        LedSignCustomCalculator(),
+        RepairDecorativeCalculator(),
+        RepairStructuralCalculator(),
+        CustomFabCalculator(),
+    ]
+    for calc in calculators:
+        # No description — should return None without trying AI
+        assert calc._try_ai_cut_list({}) is None, (
+            "%s should not trigger AI with no description" % type(calc).__name__
+        )
+        # With description — should try AI (returns None due to no API key)
+        with patch.dict("os.environ", {}, clear=True):
+            result = calc._try_ai_cut_list({"description": "some design"})
+        assert result is None
 
 
 def test_custom_fab_always_tries_ai_with_description():
@@ -439,3 +475,141 @@ def test_pdf_renders_without_ai_sections():
     pdf_bytes = generate_quote_pdf(priced_quote, user_profile)
     assert isinstance(pdf_bytes, (bytes, bytearray))
     assert len(pdf_bytes) > 500
+
+
+# ============================================================
+# TIG weld detection
+# ============================================================
+
+def test_ai_prompt_detects_tig_requirements():
+    """AI cut list prompt includes TIG guidance when finish requires it."""
+    gen = AICutListGenerator()
+    # With TIG indicators
+    prompt = gen._build_prompt("furniture_table", {
+        "description": "end table",
+        "finish": "ground smooth and blended welds",
+    })
+    assert "TIG" in prompt
+    assert "TIG WELDING" in prompt
+
+    # Without TIG indicators
+    prompt_no_tig = gen._build_prompt("furniture_table", {
+        "description": "standard table",
+        "finish": "raw",
+    })
+    assert "THIS PROJECT REQUIRES TIG WELDING" not in prompt_no_tig
+
+
+# ============================================================
+# Hardware URL generation
+# ============================================================
+
+def test_hardware_sourcer_fills_missing_urls():
+    """Hardware items get McMaster/Amazon/Grainger search URLs when url is empty."""
+    sourcer = HardwareSourcer()
+    items = [{
+        "description": "Adjustable leveling feet",
+        "quantity": 4,
+        "options": [
+            {"supplier": "McMaster-Carr", "price": 5.00, "url": "", "part_number": None, "lead_days": 3},
+            {"supplier": "Amazon", "price": 3.50, "url": "", "part_number": None, "lead_days": 5},
+            {"supplier": "Grainger", "price": 6.00, "url": "", "part_number": None, "lead_days": 2},
+        ],
+    }]
+    priced = sourcer.price_hardware_list(items)
+    assert len(priced) == 1
+    for option in priced[0]["options"]:
+        assert option["url"], "URL should not be empty for %s" % option["supplier"]
+        assert "leveling" in option["url"].lower() or "leveling" in urllib.parse.unquote_plus(option["url"]).lower()
+
+
+def test_hardware_sourcer_preserves_existing_urls():
+    """URLs that already have values are not overwritten."""
+    sourcer = HardwareSourcer()
+    items = [{
+        "description": "Test item",
+        "quantity": 1,
+        "options": [
+            {"supplier": "McMaster-Carr", "price": 10.00,
+             "url": "https://www.mcmaster.com/1573A63", "part_number": "1573A63", "lead_days": 3},
+        ],
+    }]
+    priced = sourcer.price_hardware_list(items)
+    assert priced[0]["options"][0]["url"] == "https://www.mcmaster.com/1573A63"
+
+
+# ============================================================
+# Dynamic model name
+# ============================================================
+
+def test_pricing_engine_uses_dynamic_model_name():
+    """Pricing engine assumption text uses GEMINI_MODEL env var, not hardcoded."""
+    engine = PricingEngine()
+    session_data = {
+        "job_type": "furniture_table",
+        "fields": {},
+        "material_list": {"items": [], "hardware": [], "assumptions": [],
+                          "weld_linear_inches": 0, "total_sq_ft": 0},
+        "labor_estimate": {"processes": [{"hours": 1, "rate": 100, "notes": "test"}],
+                           "total_hours": 1},
+        "finishing": {"method": "raw", "total": 0},
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 15}
+
+    with patch.dict("os.environ", {"GEMINI_MODEL": "gemini-3.0-flash"}):
+        result = engine.build_priced_quote(session_data, user)
+    assumptions_text = " ".join(result["assumptions"])
+    assert "gemini-3.0-flash" in assumptions_text
+    assert "Gemini 2.0 Flash" not in assumptions_text
+
+
+# ============================================================
+# Build instructions wiring to PricingEngine
+# ============================================================
+
+def test_pricing_engine_passes_through_build_instructions():
+    """PricingEngine includes detailed_cut_list and build_instructions in output."""
+    engine = PricingEngine()
+    session_data = {
+        "job_type": "furniture_table",
+        "fields": {},
+        "material_list": {"items": [], "hardware": [], "assumptions": [],
+                          "weld_linear_inches": 0, "total_sq_ft": 0},
+        "labor_estimate": {"processes": [], "total_hours": 0},
+        "finishing": {"method": "raw", "total": 0},
+        "detailed_cut_list": [
+            {"description": "Table leg", "profile": "sq_tube_2x2_11ga",
+             "length_inches": 30.0, "quantity": 4}
+        ],
+        "build_instructions": [
+            {"step": 1, "title": "Layout", "description": "Mark pieces",
+             "tools": ["tape measure"], "duration_minutes": 15}
+        ],
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 15}
+
+    result = engine.build_priced_quote(session_data, user)
+    assert "detailed_cut_list" in result
+    assert len(result["detailed_cut_list"]) == 1
+    assert result["detailed_cut_list"][0]["description"] == "Table leg"
+    assert "build_instructions" in result
+    assert len(result["build_instructions"]) == 1
+    assert result["build_instructions"][0]["title"] == "Layout"
+
+
+def test_pricing_engine_omits_empty_ai_sections():
+    """PricingEngine omits detailed_cut_list and build_instructions when empty."""
+    engine = PricingEngine()
+    session_data = {
+        "job_type": "furniture_table",
+        "fields": {},
+        "material_list": {"items": [], "hardware": [], "assumptions": [],
+                          "weld_linear_inches": 0, "total_sq_ft": 0},
+        "labor_estimate": {"processes": [], "total_hours": 0},
+        "finishing": {"method": "raw", "total": 0},
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 15}
+
+    result = engine.build_priced_quote(session_data, user)
+    assert "detailed_cut_list" not in result
+    assert "build_instructions" not in result

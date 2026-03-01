@@ -24,6 +24,12 @@ class UtilityEnclosureCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("utility_enclosure", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("utility_enclosure", ai_cuts, fields, assumptions)
+
         # Parse inputs
         width_in = self.parse_inches(
             fields.get("width"),

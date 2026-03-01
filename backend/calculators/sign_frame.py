@@ -25,6 +25,12 @@ class SignFrameCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("sign_frame", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("sign_frame", ai_cuts, fields, assumptions)
+
         # Parse inputs
         sign_type = fields.get("sign_type", "Post-mount sign frame (street/parking lot)")
         sign_dims = fields.get("sign_dimensions", "4 ft × 3 ft")

@@ -26,6 +26,12 @@ class RockSliderCalculator(BaseCalculator):
             "Rock sliders are always quoted as a pair (driver + passenger side).",
         ]
 
+        # Try AI cut list for custom/complex designs
+        if self._has_description(fields):
+            ai_cuts = self._try_ai_cut_list("rock_slider", fields)
+            if ai_cuts is not None:
+                return self._build_from_ai_cuts("rock_slider", ai_cuts, fields, assumptions)
+
         # Parse inputs
         tube_str = fields.get("material_thickness",
                               "1.75\" OD × 0.120\" wall DOM (standard)")
