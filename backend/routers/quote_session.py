@@ -350,6 +350,9 @@ def calculate_materials(
         )
 
     # Run calculator
+    print(f"CALCULATE DEBUG: fields keys = {list(current_params.keys())}")
+    print(f"CALCULATE DEBUG: description = {str(current_params.get('description', 'NOT FOUND'))[:100]}")
+    print(f"CALCULATE DEBUG: notes = {str(current_params.get('notes', 'NOT FOUND'))[:100]}")
     calculator = get_calculator(job_type)
     material_list = calculator.calculate(current_params)
 

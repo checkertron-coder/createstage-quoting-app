@@ -28,6 +28,8 @@ class FurnitureTableCalculator(BaseCalculator):
         ]
 
         # Try AI cut list for custom/complex designs
+        print(f"FURNITURE_TABLE DEBUG: _has_description = {self._has_description(fields)}")
+        print(f"FURNITURE_TABLE DEBUG: description field = {str(fields.get('description', 'MISSING'))[:100]}")
         ai_cuts = self._try_ai_cut_list(fields)
         if ai_cuts is not None:
             return self._build_from_ai_cuts(ai_cuts, fields, assumptions)

@@ -177,6 +177,7 @@ class BaseCalculator(ABC):
         notes = str(fields.get("notes", "") or "")
         photo_obs = str(fields.get("photo_observations", "") or "")
         combined = (description + " " + notes + " " + photo_obs).strip()
+        print(f"BASE_HAS_DESC DEBUG: combined = '{combined[:100]}', word_count = {len(combined.split())}")
         return len(combined.split()) > 10
 
     def _try_ai_cut_list(self, job_type: str, fields: dict):
