@@ -215,17 +215,19 @@ class BaseCalculator(ABC):
             if price_ft == 0.0:
                 price_ft = 3.50
             length_ft = self.inches_to_feet(length_in)
-            weight = self.get_weight_lbs(profile, length_ft * quantity)
+            # Apply waste to footage for weight/cost, not to piece count
+            wasted_length_ft = length_ft * (1 + self.WASTE_TUBE)
+            weight = self.get_weight_lbs(profile, wasted_length_ft * quantity)
             if weight == 0.0:
-                weight = length_ft * quantity * 2.0
+                weight = wasted_length_ft * quantity * 2.0
 
             items.append(self.make_material_item(
                 description=cut.get("description", "Cut piece"),
                 material_type=cut.get("material_type", "mild_steel"),
                 profile=profile,
                 length_inches=length_in,
-                quantity=self.apply_waste(quantity, self.WASTE_TUBE),
-                unit_price=round(length_ft * price_ft, 2),
+                quantity=quantity,
+                unit_price=round(wasted_length_ft * price_ft, 2),
                 cut_type=cut.get("cut_type", "square"),
                 waste_factor=self.WASTE_TUBE,
             ))
