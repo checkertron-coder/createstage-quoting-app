@@ -1,6 +1,6 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: Session 10 (Feb 28, 2026) — all contracts verified against code.*
+*Last verified: Post Session 10 hotfix (Feb 28, 2026) — all contracts verified against code.*
 
 ---
 
@@ -12,7 +12,7 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 
 ---
 
-## 2. Current State (v2, Sessions 1-10 complete)
+## 2. Current State (v2, Sessions 1-10 + hotfix complete)
 
 ### What Works — Full 6-Stage Pipeline + Intelligence Layer
 - **Stage 1 — Intake:** Job type detection via keyword matching + Gemini fallback, field extraction from description + photos
@@ -27,6 +27,28 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 - **Auth:** JWT access/refresh tokens, guest/register/login, profile management
 - **Database:** PostgreSQL on Railway (SQLite for tests), all v2 tables implemented
 - **Tests:** 324 passing tests across 13 test files
+
+### Post Session 10 Hotfix — AI Cut List Bug Fixes
+
+**Silent exception override bug (critical):**
+6 calculators (furniture_table, custom_fab, furniture_other, led_sign_custom, repair_decorative, repair_structural) had local `_try_ai_cut_list()` and `_build_from_ai_cuts()` overrides with `except Exception: return None` — silently swallowing ALL Gemini errors. This caused AI cut list generation to always fail silently and fall back to generic templates (76ms response instead of 10-20s). Fix: deleted all 6 local overrides (-514 lines). All calculators now use BaseCalculator's versions which have `logger.warning()` on failure, price fallbacks ($3.50/ft), and weight fallbacks (2.0 lbs/ft).
+
+**material_lookup.py — New profile:**
+- Added `flat_bar_1x0.125` = $1.10/ft (1" wide x 1/8" thick flat bar). User submitted an end table job with "1x1/8 flat bar" pyramid pattern — this profile didn't exist so Gemini couldn't use it, silently skipping the entire flat bar feature from the materials list.
+
+**furniture_table.py — Tube size respects user input:**
+- Template fallback now reads `leg_material_profile` field AND `description` text to detect tube size
+- "1 inch", "1x1", "1\" square" → `sq_tube_1x1_14ga` for legs and frame
+- "1.5", "1-1/2" → `sq_tube_1.5x1.5_11ga`
+- "2 inch", "2x2" → `sq_tube_2x2_11ga` legs / `sq_tube_1.5x1.5_11ga` frame
+- Previously hardcoded to 2x2 legs / 1.5x1.5 frame regardless of what the user specified.
+
+**ai_cut_list.py — Prompt improvements:**
+- Added `flat_bar_1x0.125` and `flat_bar_1x0.1875` to AVAILABLE PROFILES list in Gemini prompt
+- Added CRITICAL RULES FOR CUSTOM FEATURES block: patterns (pyramid, grid, concentric squares) MUST appear as real line items with quantities and lengths — never just mentioned in notes or build steps. Concentric square patterns calculate each layer separately, stepping inward by specified spacing until no more full squares fit, each layer = 4 pieces.
+
+### Workflow Rule
+- Direct code edits to this repo go through Claude Code prompts only. Checker (the OpenClaw AI assistant) diagnoses problems and writes the prompt; Claude Code executes and runs tests. Claude Code has full repo context, runs the test suite, and handles edge cases better than one-off direct edits.
 
 ### What's Still Needed
 - Live hardware pricing (web search / API)

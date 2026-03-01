@@ -31,6 +31,52 @@ VALID_WELD_TYPES = (
     "full_penetration", "skip", "none",
 )
 
+# Profile groups — each line is a category of available profiles
+_PROFILE_GROUPS = {
+    "sq_tube": "  Square tube: sq_tube_1x1_14ga, sq_tube_1.5x1.5_11ga, sq_tube_2x2_11ga, sq_tube_2x2_14ga, sq_tube_3x3_11ga, sq_tube_4x4_11ga",
+    "rect_tube": "  Rectangular tube: rect_tube_2x3_11ga, rect_tube_2x4_11ga",
+    "round_tube": "  Round tube: round_tube_1.5_14ga, round_tube_2_11ga",
+    "flat_bar": "  Flat bar: flat_bar_1x0.125, flat_bar_1x0.1875, flat_bar_1x0.25, flat_bar_1.5x0.25, flat_bar_2x0.25, flat_bar_3x0.25",
+    "angle": "  Angle: angle_1.5x1.5x0.125, angle_2x2x0.1875, angle_2x2x0.25",
+    "sq_bar": "  Square bar: sq_bar_0.5, sq_bar_0.625, sq_bar_0.75",
+    "round_bar": "  Round bar: round_bar_0.5, round_bar_0.625",
+    "channel": "  Channel: channel_4x5.4, channel_6x8.2",
+    "pipe": "  Pipe: pipe_3_sch40, pipe_4_sch40, pipe_6_sch40",
+    "sheet_plate": "  Sheet/plate: sheet_11ga, sheet_14ga, sheet_16ga, plate_0.25, plate_0.375, plate_0.5",
+    "dom_tube": "  DOM tube: dom_tube_1.75x0.120",
+}
+
+# Which profile groups each job type needs
+_JOB_TYPE_PROFILES = {
+    "cantilever_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate"],
+    "swing_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate"],
+    "straight_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
+    "stair_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
+    "balcony_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "sheet_plate"],
+    "ornamental_fence": ["sq_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
+    "complete_stair": ["channel", "sq_tube", "angle", "sheet_plate", "round_tube", "pipe"],
+    "spiral_stair": ["pipe", "round_tube", "sq_tube", "sheet_plate", "flat_bar"],
+    "window_security_grate": ["sq_tube", "sq_bar", "flat_bar", "angle"],
+    "furniture_table": ["sq_tube", "flat_bar", "round_bar", "round_tube", "sheet_plate"],
+    "furniture_other": ["sq_tube", "flat_bar", "round_bar", "round_tube", "sheet_plate", "angle"],
+    "utility_enclosure": ["sq_tube", "angle", "sheet_plate"],
+    "bollard": ["pipe", "sheet_plate"],
+    "repair_decorative": ["sq_tube", "flat_bar", "sq_bar", "round_bar", "round_tube", "sheet_plate"],
+    "repair_structural": ["sq_tube", "rect_tube", "channel", "flat_bar", "angle", "sheet_plate"],
+    "offroad_bumper": ["sq_tube", "rect_tube", "dom_tube", "sheet_plate", "round_tube"],
+    "rock_slider": ["sq_tube", "rect_tube", "dom_tube", "sheet_plate"],
+    "roll_cage": ["round_tube", "dom_tube", "sq_tube", "sheet_plate"],
+    "exhaust_custom": ["round_tube", "pipe"],
+    "trailer_fab": ["channel", "rect_tube", "sq_tube", "angle", "sheet_plate"],
+    "structural_frame": ["channel", "sq_tube", "rect_tube", "angle", "sheet_plate", "pipe"],
+    "sign_frame": ["sq_tube", "flat_bar", "angle", "sheet_plate"],
+    "led_sign_custom": ["sq_tube", "flat_bar", "angle", "sheet_plate"],
+    "product_firetable": ["sq_tube", "flat_bar", "sheet_plate"],
+}
+
+# All groups — used for custom_fab and unknown job types
+_ALL_PROFILE_GROUPS = list(_PROFILE_GROUPS.keys())
+
 
 class AICutListGenerator:
     """
@@ -65,7 +111,8 @@ class AICutListGenerator:
 
         try:
             prompt = self._build_prompt(job_type, fields)
-            response_text = self._call_gemini(prompt)
+            cutlist_model = os.getenv("GEMINI_CUTLIST_MODEL", "gemini-2.5-flash")
+            response_text = self._call_gemini(prompt, model=cutlist_model)
             cuts = self._parse_response(response_text)
             if cuts and len(cuts) > 0:
                 return cuts
@@ -145,6 +192,8 @@ class AICutListGenerator:
         # Build weld process guidance
         weld_guidance = self._build_weld_guidance(needs_tig, is_stainless, is_aluminum)
 
+        profiles_text = self._get_profiles_for_job_type(job_type)
+
         prompt = """You are an expert metal fabricator with 25+ years of shop experience.
 You are generating a DETAILED cut list for a fabrication project.
 
@@ -176,18 +225,8 @@ For each joint, determine the weld process:
 === STEP 4: GENERATE CUT LIST ===
 
 AVAILABLE PROFILES (use ONLY these):
-  Square tube: sq_tube_1x1_14ga, sq_tube_1.5x1.5_11ga, sq_tube_2x2_11ga, sq_tube_2x2_14ga, sq_tube_3x3_11ga, sq_tube_4x4_11ga
-  Rectangular tube: rect_tube_2x3_11ga, rect_tube_2x4_11ga
-  Round tube: round_tube_1.5_14ga, round_tube_2_11ga
-  Flat bar: flat_bar_1x0.125, flat_bar_1x0.1875, flat_bar_1x0.25, flat_bar_1.5x0.25, flat_bar_2x0.25, flat_bar_3x0.25
+%s
   NOTE on flat bar naming: width x thickness. flat_bar_1x0.125 = 1" wide x 1/8" thick (your "1x1/8" flat bar)
-  Angle: angle_1.5x1.5x0.125, angle_2x2x0.1875, angle_2x2x0.25
-  Square bar: sq_bar_0.5, sq_bar_0.625, sq_bar_0.75
-  Round bar: round_bar_0.5, round_bar_0.625
-  Channel: channel_4x5.4, channel_6x8.2
-  Pipe: pipe_3_sch40, pipe_4_sch40, pipe_6_sch40
-  Sheet/plate: sheet_11ga, sheet_14ga, sheet_16ga, plate_0.25, plate_0.375, plate_0.5
-  DOM tube: dom_tube_1.75x0.120
 
 MATERIAL TYPES: square_tubing, round_tubing, flat_bar, angle_iron, channel, pipe, plate, mild_steel, stainless_304, aluminum_6061, dom_tubing
 
@@ -225,7 +264,7 @@ Return ONLY valid JSON — an array of objects:
         "weld_type": "fillet",
         "notes": "4 legs at 30 inches for 30-inch table height. Miter bottom for leveling feet."
     }
-]""" % (job_type, fields_text, weld_guidance)
+]""" % (job_type, fields_text, weld_guidance, profiles_text)
 
         return prompt
 
@@ -258,6 +297,18 @@ Return ONLY valid JSON — an array of objects:
         lines.append("  - \"plug\" — sheet to tube/frame connections")
 
         return "\n".join(lines)
+
+    def _get_profiles_for_job_type(self, job_type: str) -> str:
+        """Return only the profile lines relevant to a job type."""
+        groups = _JOB_TYPE_PROFILES.get(job_type, _ALL_PROFILE_GROUPS)
+        lines = []
+        for group in groups:
+            line = _PROFILE_GROUPS.get(group)
+            if line:
+                lines.append(line)
+        return "\n".join(lines) if lines else "\n".join(
+            _PROFILE_GROUPS[g] for g in _ALL_PROFILE_GROUPS
+        )
 
     def _build_instructions_prompt(self, job_type: str, fields: dict,
                                     cut_list: List[Dict]) -> str:
@@ -333,10 +384,11 @@ Return ONLY valid JSON — an array of step objects:
 
         return prompt
 
-    def _call_gemini(self, prompt: str) -> str:
+    def _call_gemini(self, prompt: str, model: Optional[str] = None) -> str:
         """Call Gemini API. Raises on failure."""
         api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        if model is None:
+            model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -358,7 +410,7 @@ Return ONLY valid JSON — an array of step objects:
             method="POST",
         )
 
-        with urllib.request.urlopen(req, timeout=90) as response:
+        with urllib.request.urlopen(req, timeout=180) as response:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             return text

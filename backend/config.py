@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     MARKUP_DEFAULT: float = 1.35
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_CUTLIST_MODEL: str = "gemini-2.5-flash"
 
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time
