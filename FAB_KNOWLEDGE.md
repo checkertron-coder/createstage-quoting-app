@@ -272,6 +272,31 @@
 | Vinegar bath (small part) | 0.5 hr handle + 24 hr soak + 0.5 hr rinse/dry |
 | Powder coat transport | 3-4 hr minimum (round trip) |
 
+### Flat Bar Pyramid — TRUE 3D Design (Not Flat Concentric Squares)
+The CreateStage flat bar pyramid is a 3D stepped pyramid, NOT flat concentric squares 
+in one plane. Each layer steps both INWARD (horizontally) and DOWNWARD (vertically), 
+creating a recessed pyramid effect visible from the side.
+
+Additional complexity: flat bar pieces at the corners of adjacent layers CROSS/INTERSECT 
+each other (woven corner detail). Pieces must be sequenced so alternating layers go 
+over/under at intersections. This is NOT a simple tack at the corner — it's an 
+overlapping joint requiring careful fit-up and sequencing.
+
+Typical proportions from built examples:
+- Step per layer: ~1" inward per side + ~0.5" vertical drop
+- Layer count for 18-20" interior span: 7-10 layers
+- Corner welds: each corner intersection = 2 weld points (face + overlap)
+- Total welds for 8-layer pyramid: ~96 weld points (8 layers × 4 pieces × 3 welds each)
+
+Build sequence for pyramid (cannot deviate):
+1. Build and weld structural frame first, completely
+2. Flip frame upside down on flat table
+3. Place Layer 1 (outermost) using spacers for horizontal and vertical position
+4. Tack Layer 1, verify position, weld corners
+5. Place Layer 2, feed pieces UNDER or OVER Layer 1 corners per the pattern
+6. Tack, verify, weld — continue inward
+7. Do NOT skip layers or weld out of sequence — corner intersections lock order
+
 ### Precision Decorative Placement — A Separate Labor Category
 Decorative elements that require measured positioning before each weld are fundamentally
 different from structural assembly. Do NOT estimate these as fast tack welds.
