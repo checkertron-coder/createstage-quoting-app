@@ -194,13 +194,26 @@ class AICutListGenerator:
 
         profiles_text = self._get_profiles_for_job_type(job_type)
 
+        # Inject relevant fabrication knowledge
+        finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
+        has_stainless = is_stainless
+        from .fab_knowledge import get_relevant_knowledge
+        knowledge_snippet = get_relevant_knowledge(job_type, finish_type, has_stainless)
+        knowledge_block = ""
+        if knowledge_snippet:
+            knowledge_block = """
+SHOP KNOWLEDGE BASE (use this to inform your output):
+%s
+---
+""" % knowledge_snippet
+
         prompt = """You are an expert metal fabricator with 25+ years of shop experience.
 You are generating a DETAILED cut list for a fabrication project.
 
 IMPORTANT: Think through this design BEFORE listing pieces.
 
 JOB TYPE: %s
-
+%s
 USER-PROVIDED INFORMATION:
 %s
 
@@ -269,7 +282,7 @@ Return ONLY valid JSON — an array of objects:
         "weld_type": "fillet",
         "notes": "4 legs at 30 inches for 30-inch table height. Miter bottom for leveling feet."
     }
-]""" % (job_type, fields_text, weld_guidance, profiles_text)
+]""" % (job_type, knowledge_block, fields_text, weld_guidance, profiles_text)
 
         return prompt
 
@@ -367,6 +380,19 @@ Return ONLY valid JSON — an array of objects:
             and any(k in all_fields_lower for k in bare_metal_keywords)
         )
 
+        # Inject relevant fabrication knowledge
+        finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
+        is_stainless = "stainless" in all_fields_lower or "304" in all_fields_lower or "316" in all_fields_lower
+        from .fab_knowledge import get_relevant_knowledge
+        knowledge_snippet = get_relevant_knowledge(job_type, finish_type, is_stainless)
+        knowledge_block = ""
+        if knowledge_snippet:
+            knowledge_block = """
+SHOP KNOWLEDGE BASE (use this to inform your output):
+%s
+---
+""" % knowledge_snippet
+
         if needs_mill_scale_removal:
             build_sequence = """
 BUILD SEQUENCE (bare metal finish — mill scale removal AFTER welding):
@@ -400,7 +426,7 @@ This project will be painted, powder coated, or galvanized. Mill scale removal i
 A journeyman fabricator should be able to follow these instructions and build this project.
 
 JOB TYPE: %s
-
+%s
 PROJECT DETAILS:
 %s
 
@@ -432,7 +458,7 @@ Return ONLY valid JSON — an array of step objects:
         "weld_process": null,
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
-]""" % (job_type, fields_text, cuts_text, weld_note, build_sequence)
+]""" % (job_type, knowledge_block, fields_text, cuts_text, weld_note, build_sequence)
 
         return prompt
 
