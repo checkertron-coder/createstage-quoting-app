@@ -479,7 +479,7 @@ def estimate_labor(
         if build_instructions:
             current_params["_build_instructions"] = build_instructions
         # Store detailed cut list from material items
-        current_params["_detailed_cut_list"] = material_list.get("items", [])
+        current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
         session.params_json = current_params
         session.stage = "price"  # Ready for Stage 5
         session.updated_at = datetime.utcnow()
@@ -509,7 +509,7 @@ def estimate_labor(
         # Store results in session
         current_params["_labor_estimate"] = labor_estimate
         current_params["_finishing"] = finishing
-        current_params["_detailed_cut_list"] = material_list.get("items", [])
+        current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
         session.params_json = current_params
         session.stage = "price"  # Ready for Stage 5
         session.updated_at = datetime.utcnow()

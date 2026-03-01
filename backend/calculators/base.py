@@ -154,9 +154,10 @@ class BaseCalculator(ABC):
     def make_material_list(self, job_type: str, items: list, hardware: list,
                            total_weight_lbs: float, total_sq_ft: float,
                            weld_linear_inches: float,
-                           assumptions: list = None) -> dict:
+                           assumptions: list = None,
+                           cut_list: list = None) -> dict:
         """Build the MaterialList output dict matching the CLAUDE.md contract."""
-        return {
+        result = {
             "job_type": job_type,
             "items": items,
             "hardware": hardware,
@@ -165,6 +166,9 @@ class BaseCalculator(ABC):
             "weld_linear_inches": round(weld_linear_inches, 1),
             "assumptions": assumptions or [],
         }
+        if cut_list is not None:
+            result["cut_list"] = cut_list
+        return result
 
     # --- AI cut list integration (default implementations) ---
 
@@ -198,50 +202,91 @@ class BaseCalculator(ABC):
                             hardware: list = None) -> dict:
         """
         Build a MaterialList from AI-generated cut items.
-        Default implementation — subclasses can override for job-specific hardware.
+
+        Items are consolidated by profile — each profile appears once with total
+        footage (what you buy from the supplier). The raw per-piece cut list is
+        preserved separately as cut_list for the detailed cut list section.
         """
         from .material_lookup import MaterialLookup
         _lookup = MaterialLookup()
 
-        items = []
         total_weight = 0.0
         total_weld_inches = 0.0
+
+        # Build per-piece cut list and aggregate footage by profile
+        cut_list_items = []
+        profile_totals = {}  # profile -> {total_ft, material_type, price_ft}
 
         for cut in ai_cuts:
             profile = cut.get("profile", "sq_tube_1.5x1.5_11ga")
             length_in = cut.get("length_inches", 12.0)
             quantity = cut.get("quantity", 1)
-            price_ft = _lookup.get_price_per_foot(profile)
-            if price_ft == 0.0:
-                price_ft = 3.50
             length_ft = self.inches_to_feet(length_in)
-            # Apply waste to footage for weight/cost, not to piece count
-            wasted_length_ft = length_ft * (1 + self.WASTE_TUBE)
-            weight = self.get_weight_lbs(profile, wasted_length_ft * quantity)
-            if weight == 0.0:
-                weight = wasted_length_ft * quantity * 2.0
+            piece_total_ft = length_ft * quantity
 
-            items.append(self.make_material_item(
-                description=cut.get("description", "Cut piece"),
-                material_type=cut.get("material_type", "mild_steel"),
-                profile=profile,
-                length_inches=length_in,
-                quantity=quantity,
-                unit_price=round(wasted_length_ft * price_ft, 2),
-                cut_type=cut.get("cut_type", "square"),
-                waste_factor=self.WASTE_TUBE,
-            ))
-            total_weight += weight
+            # Per-piece entry for the cut list
+            cut_list_items.append({
+                "description": cut.get("description", "Cut piece"),
+                "piece_name": cut.get("piece_name", ""),
+                "group": cut.get("group", "general"),
+                "material_type": cut.get("material_type", "mild_steel"),
+                "profile": profile,
+                "length_inches": length_in,
+                "quantity": quantity,
+                "cut_type": cut.get("cut_type", "square"),
+                "cut_angle": cut.get("cut_angle", 90.0),
+                "weld_process": cut.get("weld_process", "mig"),
+                "weld_type": cut.get("weld_type", "fillet"),
+                "notes": cut.get("notes", ""),
+            })
+
+            # Accumulate footage by profile
+            if profile not in profile_totals:
+                price_ft = _lookup.get_price_per_foot(profile)
+                if price_ft == 0.0:
+                    price_ft = 3.50
+                profile_totals[profile] = {
+                    "total_ft": 0.0,
+                    "material_type": cut.get("material_type", "mild_steel"),
+                    "price_ft": price_ft,
+                }
+            profile_totals[profile]["total_ft"] += piece_total_ft
+
             total_weld_inches += quantity * 6  # Estimate 6" weld per piece
 
-        # Estimate surface area from items
-        total_length_ft = sum(
-            self.inches_to_feet(c.get("length_inches", 12.0)) * c.get("quantity", 1)
-            for c in ai_cuts
-        )
+        # Build consolidated material items (what you buy from the supplier)
+        items = []
+        for profile, info in profile_totals.items():
+            raw_ft = info["total_ft"]
+            wasted_ft = round(raw_ft * (1 + self.WASTE_TUBE), 1)
+            price_ft = info["price_ft"]
+            line_total = round(wasted_ft * price_ft, 2)
+
+            weight = self.get_weight_lbs(profile, wasted_ft)
+            if weight == 0.0:
+                weight = wasted_ft * 2.0
+            total_weight += weight
+
+            items.append(self.make_material_item(
+                description="%s — %.1f ft" % (profile, wasted_ft),
+                material_type=info["material_type"],
+                profile=profile,
+                length_inches=round(wasted_ft * 12, 2),
+                quantity=1,
+                unit_price=line_total,
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+
+        # Estimate surface area
+        total_length_ft = sum(info["total_ft"] for info in profile_totals.values())
         total_sq_ft = total_length_ft * 0.5  # Rough: 6" average width
 
         assumptions.append("Cut list generated by AI from project description.")
+        assumptions.append(
+            "Materials consolidated by profile — total footage includes %.0f%% waste factor."
+            % (self.WASTE_TUBE * 100)
+        )
 
         return self.make_material_list(
             job_type=job_type,
@@ -251,4 +296,5 @@ class BaseCalculator(ABC):
             total_sq_ft=total_sq_ft,
             weld_linear_inches=total_weld_inches,
             assumptions=assumptions,
+            cut_list=cut_list_items,
         )
