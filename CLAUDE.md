@@ -26,7 +26,8 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 - **Seed Data (Session 8):** 35 material prices from Osorio/Wexler invoices, 6 historical actuals, profile key parser
 - **Auth:** JWT access/refresh tokens, guest/register/login, profile management
 - **Database:** PostgreSQL on Railway (SQLite for tests), all v2 tables implemented
-- **Tests:** 324 passing tests across 13 test files
+- **Async AI Processing:** POST `/api/ai/estimate` and `/api/ai/quote` return `job_id` immediately, Gemini runs in background thread, frontend polls `GET /api/ai/job/{job_id}` — prevents Railway 30s proxy 503 timeout
+- **Tests:** 357 passing tests across 14 test files
 
 ### Post Session 10 Hotfix — AI Cut List Bug Fixes
 
@@ -75,6 +76,7 @@ createstage-quoting-app/
 │   ├── historical_validator.py — Stage 4: Compare estimates vs historical actuals
 │   ├── hardware_sourcer.py  — Stage 5: 25-item hardware catalog + consumable estimation
 │   ├── pricing_engine.py    — Stage 5: PricedQuote assembly, markup options, subtotals
+│   ├── quote_jobs.py        — In-memory async job store + background runner (Railway 503 fix)
 │   ├── pdf_generator.py     — Stage 6: PDF generation (10 sections), _safe() Unicode helper
 │   ├── bid_parser.py        — Session 7: Bid scope extraction (Gemini + keyword fallback)
 │   ├── pdf_extractor.py     — Session 7: PDF text extraction via pdfplumber
@@ -177,6 +179,7 @@ createstage-quoting-app/
 │   ├── test_photo_extraction.py        — 20 tests (photo upload, vision, extraction confirmation)
 │   ├── test_ai_cut_list.py             — 20 tests (AI cut list, furniture fixes, PDF sections)
 │   ├── test_session10_intelligence.py  — 39 tests (intelligence layer, AI-first, weld process)
+│   ├── test_async_jobs.py              — 17 tests (async job store, polling endpoints, background tasks)
 │   └── fixtures/
 │       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
 ├── alembic/                 — Database migrations
@@ -349,7 +352,7 @@ class PricedQuote(TypedDict):
 
 ---
 
-## 6. API Endpoint Reference (44 total — verified Session 3B-Hotfix)
+## 6. API Endpoint Reference (45 total — verified Session 3B-Hotfix + async)
 
 ### Auth — `/api/auth`
 | Method | Path | Auth | Description |
@@ -397,11 +400,12 @@ class PricedQuote(TypedDict):
 | POST | `/api/bid/parse-text` | Yes | Parse pasted bid text for scope items |
 | POST | `/api/bid/{bid_id}/quote-items` | Yes | Create quote sessions from selected bid items |
 
-### Legacy AI — `/api/ai`
+### Legacy AI — `/api/ai` (async — returns job_id, poll for results)
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/ai/estimate` | No | Plain English → structured estimate (doesn't save) |
-| POST | `/api/ai/quote` | No | Plain English → saved draft quote |
+| POST | `/api/ai/estimate` | No | Plain English → job_id (async) or immediate result (cache hit) |
+| POST | `/api/ai/quote` | No | With pre_computed: sync save. Without: returns job_id (async) |
+| GET | `/api/ai/job/{job_id}` | No | Poll async job status (pending/running/complete/failed/timeout) |
 | GET | `/api/ai/test` | No | Verify Gemini API key works |
 
 ### Customers — `/api/customers`
@@ -669,7 +673,8 @@ pip install pytest-randomly && pytest tests/ -v -p randomly
 | `test_photo_extraction.py` | 20 |
 | `test_ai_cut_list.py` | 20 |
 | `test_session10_intelligence.py` | 39 |
-| **Total** | **324** |
+| `test_async_jobs.py` | 17 |
+| **Total** | **357** |
 
 ---
 

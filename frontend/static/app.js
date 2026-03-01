@@ -40,6 +40,64 @@ function useExample(btn) {
   input.focus();
 }
 
+// ---- SAFE JSON PARSING ----
+
+async function safeJson(res) {
+  const ct = (res.headers.get('content-type') || '');
+  if (!ct.includes('application/json')) {
+    return null;
+  }
+  try {
+    return await res.json();
+  } catch (_) {
+    return null;
+  }
+}
+
+// ---- POLLING FOR ASYNC RESULTS ----
+
+async function pollForResult(jobId, typingId) {
+  const stages = [
+    { at: 0,  text: 'Analyzing job description...' },
+    { at: 6,  text: 'Calculating materials...' },
+    { at: 12, text: 'Estimating labor...' },
+    { at: 20, text: 'Finalizing estimate...' },
+  ];
+  const startTime = Date.now();
+  const maxPolls = 100; // 200s safety limit
+
+  for (let i = 0; i < maxPolls; i++) {
+    // Update typing indicator text based on elapsed time
+    const elapsed = (Date.now() - startTime) / 1000;
+    for (let s = stages.length - 1; s >= 0; s--) {
+      if (elapsed >= stages[s].at) {
+        updateTypingText(typingId, stages[s].text);
+        break;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    try {
+      const res = await fetch('/api/ai/job/' + jobId);
+      const data = await safeJson(res);
+      if (!data) continue; // non-JSON response, retry
+
+      if (data.status === 'complete') {
+        return data.result || data;
+      }
+      if (data.status === 'failed' || data.status === 'timeout') {
+        return { _error: data.error || 'AI processing failed' };
+      }
+      // pending or running — keep polling
+    } catch (_) {
+      // Network error — keep polling
+    }
+  }
+
+  return { _error: 'Timed out waiting for AI response. Please try again.' };
+}
+
 // ---- SUBMIT JOB ----
 
 async function submitJob() {
@@ -81,19 +139,45 @@ async function submitJob() {
       body: JSON.stringify({ job_description: prompt })
     });
 
-    removeTyping(typingId);
+    const data = await safeJson(res);
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      appendError(err.detail || `Error ${res.status} — try again`);
+    if (!data) {
+      removeTyping(typingId);
+      appendError('Server error — please try again');
       btn.disabled = false;
       return;
     }
 
-    const data = await res.json();
+    if (!res.ok) {
+      removeTyping(typingId);
+      appendError(data.detail || `Error ${res.status} — try again`);
+      btn.disabled = false;
+      return;
+    }
+
+    // Check for async job
+    if (data.status === 'pending' && data.job_id) {
+      const result = await pollForResult(data.job_id, typingId);
+      removeTyping(typingId);
+
+      if (result && result._error) {
+        appendError(result._error);
+        btn.disabled = false;
+        return;
+      }
+
+      currentEstimate = result;
+      conversationHistory.push({ role: 'ai', data: result });
+      appendAIResponse(result);
+      updateQuotePanel(result);
+      btn.disabled = false;
+      return;
+    }
+
+    // Synchronous response (cache hit)
+    removeTyping(typingId);
     currentEstimate = data;
     conversationHistory.push({ role: 'ai', data });
-
     appendAIResponse(data);
     updateQuotePanel(data);
 
@@ -264,6 +348,7 @@ function showTyping() {
   div.id = id;
   div.className = 'typing-indicator';
   div.innerHTML = `
+    <span class="typing-text">Analyzing job description...</span>
     <div class="typing-dot"></div>
     <div class="typing-dot"></div>
     <div class="typing-dot"></div>
@@ -271,6 +356,13 @@ function showTyping() {
   thread.appendChild(div);
   scrollThread();
   return id;
+}
+
+function updateTypingText(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const span = el.querySelector('.typing-text');
+  if (span) span.textContent = text;
 }
 
 function removeTyping(id) {
@@ -350,8 +442,8 @@ async function saveQuote() {
       })
     });
 
-    if (!custRes.ok) throw new Error('Failed to create customer');
-    const customer = await custRes.json();
+    const custData = await safeJson(custRes);
+    if (!custRes.ok || !custData) throw new Error('Failed to create customer');
 
     // Get last user message for description
     const lastUserMsg = [...conversationHistory].reverse().find(m => m.role === 'user');
@@ -365,17 +457,17 @@ async function saveQuote() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         job_description: description,
-        customer_id: customer.id,
+        customer_id: custData.id,
         additional_context: notes || null,
         pre_computed_estimate: currentEstimate?.raw_estimate || null
       })
     });
 
-    if (!quoteRes.ok) throw new Error('Failed to create quote');
-    const result = await quoteRes.json();
+    const quoteData = await safeJson(quoteRes);
+    if (!quoteRes.ok || !quoteData) throw new Error('Failed to create quote');
 
     document.getElementById('save-modal').style.display = 'none';
-    appendSavedConfirmation(result.quote);
+    appendSavedConfirmation(quoteData.quote);
 
   } catch (err) {
     appendError(`Save failed: ${err.message}`);
@@ -393,7 +485,7 @@ function appendSavedConfirmation(quote) {
   div.innerHTML = `
     <div class="msg-label">Saved</div>
     <div class="msg-bubble" style="border-color: rgba(34,197,94,0.3);">
-      ✅ Quote <strong>${quote.quote_number}</strong> saved for <strong>${quote.customer?.name || 'customer'}</strong> — 
+      ✅ Quote <strong>${quote.quote_number}</strong> saved for <strong>${quote.customer?.name || 'customer'}</strong> —
       total <strong style="color: var(--accent)">${fmt(quote.total)}</strong>
       <br><br>
       <a href="#" onclick="showView('quotes'); return false;" style="color: var(--accent); font-size: 13px;">View all quotes →</a>
@@ -411,8 +503,8 @@ async function loadQuotes() {
 
   try {
     const res = await fetch('/api/quotes/');
-    if (!res.ok) throw new Error('Failed to load');
-    const quotes = await res.json();
+    const quotes = await safeJson(res);
+    if (!res.ok || !quotes) throw new Error('Failed to load');
 
     if (!quotes.length) {
       list.innerHTML = `
@@ -451,8 +543,8 @@ async function showQuoteDetail(id) {
 
   try {
     const res = await fetch(`/api/quotes/${id}`);
-    if (!res.ok) throw new Error('Not found');
-    const q = await res.json();
+    const q = await safeJson(res);
+    if (!res.ok || !q) throw new Error('Not found');
 
     title.textContent = `Quote ${q.quote_number}`;
 

@@ -4,16 +4,22 @@ AI-powered quoting endpoint — powered by Gemini.
 User describes a job in plain English.
 Gemini interprets it, returns structured line items.
 The app calculates all the math using real Osario/Wexler pricing.
+
+Async pattern: POST returns job_id immediately, Gemini runs in background
+thread. Frontend polls GET /ai/job/{job_id} for results. This prevents
+Railway's 30s proxy timeout from returning 503 HTML.
 """
 
 import json
 import os
+import threading
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from .. import models
 from ..database import get_db
+from ..quote_jobs import create_job, get_job, run_in_background, mark_db_saved
 
 router = APIRouter(prefix="/ai", tags=["ai-quoting"])
 
@@ -134,12 +140,14 @@ Return ONLY valid JSON, no explanation or markdown:
 {"job_summary":"","job_type":"structural|architectural|signage|led_integration|sculpture|custom","confidence":"high|medium|low","assumptions":[],"warnings":[],"labor_rate_fallback":125,"waste_factor":0.05,"material_markup_pct":15,"stainless_multiplier":1.0,"contingency_pct":0,"profit_margin_pct":20,"line_items":[{"description":"","material_type":"mild_steel|stainless_304|stainless_316|aluminum_6061|aluminum_5052|dom_tubing|square_tubing|angle_iron|flat_bar|plate|channel|null","process_type":"layout|cutting|cnc_plasma|cnc_router|welding|tig_welding|grinding|drilling|bending|assembly|design|field_install|project_management|powder_coat|paint|null","quantity":1,"unit":"ea|lf|sqft|hr|lot","dim_length":null,"dim_width":null,"dim_thickness":null,"weight_lbs":null,"material_cost":0.0,"labor_hours":0.0,"outsourced":false,"outsource_service":null,"outsource_rate_per_sqft":null,"sq_ft":null,"notes":""}],"cut_list":[{"piece_description":"","material":"","quantity":1,"length":null,"width":null,"thickness":null,"notes":""}],"build_order":["Step 1: ...","Step 2: ..."]}
 """
 
-# Simple in-memory prompt cache — keyed on first 100 chars of prompt, max 50 entries
+# Thread-safe prompt cache
 _prompt_cache: dict = {}
+_cache_lock = threading.Lock()
 _CACHE_MAX = 50
 
 
-def _normalize_estimate(estimate: dict) -> None:
+def _normalize_estimate(estimate):
+    # type: (dict) -> None
     """Fix common Gemini formatting issues in-place.
 
     waste_factor: Gemini sometimes returns 5 (meaning 5%) instead of 0.05.
@@ -172,14 +180,36 @@ class AIQuoteResponse(BaseModel):
     quote_id: Optional[int] = None
 
 
-def call_gemini(prompt: str) -> dict:
-    """Call Gemini API and return parsed JSON estimate."""
+def _cache_get(key):
+    # type: (str) -> Optional[dict]
+    """Thread-safe cache read."""
+    with _cache_lock:
+        return _prompt_cache.get(key)
+
+
+def _cache_set(key, value):
+    # type: (str, dict) -> None
+    """Thread-safe cache write."""
+    with _cache_lock:
+        if len(_prompt_cache) >= _CACHE_MAX:
+            _prompt_cache.pop(next(iter(_prompt_cache)))
+        _prompt_cache[key] = value
+
+
+def call_gemini(prompt):
+    # type: (str) -> dict
+    """Call Gemini API and return parsed JSON estimate.
+
+    Used by the request handler for cache hits (fast path).
+    Raises HTTPException on failure — safe only in request context.
+    """
     import urllib.request
     import urllib.error
 
     cache_key = prompt[:100]
-    if cache_key in _prompt_cache:
-        return _prompt_cache[cache_key]
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
 
     api_key = os.getenv("GEMINI_API_KEY")
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
@@ -187,7 +217,7 @@ def call_gemini(prompt: str) -> dict:
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s" % (model, api_key)
 
     payload = json.dumps({
         "contents": [{
@@ -209,23 +239,104 @@ def call_gemini(prompt: str) -> dict:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=90) as response:
+        with urllib.request.urlopen(req, timeout=120) as response:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
             _normalize_estimate(parsed)
-            if len(_prompt_cache) >= _CACHE_MAX:
-                _prompt_cache.pop(next(iter(_prompt_cache)))
-            _prompt_cache[cache_key] = parsed
+            _cache_set(cache_key, parsed)
             return parsed
     except urllib.error.HTTPError as e:
         error_body = e.read().decode()
-        raise HTTPException(status_code=502, detail=f"Gemini API error: {error_body}")
+        raise HTTPException(status_code=502, detail="Gemini API error: %s" % error_body)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Gemini call failed: {str(e)}")
+        raise HTTPException(status_code=502, detail="Gemini call failed: %s" % str(e))
 
 
-def estimate_total(estimate: dict) -> tuple[float, float]:
+def call_gemini_background(prompt):
+    # type: (str) -> dict
+    """Call Gemini API from a background thread.
+
+    Same as call_gemini() but raises plain exceptions instead of HTTPException,
+    since HTTPException only makes sense in a request context.
+    """
+    import urllib.request
+    import urllib.error
+
+    cache_key = prompt[:100]
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+
+    url = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s" % (model, api_key)
+
+    payload = json.dumps({
+        "contents": [{
+            "parts": [{
+                "text": MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
+            }]
+        }],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": "application/json"
+        }
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            result = json.loads(response.read())
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            parsed = json.loads(text)
+            _normalize_estimate(parsed)
+            _cache_set(cache_key, parsed)
+            return parsed
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        raise RuntimeError("Gemini API error: %s" % error_body)
+    except Exception as e:
+        raise RuntimeError("Gemini call failed: %s" % str(e))
+
+
+def _run_estimate(prompt):
+    # type: (str) -> dict
+    """Background task: call Gemini and return formatted estimate result."""
+    estimate = call_gemini_background(prompt)
+    cost, total = estimate_total(estimate)
+    return {
+        "job_summary": estimate.get("job_summary", ""),
+        "job_type": estimate.get("job_type", "custom"),
+        "confidence": estimate.get("confidence", "medium"),
+        "assumptions": estimate.get("assumptions", []),
+        "warnings": estimate.get("warnings", []),
+        "estimated_cost": cost,
+        "estimated_total": total,
+        "line_items_count": len(estimate.get("line_items", [])),
+        "raw_estimate": estimate,
+    }
+
+
+def _run_quote_estimate(prompt):
+    # type: (str) -> dict
+    """Background task for /quote: call Gemini and return raw estimate only.
+    DB save happens on first poll, not in background thread."""
+    return call_gemini_background(prompt)
+
+
+def estimate_total(estimate):
+    # type: (dict) -> tuple
     """Quick estimate of cost and total from AI output."""
     labor_rate = estimate.get("labor_rate_fallback", 125)
     waste = estimate.get("waste_factor", 0.05)
@@ -254,25 +365,37 @@ def ai_estimate(request: AIQuoteRequest):
     """
     Describe a job in plain English — get back a structured estimate.
     Does NOT save to database. Use /ai/quote to create a saved quote.
+
+    Returns immediately with status="complete" on cache hit, or
+    status="pending" + job_id on cache miss (poll GET /ai/job/{job_id}).
     """
     prompt = request.job_description
     if request.additional_context:
-        prompt += f"\n\nAdditional context: {request.additional_context}"
+        prompt += "\n\nAdditional context: %s" % request.additional_context
 
-    estimate = call_gemini(prompt)
-    cost, total = estimate_total(estimate)
+    # Fast path: cache hit — return immediately
+    cache_key = prompt[:100]
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        cost, total = estimate_total(cached)
+        return {
+            "status": "complete",
+            "job_summary": cached.get("job_summary", ""),
+            "job_type": cached.get("job_type", "custom"),
+            "confidence": cached.get("confidence", "medium"),
+            "assumptions": cached.get("assumptions", []),
+            "warnings": cached.get("warnings", []),
+            "estimated_cost": cost,
+            "estimated_total": total,
+            "line_items_count": len(cached.get("line_items", [])),
+            "raw_estimate": cached,
+        }
 
-    return {
-        "job_summary": estimate.get("job_summary", ""),
-        "job_type": estimate.get("job_type", "custom"),
-        "confidence": estimate.get("confidence", "medium"),
-        "assumptions": estimate.get("assumptions", []),
-        "warnings": estimate.get("warnings", []),
-        "estimated_cost": cost,
-        "estimated_total": total,
-        "line_items_count": len(estimate.get("line_items", [])),
-        "raw_estimate": estimate,
-    }
+    # Slow path: create background job
+    job_id = create_job("estimate", {"prompt": prompt})
+    run_in_background(job_id, _run_estimate, (prompt,))
+
+    return {"status": "pending", "job_id": job_id}
 
 
 @router.post("/quote")
@@ -280,6 +403,10 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
     """
     Describe a job in plain English — AI estimates it and saves a draft quote.
     Requires customer_id. Returns a saved quote ready to review and adjust.
+
+    With pre_computed_estimate: synchronous (no Gemini call, just DB save).
+    Without: returns job_id, poll GET /ai/job/{job_id}. DB save happens on
+    first poll after completion.
     """
     if not request.customer_id:
         raise HTTPException(status_code=400, detail="customer_id required to save a quote")
@@ -289,25 +416,43 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     if request.pre_computed_estimate:
-        # Use the estimate already shown to the user — no second Gemini call
+        # Synchronous path — no Gemini call needed
         estimate = request.pre_computed_estimate
         _normalize_estimate(estimate)
-    else:
-        prompt = request.job_description
-        if request.additional_context:
-            prompt += f"\n\nAdditional context: {request.additional_context}"
-        estimate = call_gemini(prompt)
+        result = _save_quote_to_db(estimate, request, db)
+        result["status"] = "complete"
+        return result
 
-    # Import here to avoid circular
+    # Async path — Gemini needed
+    prompt = request.job_description
+    if request.additional_context:
+        prompt += "\n\nAdditional context: %s" % request.additional_context
+
+    job_id = create_job("quote", {
+        "prompt": prompt,
+        "customer_id": request.customer_id,
+        "job_description": request.job_description,
+        "additional_context": request.additional_context,
+    })
+    run_in_background(job_id, _run_quote_estimate, (prompt,))
+
+    return {"status": "pending", "job_id": job_id}
+
+
+def _save_quote_to_db(estimate, request, db):
+    # type: (dict, AIQuoteRequest, Session) -> dict
+    """Save an estimate as a Quote in the database. Returns response dict."""
     from .quotes import generate_quote_number, calculate_totals, _quote_to_dict
 
-    # Build the Quote
     db_quote = models.Quote(
         quote_number=generate_quote_number(db),
         customer_id=request.customer_id,
         job_type=estimate.get("job_type", "custom"),
         project_description=estimate.get("job_summary", request.job_description),
-        notes=f"AI-generated estimate. Assumptions: {'; '.join(estimate.get('assumptions', []))}. Warnings: {'; '.join(estimate.get('warnings', []))}",
+        notes="AI-generated estimate. Assumptions: %s. Warnings: %s" % (
+            '; '.join(estimate.get('assumptions', [])),
+            '; '.join(estimate.get('warnings', []))
+        ),
         labor_rate=estimate.get("labor_rate_fallback", 125.0),
         waste_factor=estimate.get("waste_factor", 0.05),
         material_markup_pct=estimate.get("material_markup_pct", 15.0),
@@ -318,7 +463,6 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
     db.add(db_quote)
     db.flush()
 
-    # Add line items
     for item_data in estimate.get("line_items", []):
         db_item = models.QuoteLineItem(
             quote_id=db_quote.id,
@@ -353,6 +497,88 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
         "warnings": estimate.get("warnings", []),
         "quote": _quote_to_dict(db_quote),
     }
+
+
+@router.get("/job/{job_id}")
+def get_job_status(job_id: str, db: Session = Depends(get_db)):
+    """
+    Poll for async job status.
+
+    Returns:
+      - {"status": "pending", "job_id": "..."} — queued
+      - {"status": "running", "job_id": "..."} — Gemini in progress
+      - {"status": "complete", "result": {...}} — done
+      - {"status": "failed", "error": "..."} — Gemini error
+      - {"status": "timeout", "error": "..."} — exceeded 180s
+      - 404 — not found or expired
+
+    For "quote" jobs: DB save happens on first poll after completion.
+    """
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found or expired")
+
+    status = job["status"]
+
+    if status in ("pending", "running"):
+        return {"status": status, "job_id": job_id}
+
+    if status == "complete":
+        result = job.get("result")
+
+        # For quote jobs, save to DB on first poll after completion
+        if job["job_type"] == "quote" and result is not None:
+            if mark_db_saved(job_id):
+                input_data = job.get("input_data", {})
+                estimate = result
+                _normalize_estimate(estimate)
+
+                # Build a minimal request-like object for _save_quote_to_db
+                save_request = AIQuoteRequest(
+                    job_description=input_data.get("job_description", ""),
+                    customer_id=input_data.get("customer_id"),
+                    additional_context=input_data.get("additional_context"),
+                )
+
+                try:
+                    db_result = _save_quote_to_db(estimate, save_request, db)
+                    db_result["status"] = "complete"
+                    return db_result
+                except Exception as e:
+                    return {
+                        "status": "failed",
+                        "job_id": job_id,
+                        "error": "Failed to save quote: %s" % str(e),
+                    }
+            else:
+                # Already saved — return the estimate result
+                cost, total = estimate_total(result)
+                return {
+                    "status": "complete",
+                    "result": {
+                        "job_summary": result.get("job_summary", ""),
+                        "job_type": result.get("job_type", "custom"),
+                        "confidence": result.get("confidence", "medium"),
+                        "assumptions": result.get("assumptions", []),
+                        "warnings": result.get("warnings", []),
+                        "estimated_cost": cost,
+                        "estimated_total": total,
+                        "raw_estimate": result,
+                    }
+                }
+
+        # For estimate jobs, result is already formatted
+        return {"status": "complete", "result": result}
+
+    if status in ("failed", "timeout"):
+        return {
+            "status": status,
+            "job_id": job_id,
+            "error": job.get("error", "Unknown error"),
+        }
+
+    # Shouldn't happen, but handle gracefully
+    return {"status": status, "job_id": job_id}
 
 
 @router.get("/test")

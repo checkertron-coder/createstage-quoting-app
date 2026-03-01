@@ -120,6 +120,13 @@ def auto_migrate():
 
 
 @app.on_event("startup")
+def start_job_cleanup():
+    """Start periodic cleanup of expired async AI jobs."""
+    from .quote_jobs import start_cleanup_cycle
+    start_cleanup_cycle()
+
+
+@app.on_event("startup")
 def auto_seed():
     """Auto-seed process rates and material prices on first run."""
     from .database import SessionLocal
