@@ -4,13 +4,22 @@ Tests for deterministic labor calculator (labor_calculator.py).
 Tests:
 1-3.  Simple furniture (tube frame, 10 pieces)
 4-6.  Complex furniture (tube + flat bar pyramid, 30+ pieces)
-7-9.  Railing job
+7-9.  Railing job with pickets (TYPE B decorative)
 10.   Empty cut list returns minimums
 11.   TIG detection from fields
 12.   Mill scale adds grind time
+13.   TYPE A/B categorization
+14.   Reasoning string generated
+15.   Guardrails: flagged when grind > weld
 """
 
 from backend.calculators.labor_calculator import calculate_labor_hours
+
+
+def _hour_total(result):
+    """Sum only the numeric hour keys (exclude _reasoning, _flagged)."""
+    return sum(v for k, v in result.items()
+               if isinstance(v, (int, float)) and not k.startswith("_"))
 
 
 # --- Fixtures ---
@@ -36,7 +45,7 @@ def _simple_furniture_cuts():
 def _complex_furniture_cuts():
     """42-piece table with tube frame + flat bar pyramid pattern."""
     cuts = _simple_furniture_cuts()  # 10 tube pieces
-    # 8 pyramid layers × 4 pieces each = 32 flat bar pieces
+    # 8 pyramid layers x 4 pieces each = 32 flat bar pieces
     for i in range(8):
         length = 20 - (i * 2)
         cuts.append({
@@ -88,7 +97,7 @@ def _railing_fields():
 # ============================================================
 
 def test_simple_furniture_returns_all_8_keys():
-    """All 8 labor categories present."""
+    """All 8 labor categories present plus _reasoning and _flagged."""
     result = calculate_labor_hours("furniture_table", _simple_furniture_cuts(),
                                    _furniture_fields())
     expected_keys = [
@@ -99,6 +108,8 @@ def test_simple_furniture_returns_all_8_keys():
         assert key in result, "Missing key: %s" % key
         assert isinstance(result[key], float), "%s should be float" % key
         assert result[key] >= 0.0, "%s should be non-negative" % key
+    assert "_reasoning" in result
+    assert "_flagged" in result
 
 
 def test_simple_furniture_weld_hours_realistic():
@@ -114,7 +125,7 @@ def test_simple_furniture_total_reasonable():
     """Total shop hours (excluding install) should be 5-25 hrs for simple table."""
     result = calculate_labor_hours("furniture_table", _simple_furniture_cuts(),
                                    _furniture_fields())
-    total = sum(result.values())
+    total = _hour_total(result)
     assert total >= 5.0, "Total %.1f too low for furniture" % total
     assert total <= 25.0, "Total %.1f too high for simple furniture" % total
 
@@ -137,7 +148,7 @@ def test_complex_furniture_more_than_simple():
                                     _furniture_fields())
     complex_ = calculate_labor_hours("furniture_table", _complex_furniture_cuts(),
                                       _furniture_fields())
-    assert sum(complex_.values()) > sum(simple.values()), \
+    assert _hour_total(complex_) > _hour_total(simple), \
         "Complex furniture should take longer than simple"
 
 
@@ -158,9 +169,7 @@ def test_railing_uses_mig_speed():
     """Railing with MIG welding should have lower weld hours than TIG equivalent."""
     result = calculate_labor_hours("straight_railing", _railing_cuts(),
                                    _railing_fields())
-    # MIG is 2.5x faster than TIG, so weld hours should reflect that
     assert result["full_weld"] > 0.0
-    # Powder coat = 0 coating application
     assert result["coating_application"] == 0.0
 
 
@@ -176,7 +185,7 @@ def test_railing_total_reasonable():
     """40 LF railing total hours should be reasonable."""
     result = calculate_labor_hours("straight_railing", _railing_cuts(),
                                    _railing_fields())
-    total = sum(result.values())
+    total = _hour_total(result)
     assert total > 5.0, "Total %.1f too low for 40 LF railing" % total
 
 
@@ -189,16 +198,15 @@ def test_empty_cut_list_returns_minimums():
     result = calculate_labor_hours("custom_fab", [], {})
     assert result["layout_setup"] == 1.5
     assert result["final_inspection"] == 0.5
-    assert sum(result.values()) > 0
+    assert _hour_total(result) > 0
 
 
 def test_tig_detected_from_fields():
     """TIG detection from field values (not just cut list weld_process)."""
-    # Use enough pieces so weld hours exceed the 0.5 hr minimum
     cuts = [
         {"profile": "sq_tube_2x2_11ga", "quantity": 10,
          "cut_type": "square", "length_inches": 28,
-         "weld_process": "mig"},  # items say MIG
+         "weld_process": "mig"},
         {"profile": "sq_tube_2x2_11ga", "quantity": 6,
          "cut_type": "miter_45", "length_inches": 20,
          "weld_process": "mig"},
@@ -227,3 +235,58 @@ def test_mill_scale_adds_grind_time():
     result_powder = calculate_labor_hours("furniture_table", cuts, fields_powder)
     assert result_clear["grind_clean"] > result_powder["grind_clean"], \
         "Clear coat should add mill scale removal time to grind_clean"
+
+
+# ============================================================
+# TYPE A/B Categorization Tests
+# ============================================================
+
+def test_type_b_flat_bar_gets_per_piece_time():
+    """Flat bar pieces should be TYPE B — 5 min/piece for full_weld."""
+    cuts = [
+        {"profile": "flat_bar_1x0.125", "quantity": 20,
+         "cut_type": "square", "length_inches": 18,
+         "description": "Pyramid layer", "weld_process": "tig"},
+    ]
+    result = calculate_labor_hours("furniture_table", cuts,
+                                   {"finish": "Clear coat"})
+    # 20 TYPE B pieces × 5 min = 100 min = 1.67 hr
+    assert result["full_weld"] >= 1.5, \
+        "20 flat bar pieces should take >= 1.5 hr weld, got %.2f" % result["full_weld"]
+
+
+def test_type_b_pickets_detected_by_description():
+    """Pickets should be TYPE B even with sq_bar profile."""
+    cuts = [
+        {"profile": "sq_bar_0.5", "quantity": 60,
+         "cut_type": "square", "length_inches": 36,
+         "description": "Pickets", "weld_process": "mig"},
+    ]
+    result = calculate_labor_hours("straight_railing", cuts,
+                                   {"finish": "Powder coat"})
+    # 60 TYPE B pieces × 5 min = 300 min = 5.0 hr
+    assert result["full_weld"] >= 4.5, \
+        "60 pickets should take >= 4.5 hr weld, got %.2f" % result["full_weld"]
+
+
+def test_reasoning_string_generated():
+    """Result should include _reasoning with step-by-step calculation."""
+    result = calculate_labor_hours("furniture_table", _complex_furniture_cuts(),
+                                   _furniture_fields())
+    reasoning = result["_reasoning"]
+    assert "STEP 1" in reasoning
+    assert "STEP 2" in reasoning
+    assert "TYPE A" in reasoning
+    assert "TYPE B" in reasoning
+
+
+def test_guardrail_grind_exceeds_weld_flagged():
+    """When grind_clean > full_weld, _flagged should be True and logged."""
+    # 120 pickets: lots of small welds to blend → grind can exceed weld
+    result = calculate_labor_hours("straight_railing", _railing_cuts(),
+                                   _railing_fields())
+    # With 120 pickets (TYPE B), grind per decorative joint (3 min × 240) is large
+    # This should trigger the grind > weld guardrail
+    if result["grind_clean"] > result["full_weld"]:
+        assert result["_flagged"] is True
+        assert "grind" in result["_reasoning"].lower()

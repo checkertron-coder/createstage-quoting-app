@@ -144,11 +144,16 @@ class LaborEstimator:
 
         total_hours = round(sum(p["hours"] for p in processes), 2)
 
+        # Extract reasoning and flag status from calculator
+        reasoning = labor_hours.get("_reasoning", "")
+        flagged = labor_hours.get("_flagged", False)
+
         return {
             "processes": processes,
             "total_hours": total_hours,
-            "flagged": False,
-            "flag_reason": None,
+            "flagged": flagged,
+            "flag_reason": reasoning if flagged else None,
+            "_reasoning": reasoning,
         }
 
     def _build_prompt(self, material_list: dict, quote_params: dict) -> str:
