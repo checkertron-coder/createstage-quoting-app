@@ -348,7 +348,45 @@ Return ONLY valid JSON — an array of objects:
         if "tig" in weld_processes:
             weld_note = "\nNOTE: This project includes TIG welding. Steps involving TIG should specify appropriate gas (argon), filler rod, and amperage range."
 
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        # Detect finish type to determine mill scale removal and build sequence
+        all_fields_lower = " ".join(str(v) for v in fields.values()).lower()
+        bare_metal_finishes = ["clear coat", "clearcoat", "brushed", "raw steel",
+                               "raw metal", "patina", "natural", "bare"]
+        coating_finishes = ["powder coat", "powdercoat", "paint", "galvanized",
+                            "galvanize", "primer", "enamel"]
+        needs_mill_scale_removal = any(f in all_fields_lower for f in bare_metal_finishes)
+        has_coating = any(f in all_fields_lower for f in coating_finishes)
+        # If neither detected, default to no mill scale removal (coating assumed)
+        if needs_mill_scale_removal and has_coating:
+            needs_mill_scale_removal = False  # coating wins
+
+        if needs_mill_scale_removal:
+            build_sequence = """
+BUILD SEQUENCE (bare metal finish — mill scale removal required):
+Mill scale removal is recommended before assembly. Options: vinegar bath, acid wash, or needle scaler. Consider bath/tank size as a constraint when cutting pieces.
+1. Layout and mark all pieces
+2. Cut all pieces (consider bath/tank size — pieces must fit your soaking container)
+3. Mill scale removal on all cut pieces (vinegar bath, acid wash, or needle scaler — use what you have)
+4. Wire brush, clean, and dry all pieces immediately after mill scale removal
+5. Surface prep / grinder cleanup on individual pieces WHILE they are accessible (before assembly)
+6. Build and fully weld main structural frame (MIG)
+7. Grind frame welds smooth
+8. Attach decorative/thin elements (TIG) using physical spacers where needed
+9. Final finish (clear coat, brushed finish, patina treatment, etc.)
+"""
+        else:
+            build_sequence = """
+BUILD SEQUENCE (paint/powder coat/galvanized finish — no mill scale removal needed):
+Paint and powder coat bond fine over mill scale with proper surface prep (scuff, sand, degrease). Do NOT include vinegar bath or acid wash steps.
+1. Layout and mark all pieces
+2. Cut all pieces
+3. Degrease and scuff all pieces
+4. Build and fully weld main structural frame (MIG)
+5. Grind welds to required finish level
+6. Attach decorative elements (TIG)
+7. Surface prep for coating (sand, degrease, wipe down)
+8. Paint or send out for powder coat / galvanizing
+"""
 
         prompt = """You are an expert metal fabricator creating step-by-step build instructions.
 A journeyman fabricator should be able to follow these instructions and build this project.
@@ -360,12 +398,13 @@ PROJECT DETAILS:
 
 CUT LIST:
 %s
-%s
+%s%s
 TASK: Generate a practical fabrication sequence — the exact steps a fabricator follows
 to build this project from raw material to finished product.
+Follow the BUILD SEQUENCE above as the template for step order.
 
 RULES:
-1. Steps in logical build order: layout/mark → cut → deburr → fit/tack → weld → grind → finish
+1. Follow the BUILD SEQUENCE order above. Do not rearrange steps or add mill scale removal if the sequence says to skip it.
 2. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.
 3. Include the correct tools for each step (chop saw, band saw, TIG welder, MIG welder, angle grinder, etc.).
 4. Specify weld process (MIG vs TIG) for each welding step.
@@ -385,7 +424,7 @@ Return ONLY valid JSON — an array of step objects:
         "weld_process": null,
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
-]""" % (job_type, fields_text, cuts_text, weld_note)
+]""" % (job_type, fields_text, cuts_text, weld_note, build_sequence)
 
         return prompt
 
