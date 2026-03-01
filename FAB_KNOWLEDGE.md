@@ -272,6 +272,31 @@
 | Vinegar bath (small part) | 0.5 hr handle + 24 hr soak + 0.5 hr rinse/dry |
 | Powder coat transport | 3-4 hr minimum (round trip) |
 
+### Precision Decorative Placement — A Separate Labor Category
+Decorative elements that require measured positioning before each weld are fundamentally
+different from structural assembly. Do NOT estimate these as fast tack welds.
+
+**Examples:** Flat bar pyramids, concentric square patterns, evenly-spaced pickets,
+ornamental grids, stepped inlays — anything where position accuracy is part of the finish.
+
+**Per-piece workflow (cannot be skipped):**
+1. Measure the step distance from the previous piece (e.g., 1/4" inward per layer)
+2. Mark reference lines or use a spacer/jig
+3. Position piece against spacer, check flush and level
+4. Clamp or hold
+5. Tack — check position hasn't shifted, adjust if needed
+6. Weld both sides (face weld + edge weld on 1×1/8" flat bar)
+7. Move to next piece — reset spacer, repeat
+
+**Time standard:** 5-8 minutes per piece for skilled fabricator with a jig.
+Without a jig (measuring each piece individually): 8-12 minutes per piece.
+Multiply by qty — 120 pieces at 5 min = 10 hrs, at 8 min = 16 hrs.
+Burton's shop with jig/spacer method runs ~3-4 min/piece for practiced patterns.
+
+**Key insight for AI estimation:** A 30-layer × 4-piece flat bar pyramid = 120 precision
+placements. This dominates the weld time on decorative furniture jobs. Do not
+underestimate by treating these as simple tack welds.
+
 ### Weld Deposition Rate for Labor Calc
 - MIG 0.035" wire, 250A, 28V: ~3.5 lb/hr deposition
 - MIG 0.045" wire, 300A, 30V: ~6.0 lb/hr deposition
