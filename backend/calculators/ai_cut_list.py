@@ -14,7 +14,7 @@ import logging
 import re
 from typing import Optional, List, Dict
 
-from ..gemini_client import call_deep, is_configured
+from ..gemini_client import call_fast, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -474,7 +474,7 @@ Return ONLY valid JSON — an array of step objects:
 
     def _call_gemini(self, prompt: str) -> str:
         """Call Gemini API. Raises RuntimeError on failure."""
-        text = call_deep(prompt, timeout=180)
+        text = call_fast(prompt, timeout=180)
         if text is None:
             raise RuntimeError("Gemini returned no response")
         return text
