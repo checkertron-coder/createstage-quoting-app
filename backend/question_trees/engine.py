@@ -553,8 +553,9 @@ def detect_job_type(description: str) -> dict:
         return keyword_result
 
     # Step 3: Try Gemini for better accuracy
+    # Use fast model — detection is a simple classification, not reasoning
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("GEMINI_CUTLIST_MODEL", "gemini-2.5-flash")
 
     if not api_key:
         # No API key — use keyword result or default
@@ -599,7 +600,7 @@ Return ONLY valid JSON:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             result = json.loads(response.read())
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             parsed = json.loads(text)
@@ -609,7 +610,7 @@ Return ONLY valid JSON:
                 parsed["confidence"] = max(parsed.get("confidence", 0) * 0.5, 0.1)
             return parsed
     except Exception:
-        # Gemini failed — use keyword result or default
+        # Gemini failed or timed out — use keyword result or default
         if keyword_result:
             return keyword_result
         return {
