@@ -1,11 +1,11 @@
 """
 Fabrication knowledge injection for AI prompts.
 
-Reads FAB_KNOWLEDGE.md from the repo root, parses it by ## section headers,
-and returns targeted snippets relevant to a specific job type and finish.
+Sources knowledge from structured Python modules in backend/knowledge/
+(processes, materials, joints, consumables, validation) and supplements
+with build sequence prose from FAB_KNOWLEDGE.md.
 
 Keeps token budget low (~300-500 words) by extracting only actionable rules.
-Handles missing file gracefully (returns empty string).
 """
 
 import logging
@@ -13,31 +13,47 @@ import re
 from pathlib import Path
 from typing import Optional
 
+from ..knowledge.materials import (
+    DISTORTION_RISK,
+    LABOR_MULTIPLIERS,
+    POSITION_MULTIPLIERS,
+)
+from ..knowledge.processes import (
+    get_process,
+    get_banned_terms,
+)
+from ..knowledge.validation import (
+    check_banned_terms,
+)
+
 logger = logging.getLogger(__name__)
 
-# Locate FAB_KNOWLEDGE.md relative to this file
+# ---------------------------------------------------------------------------
+# FAB_KNOWLEDGE.md — still used for build sequence prose sections.
+# Structured data (welding, labor, distortion, mill scale, stainless) now
+# comes from backend/knowledge/ modules.
+# ---------------------------------------------------------------------------
+
 _KNOWLEDGE_PATH = Path(__file__).resolve().parent.parent.parent / "FAB_KNOWLEDGE.md"
 
-# Parsed sections cache (loaded once at import time)
 _SECTIONS = {}  # type: dict[str, str]
 
 try:
     _raw = _KNOWLEDGE_PATH.read_text(encoding="utf-8")
-    # Split by ## headers, keeping the header text
     _parts = re.split(r'^(## .+)$', _raw, flags=re.MULTILINE)
-    # _parts alternates: [preamble, header1, body1, header2, body2, ...]
     for i in range(1, len(_parts) - 1, 2):
         header = _parts[i].strip().lstrip("# ").strip()
         body = _parts[i + 1].strip()
         _SECTIONS[header] = body
     logger.info("Loaded %d sections from FAB_KNOWLEDGE.md", len(_SECTIONS))
 except FileNotFoundError:
-    logger.warning("FAB_KNOWLEDGE.md not found at %s — knowledge injection disabled", _KNOWLEDGE_PATH)
+    logger.warning("FAB_KNOWLEDGE.md not found at %s — build sequences unavailable", _KNOWLEDGE_PATH)
 except Exception as e:
     logger.warning("Failed to parse FAB_KNOWLEDGE.md: %s", e)
 
 
-def _find_section(keyword: str) -> Optional[str]:
+def _find_section(keyword):
+    # type: (str) -> Optional[str]
     """Find a section by keyword match in the header."""
     for header, body in _SECTIONS.items():
         if keyword.lower() in header.lower():
@@ -45,30 +61,16 @@ def _find_section(keyword: str) -> Optional[str]:
     return None
 
 
-def _trim_to_rules(text: str, max_lines: int = 15) -> str:
-    """Trim a section body to its most actionable lines."""
-    lines = text.strip().split("\n")
-    kept = []
-    for line in lines:
-        s = line.strip()
-        if not s:
-            continue
-        # Keep bullet points, table rows, numbered items, and short headings
-        if (s.startswith("-") or s.startswith("|") or
-                re.match(r'^\d+\.', s) or s.startswith("###") or
-                s.startswith("*")):
-            kept.append(line)
-        if len(kept) >= max_lines:
-            break
-    return "\n".join(kept)
+# ---------------------------------------------------------------------------
+# Pre-built summaries — sourced from structured knowledge modules
+# ---------------------------------------------------------------------------
 
-
-# --- Pre-extracted summaries (trimmed at import time for speed) ---
-
-def _build_welding_summary() -> str:
-    """Extract key welding process rules."""
-    raw = _find_section("WELDING PROCESSES")
-    if not raw:
+def _build_welding_summary():
+    # type: () -> str
+    """Build welding process summary from structured process data."""
+    mig = get_process("mig_weld")
+    tig = get_process("tig_weld")
+    if not mig or not tig:
         return ""
     return """WELDING PROCESS SELECTION:
 - MIG (ER70S-6, 75/25 gas): structural frames, furniture legs, railings, gates. Mild steel >=12ga. Long welds.
@@ -78,10 +80,12 @@ def _build_welding_summary() -> str:
 - Overwelding = wasted time + heat distortion."""
 
 
-def _build_labor_summary() -> str:
-    """Extract key labor time standards."""
-    raw = _find_section("LABOR ESTIMATION")
-    if not raw:
+def _build_labor_summary():
+    # type: () -> str
+    """Build labor time standards from structured process data."""
+    chop = get_process("chop_saw_cut")
+    grinder = get_process("angle_grinder_grinding")
+    if not chop or not grinder:
         return ""
     return """LABOR TIME STANDARDS:
 - Chop saw cut (1" tube): 2-3 min/cut. (2" tube): 3-5 min/cut.
@@ -89,26 +93,43 @@ def _build_labor_summary() -> str:
 - MIG fillet (3/16"): 12-18 in/min travel. TIG fillet: 4-6 in/min travel.
 - Grind weld flush: 5-10 min/ft. Brush finish: 15-30 min/sq ft.
 - Die grinder cleanup (tight access): 3-5 min per weld area.
-- Stainless multiplier: 1.5x. Thin material (<=16ga): 1.4x. Overhead position: 1.7x.
-- Tooling access: 4.5" angle grinder (open surfaces), die grinder with 2" roloc (constrained spaces), hand files (tight spots). "Inaccessible" = smaller tooling + more time, not impossible."""
+- Stainless multiplier: %.1fx. Thin material (<=16ga): 1.4x. Overhead position: %.1fx.
+- Tooling access: 4.5" angle grinder (open surfaces), die grinder with 2" roloc (constrained spaces), hand files (tight spots). "Inaccessible" = smaller tooling + more time, not impossible.""" % (
+        LABOR_MULTIPLIERS.get("stainless_304", 1.5),
+        POSITION_MULTIPLIERS.get("overhead_4f_4g", 1.7),
+    )
 
 
-def _build_distortion_table() -> str:
-    """Extract distortion risk table."""
-    raw = _find_section("DISTORTION CONTROL")
-    if not raw:
+def _build_distortion_table():
+    # type: () -> str
+    """Build distortion risk table from structured material data."""
+    if not DISTORTION_RISK:
         return ""
-    return """DISTORTION CONTROL:
-- Furniture (flat bar top): HIGH risk — alternate welds, backstep.
-- Railing (post-to-rail): MEDIUM — tack sequence, balanced welding.
-- Gate (diagonal frame): HIGH — pre-set, weld toward center.
-- Sign frame (thin sheet): HIGH — TIG or intermittent MIG.
-- Structural frame (heavy): LOW — mass absorbs heat.
-- Always tack all corners before continuous welds. Check square at every stage."""
+
+    # Extract key job types for the concise summary
+    lines = ["DISTORTION CONTROL:"]
+    key_jobs = [
+        ("furniture_table", "Furniture (flat bar top)"),
+        ("straight_railing", "Railing (post-to-rail)"),
+        ("cantilever_gate", "Gate (diagonal frame)"),
+        ("sign_frame", "Sign frame (thin sheet)"),
+        ("structural_frame", "Structural frame (heavy)"),
+    ]
+    for job_key, label in key_jobs:
+        info = DISTORTION_RISK.get(job_key, {})
+        risk = info.get("risk", "medium").upper()
+        control = info.get("control", "Standard controls")
+        lines.append("- %s: %s — %s." % (label, risk, control))
+    lines.append("- Always tack all corners before continuous welds. Check square at every stage.")
+    return "\n".join(lines)
 
 
-def _build_mill_scale_rules() -> str:
-    """Extract mill scale decision tree — reflects both before-cutting and after-welding paths."""
+def _build_mill_scale_rules():
+    # type: () -> str
+    """Build mill scale decision rules from structured process data."""
+    vinegar = get_process("vinegar_bath")
+    if not vinegar:
+        return ""
     return """MILL SCALE DECISION:
 - Powder coat or paint: SKIP mill scale removal. Clean + degrease only.
 - Clear coat / raw / brushed / patina: REMOVE mill scale. WHEN depends on the pieces:
@@ -119,8 +140,9 @@ def _build_mill_scale_rules() -> str:
 - Methods: vinegar bath (small parts, 12-24hr soak), flap disc grind (fastest for accessible areas), wire wheel (welds/transitions)."""
 
 
-def _build_stainless_notes() -> str:
-    """Extract stainless-specific rules."""
+def _build_stainless_notes():
+    # type: () -> str
+    """Build stainless-specific rules from structured material data."""
     return """STAINLESS STEEL RULES:
 - ALWAYS use stainless filler (ER308L for 304, ER309L for dissimilar).
 - Dedicate grinding wheels, wire brushes, clamps — carbon steel contamination causes rust.
@@ -129,12 +151,12 @@ def _build_stainless_notes() -> str:
 - Harder to cut — adjust chop saw RPM down, use stainless-rated blades."""
 
 
-def _build_furniture_sequence() -> str:
-    """Extract furniture build sequence from current FAB_KNOWLEDGE.md Section 5."""
+def _build_furniture_sequence():
+    # type: () -> str
+    """Extract furniture build sequence from FAB_KNOWLEDGE.md Section 5."""
     raw = _find_section("BUILD SEQUENCE")
     if not raw:
         return ""
-    # Extract the Furniture subsection from the full build sequence section
     lines = raw.split("\n")
     furniture_lines = []
     in_furniture = False
@@ -143,7 +165,7 @@ def _build_furniture_sequence() -> str:
             in_furniture = True
             continue
         elif line.startswith("### ") and in_furniture:
-            break  # Hit next subsection
+            break
         elif in_furniture:
             furniture_lines.append(line)
     if furniture_lines:
@@ -153,8 +175,9 @@ def _build_furniture_sequence() -> str:
     return ""
 
 
-def _build_railing_sequence() -> str:
-    """Extract railing build sequence from current FAB_KNOWLEDGE.md Section 5."""
+def _build_railing_sequence():
+    # type: () -> str
+    """Extract railing build sequence from FAB_KNOWLEDGE.md Section 5."""
     raw = _find_section("BUILD SEQUENCE")
     if not raw:
         return ""
@@ -176,8 +199,9 @@ def _build_railing_sequence() -> str:
     return ""
 
 
-def _build_gate_sequence() -> str:
-    """Extract gate build sequence from current FAB_KNOWLEDGE.md Section 5."""
+def _build_gate_sequence():
+    # type: () -> str
+    """Extract gate build sequence from FAB_KNOWLEDGE.md Section 5."""
     raw = _find_section("BUILD SEQUENCE")
     if not raw:
         return ""
@@ -199,12 +223,12 @@ def _build_gate_sequence() -> str:
     return ""
 
 
-def _build_reasoning_principles() -> str:
+def _build_reasoning_principles():
+    # type: () -> str
     """Extract Section 12 — Fabrication Reasoning Principles. Always included.
 
-    Uses full text (not _trim_to_rules) because principles contain critical
-    prose paragraphs that don't start with bullet prefixes but are essential
-    for AI reasoning (e.g., Principle 3 spacer dimension clarification).
+    Uses full text (not trimmed) because principles contain critical
+    prose paragraphs essential for AI reasoning.
     """
     raw = _find_section("FABRICATION REASONING PRINCIPLES")
     if not raw:
@@ -214,23 +238,36 @@ def _build_reasoning_principles() -> str:
     return "FABRICATION REASONING PRINCIPLES:\n" + "\n".join(kept[:60])
 
 
-def _build_decorative_stock_prep() -> str:
-    """Extract Section 11 — Decorative Stock Prep. Included for decorative + bare metal jobs.
+def _build_decorative_stock_prep():
+    # type: () -> str
+    """Build decorative stock prep rules from structured process data + FAB_KNOWLEDGE.md.
 
-    Uses full text (not _trim_to_rules) because this section contains critical
-    prose paragraphs (spacer dimensions, why-this-matters) that don't start with
-    bullet/number prefixes but are essential for AI reasoning.
+    Uses full text because this section contains critical prose paragraphs
+    (spacer dimensions, why-this-matters) essential for AI reasoning.
     """
+    # Try structured data first
+    proc = get_process("decorative_stock_prep")
+    if proc:
+        notes = proc.get("notes", "")
+        never = get_banned_terms("decorative_stock_prep")
+        result = "DECORATIVE STOCK PREP — PROCESS ORDER:\n"
+        result += notes + "\n"
+        if never:
+            result += "NEVER: " + ", ".join(never) + "\n"
+
+    # Supplement with FAB_KNOWLEDGE.md prose (has spacer dimensions, etc.)
     raw = _find_section("DECORATIVE STOCK PREP")
-    if not raw:
-        return ""
-    # Return full section content — it's already concise and actionable
-    lines = raw.strip().split("\n")
-    kept = [l for l in lines if l.strip()]
-    return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + "\n".join(kept[:50])
+    if raw:
+        lines = raw.strip().split("\n")
+        kept = [l for l in lines if l.strip()]
+        return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + "\n".join(kept[:50])
+
+    if proc:
+        return result
+    return ""
 
 
-# Cache the always-included snippets
+# Cache the always-included snippets at import time
 _WELDING_SUMMARY = _build_welding_summary()
 _LABOR_SUMMARY = _build_labor_summary()
 _DISTORTION_TABLE = _build_distortion_table()
@@ -242,10 +279,15 @@ _GATE_SEQ = _build_gate_sequence()
 _REASONING_PRINCIPLES = _build_reasoning_principles()
 _DECORATIVE_STOCK_PREP = _build_decorative_stock_prep()
 
+# Knowledge is available if structured modules loaded (always True since they're
+# Python code, not external files). FAB_KNOWLEDGE.md is optional supplemental.
+_KNOWLEDGE_AVAILABLE = True
 
-def get_relevant_knowledge(job_type: str, finish_type: str,
-                           has_stainless: bool = False,
-                           description: str = "") -> str:
+
+def get_relevant_knowledge(job_type, finish_type,
+                           has_stainless=False,
+                           description=""):
+    # type: (str, str, bool, str) -> str
     """
     Return a focused knowledge snippet for AI prompt injection.
 
@@ -256,10 +298,9 @@ def get_relevant_knowledge(job_type: str, finish_type: str,
         description: Job description text (for keyword detection)
 
     Returns:
-        A string of relevant fab knowledge,
-        or empty string if FAB_KNOWLEDGE.md is missing.
+        A string of relevant fab knowledge.
     """
-    if not _SECTIONS:
+    if not _KNOWLEDGE_AVAILABLE:
         return ""
 
     sections = []
