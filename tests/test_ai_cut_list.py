@@ -757,3 +757,35 @@ def test_fab_knowledge_returns_decorative_stock_prep():
     assert "DECORATIVE STOCK PREP" not in result_paint, (
         "Should NOT include decorative stock prep for powder coat"
     )
+
+
+def test_both_prompts_include_reasoning_principles():
+    """Both cut list and build sequence prompts include reasoning principles."""
+    gen = AICutListGenerator()
+    fields = {
+        "description": "end table with pyramid pattern",
+        "finish": "clearcoat",
+        "height": "30",
+    }
+    cut_list = [
+        {"description": "Table leg", "quantity": 4, "length_inches": 30,
+         "profile": "sq_tube_2x2_11ga", "cut_type": "square"},
+    ]
+
+    # Cut list prompt
+    cut_prompt = gen._build_prompt("furniture_table", fields)
+    assert "Principle 1" in cut_prompt or "Workability" in cut_prompt, (
+        "Cut list prompt must include reasoning principles"
+    )
+    assert "Principle 3" in cut_prompt or "Component vs Assembly" in cut_prompt, (
+        "Cut list prompt must include Principle 3 (dimensions)"
+    )
+
+    # Build sequence prompt
+    build_prompt = gen._build_instructions_prompt("furniture_table", fields, cut_list)
+    assert "Principle 1" in build_prompt or "Workability" in build_prompt, (
+        "Build sequence prompt must include reasoning principles"
+    )
+    assert "Principle 3" in build_prompt or "Component vs Assembly" in build_prompt, (
+        "Build sequence prompt must include Principle 3 (dimensions)"
+    )

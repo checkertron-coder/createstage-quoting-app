@@ -109,6 +109,15 @@
 
 ### Mill Scale Removal Methods
 - **Vinegar bath (dilute acetic acid):** 20-30% white vinegar, submerge 12-24 hours. Zero cost for chemicals, high labor (handling, rinsing, neutralizing, drying). Best for small parts with complex geometry.
+
+### Post-Vinegar Cleanup Method
+1. Rinse under warm running water
+2. Scrub with dish soap and a scotch-brite pad (red, medium grit)
+3. Rinse again thoroughly
+4. Dry with a clean towel
+
+This is a CLEANING step, not a finishing step — surface finish comes from subsequent grinding. Do not introduce finishing operations (wire brushing, chemical neutralizers, compressed air) unless the specific finish calls for it.
+
 - **Angle grinder + flap disc:** 80-grit first, then 120-grit for consistency. Fastest for flat stock and accessible areas. Use 40-grit for thick scale on old material.
 - **Wire wheel:** Good for welds and transitions, not for large flat areas.
 - **Phosphoric acid wash (Metal Prep, Ospho):** Converts scale to iron phosphate primer. Good for outdoor structural that will be painted. Not for stainless.
@@ -278,7 +287,16 @@
 | Grind weld flush | 5-10 min/foot of weld |
 | Brush finish | 15-30 min/sq ft |
 | Vinegar bath | 0.75-1.25 hr active handling only. Soak time (12-24 hr) is UNATTENDED and must NOT be counted as labor hours. |
+| Die grinder cleanup (tight access) | 3-5 min per weld area |
 | Powder coat transport | 3-4 hr minimum (round trip) |
+
+### Tooling and Access
+A fabricator's ability to finish a weld area depends on what tool can physically REACH it. Common shop tooling ranges from large to small:
+- 4.5" angle grinder: open, accessible surfaces. Fast removal.
+- Die grinder with 2" roloc-style discs: constrained spaces, between layers, inside frames. Slower but reaches where angle grinders cannot.
+- Hand files, emery cloth: very tight spots, final touch-up.
+
+"Inaccessible" usually means "requires smaller tooling and more time," not "physically impossible." Adjust labor time rather than skipping the operation.
 
 ### Flat Bar Pyramid — TRUE 3D Design (Not Flat Concentric Squares)
 The CreateStage flat bar pyramid is a 3D stepped pyramid, NOT flat concentric squares 
@@ -480,6 +498,8 @@ A description may reference multiple dimensions that sound similar but are physi
 - SPACING or GAP between elements (empty space, not a physical piece)
 The cut list shows what the fabricator PHYSICALLY CUTS — individual component dimensions. Ask: "What does the saw actually cut?"
 
+This distinction is especially critical for small components like spacers, shims, and standoffs. A description might reference a GAP dimension (space between elements), a PIECE dimension (what you physically cut), and an ASSEMBLED dimension (multiple pieces joined). All three may appear in the same sentence. The cut list must trace back to: what does the saw blade actually pass through? That is the piece dimension.
+
 ### Principle 4: Joint Design Determines Cut Geometry
 Before specifying how to cut a piece, ask: "What happens where this piece meets the next one?"
 - If two pieces form a CONTINUOUS PROFILE at a corner (eye sees one unbroken line) → cut must create that seamless meeting
@@ -504,5 +524,5 @@ Trace through each step and ask: "What does this step make impossible or harder 
 
 ---
 
-*Last updated: 2026-03-01 (Session 11 — fabrication reasoning principles)*
+*Last updated: 2026-03-02 (Session 12 — reasoning sharpening, tooling access, post-vinegar cleanup)*
 *Source: CreateStage shop practices + AWS D1.1 field experience + welding engineering fundamentals*

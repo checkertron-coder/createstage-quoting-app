@@ -88,7 +88,9 @@ def _build_labor_summary() -> str:
 - Cope/notch tube end: 10-20 min/end.
 - MIG fillet (3/16"): 12-18 in/min travel. TIG fillet: 4-6 in/min travel.
 - Grind weld flush: 5-10 min/ft. Brush finish: 15-30 min/sq ft.
-- Stainless multiplier: 1.5x. Thin material (<=16ga): 1.4x. Overhead position: 1.7x."""
+- Die grinder cleanup (tight access): 3-5 min per weld area.
+- Stainless multiplier: 1.5x. Thin material (<=16ga): 1.4x. Overhead position: 1.7x.
+- Tooling access: 4.5" angle grinder (open surfaces), die grinder with 2" roloc (constrained spaces), hand files (tight spots). "Inaccessible" = smaller tooling + more time, not impossible."""
 
 
 def _build_distortion_table() -> str:
@@ -152,45 +154,80 @@ def _build_furniture_sequence() -> str:
 
 
 def _build_railing_sequence() -> str:
-    """Extract railing build sequence."""
-    return """RAILING BUILD SEQUENCE:
-1. Measure in-field — do not trust drawings alone for existing structures.
-2. Fabricate top rail and bottom plate as flat assemblies.
-3. Cut and fit balusters — jig for spacing consistency.
-4. Tack all balusters before welding (spacing is locked once welded).
-5. Weld balusters from center out to minimize accumulated spacing error.
-6. Weld top and bottom rail connections.
-7. Grind welds visible from walking side.
-8. Prime/paint before installation (touch up field welds after)."""
+    """Extract railing build sequence from current FAB_KNOWLEDGE.md Section 5."""
+    raw = _find_section("BUILD SEQUENCE")
+    if not raw:
+        return ""
+    lines = raw.split("\n")
+    railing_lines = []
+    in_railing = False
+    for line in lines:
+        if "### Railings" in line:
+            in_railing = True
+            continue
+        elif line.startswith("### ") and in_railing:
+            break
+        elif in_railing:
+            railing_lines.append(line)
+    if railing_lines:
+        return "RAILING BUILD SEQUENCE (from FAB_KNOWLEDGE.md):\n" + "\n".join(
+            l for l in railing_lines if l.strip()
+        )
+    return ""
 
 
 def _build_gate_sequence() -> str:
-    """Extract gate build sequence."""
-    return """GATE BUILD SEQUENCE:
-1. Lay out frame on welding table — square is critical.
-2. Cut frame members with compound miter where needed.
-3. Tack and check diagonal — gates are large, distortion is amplified.
-4. Weld frame with backstep technique on long members.
-5. Fit and weld infill (pickets, flat bar pattern, mesh).
-6. Add hardware mounting plates (hinges, latch) BEFORE surface finishing.
-7. Mock-install hinges and check swing before powder coat.
-8. Surface prep and finish. Install hardware. Install gate."""
+    """Extract gate build sequence from current FAB_KNOWLEDGE.md Section 5."""
+    raw = _find_section("BUILD SEQUENCE")
+    if not raw:
+        return ""
+    lines = raw.split("\n")
+    gate_lines = []
+    in_gate = False
+    for line in lines:
+        if "### Gates" in line:
+            in_gate = True
+            continue
+        elif line.startswith("### ") and in_gate:
+            break
+        elif in_gate:
+            gate_lines.append(line)
+    if gate_lines:
+        return "GATE BUILD SEQUENCE (from FAB_KNOWLEDGE.md):\n" + "\n".join(
+            l for l in gate_lines if l.strip()
+        )
+    return ""
 
 
 def _build_reasoning_principles() -> str:
-    """Extract Section 12 — Fabrication Reasoning Principles. Always included."""
+    """Extract Section 12 — Fabrication Reasoning Principles. Always included.
+
+    Uses full text (not _trim_to_rules) because principles contain critical
+    prose paragraphs that don't start with bullet prefixes but are essential
+    for AI reasoning (e.g., Principle 3 spacer dimension clarification).
+    """
     raw = _find_section("FABRICATION REASONING PRINCIPLES")
     if not raw:
         return ""
-    return "FABRICATION REASONING PRINCIPLES:\n" + _trim_to_rules(raw, max_lines=40)
+    lines = raw.strip().split("\n")
+    kept = [l for l in lines if l.strip()]
+    return "FABRICATION REASONING PRINCIPLES:\n" + "\n".join(kept[:60])
 
 
 def _build_decorative_stock_prep() -> str:
-    """Extract Section 11 — Decorative Stock Prep. Included for decorative + bare metal jobs."""
+    """Extract Section 11 — Decorative Stock Prep. Included for decorative + bare metal jobs.
+
+    Uses full text (not _trim_to_rules) because this section contains critical
+    prose paragraphs (spacer dimensions, why-this-matters) that don't start with
+    bullet/number prefixes but are essential for AI reasoning.
+    """
     raw = _find_section("DECORATIVE STOCK PREP")
     if not raw:
         return ""
-    return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + _trim_to_rules(raw, max_lines=30)
+    # Return full section content — it's already concise and actionable
+    lines = raw.strip().split("\n")
+    kept = [l for l in lines if l.strip()]
+    return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + "\n".join(kept[:50])
 
 
 # Cache the always-included snippets
