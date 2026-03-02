@@ -67,6 +67,9 @@ PROCESS_NAMES = {
     "hardware_install": "Hardware Install",
     "site_install": "Site Install",
     "final_inspection": "Final Inspection",
+    "stock_prep_grind": "Stock Prep & Grind",
+    "post_weld_cleanup": "Post-Weld Cleanup",
+    "coating_application": "Coating Application",
 }
 
 
@@ -172,6 +175,17 @@ def _fmt(amount) -> str:
         return f"${float(amount):,.2f}"
     except (ValueError, TypeError):
         return "$0.00"
+
+
+def _fmt_length(length) -> str:
+    """Format a length in inches for display. Handles sub-inch values."""
+    if length is None or length <= 0:
+        return "-"
+    if length < 1:
+        return '%.2f"' % length
+    if length == int(length):
+        return '%d"' % int(length)
+    return '%.1f"' % length
 
 
 def _fmt_hrs(hours) -> str:
@@ -308,7 +322,7 @@ def generate_quote_pdf(
     pdf.cell(0, 8, f"QUOTE #{quote_number}", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 5, f"Date: {date_str}", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 5, "Valid for: 30 days", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
 
     # Client name
     client = priced_quote.get("client_name")
@@ -364,7 +378,7 @@ def generate_quote_pdf(
         length = item.get("length_inches")
         qty = item.get("quantity", 1)
         cut = item.get("cut_type", "square")
-        length_str = f'{length}"' if length else "-"
+        length_str = _fmt_length(length)
         pdf.table_row([_safe(desc), _safe(profile), length_str, str(qty), _safe(cut)], cut_widths)
 
     pdf.ln(4)
@@ -385,7 +399,7 @@ def generate_quote_pdf(
             qty = cut.get("quantity", 1)
             cut_type = _safe(str(cut.get("cut_type", "square"))[:12])
             notes = _safe(str(cut.get("notes", ""))[:18])
-            length_str = '%.0f"' % length if length else "-"
+            length_str = _fmt_length(length)
             pdf.table_row([desc, profile, length_str, str(qty), cut_type, notes],
                           detail_widths)
 
@@ -602,8 +616,8 @@ def generate_quote_pdf(
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(100, 100, 100)
     pdf.set_x(pdf.l_margin)
-    pdf.cell(pw, 4, "This quote is valid for 30 days from the date above.", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(pw, 4, "Payment terms: 50% deposit, balance upon completion.", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(pw, 4, "This quote is valid for 7 days from the date above.", new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(pw, 4, "Payment terms: 50% of labor + 100% of materials & consumables due at signing. Remaining 50% of labor due upon completion.")
     pdf.set_text_color(0, 0, 0)
 
     return pdf.output()

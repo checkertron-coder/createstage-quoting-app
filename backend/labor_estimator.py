@@ -115,7 +115,7 @@ class LaborEstimator:
                     or "full installation" in install_str):
                 site_install += 2.0
 
-        # --- Assemble 11-process list ---
+        # --- Assemble process list ---
         hours_map = {
             "layout_setup": labor_hours["layout_setup"],
             "cut_prep": labor_hours["cut_prep"],
@@ -130,10 +130,22 @@ class LaborEstimator:
             "final_inspection": labor_hours["final_inspection"],
         }
 
+        # Handle split grind keys (decorative flat bar + bare metal)
+        if labor_hours.get("stock_prep_grind", 0) > 0:
+            hours_map["grind_clean"] = 0.0
+            hours_map["stock_prep_grind"] = labor_hours["stock_prep_grind"]
+            hours_map["post_weld_cleanup"] = labor_hours["post_weld_cleanup"]
+
+        # Build combined process list: base 11 + any extra split keys
+        extra_processes = [k for k in hours_map if k not in LABOR_PROCESSES]
+        all_processes = LABOR_PROCESSES + extra_processes
+
         note = "Deterministic — calculated from cut list and shop standards"
         processes = []
-        for process_name in LABOR_PROCESSES:
+        for process_name in all_processes:
             hours = round(max(hours_map.get(process_name, 0.0), 0.0), 2)
+            if hours == 0.0 and process_name in extra_processes:
+                continue  # Skip zero-hour extra keys
             rate = self._get_rate_for_process(process_name, is_onsite, user_rates)
             processes.append({
                 "process": process_name,

@@ -229,6 +229,22 @@ def calculate_labor_hours(job_type, cut_list, fields):
            " + 90 min mill scale" if needs_mill_scale else "",
            grind_min, grind_clean))
 
+    # --- Grind split for decorative flat bar + bare metal ---
+    has_decorative_flat_bar = type_b_count > 0 and any(
+        "flat_bar" in str(item.get("profile", "")).lower() for item in cut_list
+    )
+    stock_prep_grind = 0.0
+    post_weld_cleanup = 0.0
+    if has_decorative_flat_bar and needs_mill_scale:
+        stock_prep_grind = round(grind_clean * 0.65, 2)
+        post_weld_cleanup = min(round(grind_clean * 0.35, 2), 2.0)
+        reasoning_lines.append(
+            "GRIND SPLIT: Decorative flat bar + bare metal → "
+            "stock_prep_grind = %.2f hr (65%%), post_weld_cleanup = %.2f hr "
+            "(35%%, capped 2.0). Original grind_clean zeroed."
+            % (stock_prep_grind, post_weld_cleanup))
+        grind_clean = 0.0
+
     # ======================================================
     # STEP 4 — REMAINING CATEGORIES
     # ======================================================
@@ -312,7 +328,8 @@ def calculate_labor_hours(job_type, cut_list, fields):
         return round(val, 2)
 
     total_hrs = (layout_setup + cut_prep + fit_tack + full_weld
-                 + grind_clean + finish_prep + coating_application + final_inspection)
+                 + grind_clean + stock_prep_grind + post_weld_cleanup
+                 + finish_prep + coating_application + final_inspection)
     days = total_hrs / 8.0
 
     reasoning_lines.append(
@@ -331,6 +348,8 @@ def calculate_labor_hours(job_type, cut_list, fields):
         "finish_prep": _safe(finish_prep),
         "coating_application": _safe(coating_application),
         "final_inspection": _safe(final_inspection),
+        "stock_prep_grind": _safe(stock_prep_grind),
+        "post_weld_cleanup": _safe(post_weld_cleanup),
         "_reasoning": "\n".join(reasoning_lines),
         "_flagged": flagged,
     }

@@ -22,20 +22,43 @@ class FurnitureTableCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        quantity = self.parse_int(fields.get("quantity"), default=1)
+        if quantity < 1:
+            quantity = 1
+
+        # Hardware — created before AI/template branch so both paths get it
+        hardware = [self.make_hardware_item(
+            description="Adjustable leveling feet",
+            quantity=4 * quantity,
+            options=[
+                {"supplier": "McMaster-Carr", "price": 5.00,
+                 "url": "https://www.mcmaster.com/leveling-feet",
+                 "part_number": None, "lead_days": 3},
+                {"supplier": "Amazon", "price": 3.50,
+                 "url": "https://www.amazon.com/s?k=adjustable+leveling+feet+3/8-16",
+                 "part_number": None, "lead_days": 5},
+                {"supplier": "Grainger", "price": 6.00,
+                 "url": "https://www.grainger.com/category/leveling-feet",
+                 "part_number": None, "lead_days": 2},
+            ],
+        )]
+
         # Try AI cut list when description exists
-        print(f"FURNITURE_TABLE DEBUG: _has_description = {self._has_description(fields)}")
-        print(f"FURNITURE_TABLE DEBUG: description field = {str(fields.get('description', 'MISSING'))[:100]}")
         if self._has_description(fields):
             ai_result = self._try_ai_cut_list("furniture_table", fields)
             if ai_result is not None:
-                return self._build_from_ai_cuts("furniture_table", ai_result, fields, assumptions)
+                return self._build_from_ai_cuts(
+                    "furniture_table", ai_result, fields, assumptions,
+                    hardware=hardware)
 
-        return self._template_calculate(fields, assumptions)
+        return self._template_calculate(fields, assumptions, hardware)
 
-    def _template_calculate(self, fields: dict, assumptions: list) -> dict:
+    def _template_calculate(self, fields: dict, assumptions: list,
+                            hardware: list = None) -> dict:
         """Template-based calculation when AI is unavailable."""
         items = []
-        hardware = []
+        if hardware is None:
+            hardware = []
         total_weight = 0.0
         total_sq_ft = 0.0
         total_weld_inches = 0.0
@@ -173,17 +196,6 @@ class FurnitureTableCalculator(BaseCalculator):
             waste_factor=self.WASTE_TUBE,
         ))
         total_weight += bottom_weight
-
-        # Leveling feet hardware
-        hardware.append(self.make_hardware_item(
-            description="Adjustable leveling feet",
-            quantity=4 * quantity,
-            options=[
-                {"supplier": "McMaster-Carr", "price": 5.00, "url": "", "part_number": None, "lead_days": 3},
-                {"supplier": "Amazon", "price": 3.50, "url": "", "part_number": None, "lead_days": 5},
-                {"supplier": "Grainger", "price": 6.00, "url": "", "part_number": None, "lead_days": 2},
-            ],
-        ))
 
         # Weld totals
         total_weld_inches = leg_count * 8  # Leg-to-frame welds (4 sides x 2")

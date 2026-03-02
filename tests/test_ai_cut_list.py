@@ -27,8 +27,9 @@ from backend.calculators.repair_structural import RepairStructuralCalculator
 from backend.hardware_sourcer import HardwareSourcer
 from backend.pricing_engine import PricingEngine
 from backend.pdf_generator import (
-    generate_quote_pdf, JOB_TYPE_NAMES, generate_job_summary
+    generate_quote_pdf, JOB_TYPE_NAMES, generate_job_summary, _fmt_length
 )
+from backend.calculators.labor_calculator import calculate_labor_hours
 
 
 # ============================================================
@@ -613,3 +614,106 @@ def test_pricing_engine_omits_empty_ai_sections():
     result = engine.build_priced_quote(session_data, user)
     assert "detailed_cut_list" not in result
     assert "build_instructions" not in result
+
+
+# ============================================================
+# Rockstar quote fixes
+# ============================================================
+
+def test_furniture_hardware_in_ai_path():
+    """Furniture table AI path includes hardware (leveling feet)."""
+    calc = FurnitureTableCalculator()
+
+    # Mock AI cut list return
+    mock_cuts = [
+        {
+            "description": "Table leg",
+            "piece_name": "leg",
+            "group": "frame",
+            "material_type": "square_tubing",
+            "profile": "sq_tube_2x2_11ga",
+            "length_inches": 30.0,
+            "quantity": 4,
+            "cut_type": "square",
+            "cut_angle": 90.0,
+            "weld_process": "tig",
+            "weld_type": "fillet",
+            "notes": "4 legs"
+        },
+        {
+            "description": "Frame rail",
+            "piece_name": "rail",
+            "group": "frame",
+            "material_type": "square_tubing",
+            "profile": "sq_tube_1.5x1.5_11ga",
+            "length_inches": 60.0,
+            "quantity": 2,
+            "cut_type": "miter_45",
+            "cut_angle": 45.0,
+            "weld_process": "tig",
+            "weld_type": "butt",
+            "notes": "2 long rails"
+        },
+    ]
+
+    with patch.object(calc, "_try_ai_cut_list", return_value=mock_cuts):
+        result = calc.calculate({
+            "description": "End table with flat bar pyramid pattern",
+            "approximate_size": "20 x 20 x 32",
+            "quantity": "1",
+        })
+
+    assert result["hardware"], "AI path should include hardware"
+    hw_descs = [h["description"].lower() for h in result["hardware"]]
+    assert any("leveling" in d for d in hw_descs), "Should have leveling feet"
+    # Check quantity is at least 4
+    for h in result["hardware"]:
+        if "leveling" in h["description"].lower():
+            assert h["quantity"] >= 4
+
+
+def test_spacer_length_format_not_zero():
+    """_fmt_length handles sub-inch values without rounding to 0."""
+    assert _fmt_length(0.5) == '0.50"'
+    assert _fmt_length(0.25) == '0.25"'
+    assert _fmt_length(0.75) == '0.75"'
+    assert _fmt_length(24) == '24"'
+    assert _fmt_length(24.0) == '24"'
+    assert _fmt_length(18.5) == '18.5"'
+    assert _fmt_length(0) == "-"
+    assert _fmt_length(None) == "-"
+    assert _fmt_length(-1) == "-"
+
+
+def test_grind_split_decorative_flat_bar():
+    """Labor calc splits grind for decorative flat bar + bare metal finish."""
+    cut_list = [
+        {
+            "description": "Table leg",
+            "profile": "sq_tube_2x2_11ga",
+            "quantity": 4,
+            "cut_type": "square",
+            "group": "frame",
+        },
+        {
+            "description": "Pyramid flat bar layer 1",
+            "profile": "flat_bar_1x0.125",
+            "quantity": 4,
+            "cut_type": "square",
+            "group": "decorative",
+        },
+        {
+            "description": "Pyramid flat bar layer 2",
+            "profile": "flat_bar_1x0.125",
+            "quantity": 4,
+            "cut_type": "square",
+            "group": "decorative",
+        },
+    ]
+    fields = {"finish": "clearcoat"}
+
+    result = calculate_labor_hours("furniture_table", cut_list, fields)
+
+    assert result["stock_prep_grind"] > 0, "Should have stock prep grind hours"
+    assert result["post_weld_cleanup"] > 0, "Should have post-weld cleanup hours"
+    assert result["grind_clean"] == 0.0, "grind_clean should be zeroed when split"

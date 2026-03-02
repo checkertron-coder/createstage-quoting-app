@@ -253,6 +253,11 @@ CRITICAL RULES FOR CUSTOM FEATURES:
 - Each piece in a single square layer must have the SAME length (all 4 sides of a square are equal).
 - For pyramid/concentric patterns: calculate each layer separately. Start with the outermost square, step inward by the specified spacing, repeat until no more full squares fit. Each layer = 4 pieces.
 - Example: 20" inside frame, 1/4" spacing per side. Layer 1: 4 pcs at 19.5". Layer 2: 4 pcs at 19.0". Layer 3: 4 pcs at 18.5". Continue until pieces are too small to be practical (< 3").
+- UNIFORM LAYER STEPS: All layers in a concentric/pyramid pattern MUST reduce by the SAME increment.
+  Calculate: step_size = interior_span / (desired_layers - 1), round to nearest 0.25".
+  Example: 18" span, 10 layers -> step = 18/9 = 2.0". Layers: 18, 16, 14, 12, 10, 8, 6, 4.
+  WRONG: 18, 16, 15, 14, 12, 10, 9 (inconsistent steps of -2, -1, -1, -2, -2, -1).
+  RIGHT: 18, 16, 14, 12, 10, 8, 6, 4 (uniform -2" steps).
 - Do NOT invent structural pieces (tabs, supports, connectors, spacers) that were not mentioned in the description. Only include pieces the user asked for.
 
 RULES:
@@ -347,7 +352,10 @@ Return ONLY valid JSON — an array of objects:
             qty = item.get("quantity", 1)
             length = item.get("length_inches", 0)
             weld = item.get("cut_type", "square")
-            cut_lines.append('  - %s (qty %d, %.0f", cut: %s)' % (desc, qty, length, weld))
+            length_str = ('%.2f"' % length if length < 1 else
+                         '%d"' % int(length) if length == int(length) else
+                         '%.1f"' % length) if length else '0"'
+            cut_lines.append('  - %s (qty %d, %s, cut: %s)' % (desc, qty, length_str, weld))
         cuts_text = "\n".join(cut_lines) if cut_lines else "  (no items)"
 
         # Detect weld process from cut list
@@ -393,7 +401,33 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
 ---
 """ % knowledge_snippet
 
-        if needs_mill_scale_removal:
+        # Detect decorative flat bar items in cut list
+        has_decorative_flat_bar = any(
+            "flat_bar" in str(item.get("profile", "")).lower()
+            for item in cut_list
+        )
+
+        if needs_mill_scale_removal and has_decorative_flat_bar:
+            build_sequence = """
+BUILD SEQUENCE (decorative flat bar + bare metal finish — stock prep BEFORE cutting):
+This project has decorative flat bar with a bare metal finish. You CANNOT grind tiny cut pieces to a furniture finish — stock prep must happen on raw stock BEFORE cutting.
+1. Vinegar bath raw flat bar stock (full lengths, not cut pieces). Submerge 24-48 hrs to remove mill scale.
+2. Remove from vinegar, clean with warm water + dish soap, scrub with scotch-brite pad, rinse, towel dry immediately.
+3. Heavy grind raw flat bar stock to furniture finish (flap disc 80 -> 120 grit on full-length stock). This is your "Stock Prep & Grind" — the bulk of the grind hours.
+4. Layout and mark all pieces on prepped stock. Use tape/sharpie, not soapstone (soapstone scratches the finish).
+5. Cut all tube/structural pieces (chop saw, band saw).
+6. Weld structural tube frame (MIG). Square-check after tacking.
+7. Grind frame welds smooth (angle grinder, flap disc).
+8. Cut flat bar pieces from prepped stock (band saw or chop saw with fine blade). Handle with gloves to avoid fingerprints.
+9. Cut and prep spacers from leftover tube or flat bar stock.
+10. Dry-fit spacers into position on frame. Verify uniform spacing.
+11. Fit, tack, and weld decorative flat bar pieces (TIG). Use physical spacers. Work from center outward.
+12. Light post-weld cleanup on decorative weld areas ONLY (wire brush, light scotch-brite). Do NOT heavy grind — you already prepped the stock.
+13. Acetone wipe entire piece to remove oils, fingerprints, dust.
+14. Apply finish (clear coat, wax, patina treatment, etc.).
+15. Install hardware (leveling feet, mounting brackets, etc.).
+"""
+        elif needs_mill_scale_removal:
             build_sequence = """
 BUILD SEQUENCE (bare metal finish — mill scale removal AFTER welding):
 This project has a bare metal finish (clear coat, brushed, raw, or patina). Mill scale must be removed for proper adhesion and appearance. Do this AFTER all welding is complete.
