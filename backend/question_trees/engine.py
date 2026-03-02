@@ -8,10 +8,11 @@ re-asking questions already answered in the user's initial description.
 
 import base64
 import json
-import os
 import urllib.request
 from pathlib import Path
 from typing import Optional
+
+from ..gemini_client import call_fast, call_vision as _gemini_vision
 
 # Directory where question tree JSON files live
 DATA_DIR = Path(__file__).parent / "data"
@@ -274,43 +275,15 @@ def _call_gemini_extract(prompt: str) -> dict:
     Returns parsed dict of extracted fields.
     Falls back to empty dict on any error.
     """
-    import urllib.request
-    import urllib.error
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-    if not api_key:
-        # No API key — return empty extraction (tests and dev without Gemini)
-        return {}
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "responseMimeType": "application/json",
-        },
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed
+        text = call_fast(prompt, timeout=30)
+        if text is None:
             return {}
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+        return {}
     except Exception:
-        # Any failure — return empty extraction rather than crashing
         return {}
 
 
@@ -410,52 +383,21 @@ def _call_gemini_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     Returns parsed photo extraction result.
     Falls back to empty result on any error.
     """
-    import urllib.error
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-    if not api_key:
-        return _empty_photo_result()
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-
-    payload = json.dumps({
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": mime_type, "data": image_b64}},
-            ]
-        }],
-        "generationConfig": {
-            "temperature": 0.1,
-            "responseMimeType": "application/json",
-        },
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=60) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                # Ensure all expected keys exist
-                return {
-                    "extracted_fields": parsed.get("extracted_fields", {}),
-                    "photo_observations": parsed.get("photo_observations", ""),
-                    "material_detected": parsed.get("material_detected", "unknown"),
-                    "dimensions_detected": parsed.get("dimensions_detected", {}),
-                    "damage_assessment": parsed.get("damage_assessment", "N/A"),
-                    "confidence": float(parsed.get("confidence", 0.0)),
-                }
+        text = _gemini_vision(prompt, image_b64, mime_type, timeout=60)
+        if text is None:
             return _empty_photo_result()
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return {
+                "extracted_fields": parsed.get("extracted_fields", {}),
+                "photo_observations": parsed.get("photo_observations", ""),
+                "material_detected": parsed.get("material_detected", "unknown"),
+                "dimensions_detected": parsed.get("dimensions_detected", {}),
+                "damage_assessment": parsed.get("damage_assessment", "N/A"),
+                "confidence": float(parsed.get("confidence", 0.0)),
+            }
+        return _empty_photo_result()
     except Exception:
         return _empty_photo_result()
 
@@ -553,12 +495,8 @@ def detect_job_type(description: str) -> dict:
         return keyword_result
 
     # Step 3: Try Gemini for better accuracy
-    # Use fast model — detection is a simple classification, not reasoning
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_CUTLIST_MODEL", "gemini-2.5-flash")
-
-    if not api_key:
-        # No API key — use keyword result or default
+    from ..gemini_client import is_configured
+    if not is_configured():
         if keyword_result:
             return keyword_result
         return {
@@ -584,33 +522,18 @@ RULES:
 Return ONLY valid JSON:
 {{"job_type": "one_of_the_types", "confidence": 0.85, "ambiguous": false}}"""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "responseMimeType": "application/json",
-        },
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(text)
-            # Validate job_type is in the list
-            if parsed.get("job_type") not in V2_JOB_TYPES:
-                parsed["job_type"] = "custom_fab"
-                parsed["confidence"] = max(parsed.get("confidence", 0) * 0.5, 0.1)
-            return parsed
+        text = call_fast(prompt)
+        if text is None:
+            if keyword_result:
+                return keyword_result
+            return {"job_type": "custom_fab", "confidence": 0.0, "ambiguous": True}
+        parsed = json.loads(text)
+        if parsed.get("job_type") not in V2_JOB_TYPES:
+            parsed["job_type"] = "custom_fab"
+            parsed["confidence"] = max(parsed.get("confidence", 0) * 0.5, 0.1)
+        return parsed
     except Exception:
-        # Gemini failed or timed out — use keyword result or default
         if keyword_result:
             return keyword_result
         return {

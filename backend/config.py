@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_CUTLIST_MODEL: str = "gemini-2.5-flash"
+    GEMINI_FAST_MODEL: str = ""
+    GEMINI_DEEP_MODEL: str = ""
 
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time

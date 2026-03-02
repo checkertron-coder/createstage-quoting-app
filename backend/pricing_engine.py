@@ -8,9 +8,9 @@ Input: MaterialList + LaborEstimate + FinishingSection + hardware pricing
 Output: PricedQuote (per CLAUDE.md contract)
 """
 
-import os
 from datetime import datetime
 
+from .gemini_client import get_model_name
 from .hardware_sourcer import HardwareSourcer
 
 
@@ -198,9 +198,8 @@ class PricingEngine:
                 "AI estimator was unavailable. Consider re-running when available."
             )
         else:
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
             assumptions.append(
-                "Labor hours estimated by AI (%s) with domain guidance." % model_name
+                "Labor hours estimated by AI (%s) with domain guidance." % get_model_name("deep")
             )
 
         # Hardware pricing source

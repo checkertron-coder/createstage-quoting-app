@@ -11,7 +11,6 @@ Railway's 30s proxy timeout from returning 503 HTML.
 """
 
 import json
-import os
 import threading
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -19,6 +18,7 @@ from pydantic import BaseModel
 from typing import Optional
 from .. import models
 from ..database import get_db
+from ..gemini_client import call_deep, get_model_name, is_configured
 from ..quote_jobs import create_job, get_job, run_in_background, mark_db_saved
 
 router = APIRouter(prefix="/ai", tags=["ai-quoting"])
@@ -203,52 +203,24 @@ def call_gemini(prompt):
     Used by the request handler for cache hits (fast path).
     Raises HTTPException on failure — safe only in request context.
     """
-    import urllib.request
-    import urllib.error
-
     cache_key = prompt[:100]
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-    if not api_key:
+    if not is_configured():
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s" % (model, api_key)
-
-    payload = json.dumps({
-        "contents": [{
-            "parts": [{
-                "text": MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": "application/json"
-        }
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    full_prompt = MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
+    text = call_deep(full_prompt)
+    if text is None:
+        raise HTTPException(status_code=502, detail="Gemini call failed: no response")
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(text)
-            _normalize_estimate(parsed)
-            _cache_set(cache_key, parsed)
-            return parsed
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        raise HTTPException(status_code=502, detail="Gemini API error: %s" % error_body)
+        parsed = json.loads(text)
+        _normalize_estimate(parsed)
+        _cache_set(cache_key, parsed)
+        return parsed
     except Exception as e:
         raise HTTPException(status_code=502, detail="Gemini call failed: %s" % str(e))
 
@@ -260,52 +232,24 @@ def call_gemini_background(prompt):
     Same as call_gemini() but raises plain exceptions instead of HTTPException,
     since HTTPException only makes sense in a request context.
     """
-    import urllib.request
-    import urllib.error
-
     cache_key = prompt[:100]
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-    if not api_key:
+    if not is_configured():
         raise RuntimeError("GEMINI_API_KEY not configured")
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s" % (model, api_key)
-
-    payload = json.dumps({
-        "contents": [{
-            "parts": [{
-                "text": MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
-            }]
-        }],
-        "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": "application/json"
-        }
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
+    full_prompt = MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
+    text = call_deep(full_prompt)
+    if text is None:
+        raise RuntimeError("Gemini call failed: no response")
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            parsed = json.loads(text)
-            _normalize_estimate(parsed)
-            _cache_set(cache_key, parsed)
-            return parsed
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode()
-        raise RuntimeError("Gemini API error: %s" % error_body)
+        parsed = json.loads(text)
+        _normalize_estimate(parsed)
+        _cache_set(cache_key, parsed)
+        return parsed
     except Exception as e:
         raise RuntimeError("Gemini call failed: %s" % str(e))
 
@@ -585,4 +529,4 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
 def test_gemini():
     """Quick test to verify Gemini API key is working."""
     result = call_gemini("quote a simple steel frame")
-    return {"status": "ok", "model": os.getenv("GEMINI_MODEL"), "result": result}
+    return {"status": "ok", "model": get_model_name("deep"), "result": result}

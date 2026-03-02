@@ -13,11 +13,10 @@ Uses Gemini 2.0 Flash for extraction with keyword-based fallback.
 import json
 import logging
 import math
-import os
 import re
-import urllib.error
-import urllib.request
 from typing import Optional
+
+from .gemini_client import call_deep, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -196,10 +195,7 @@ class BidParser:
         Send document text to Gemini for scope extraction.
         Returns list of ExtractedItem dicts.
         """
-        api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-        if not api_key:
+        if not is_configured():
             logger.warning("No GEMINI_API_KEY — using keyword-based fallback for bid parsing")
             return []
 
@@ -211,41 +207,23 @@ class BidParser:
 
         prompt = self._build_extraction_prompt(text)
 
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
-            f":generateContent?key={api_key}"
-        )
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.1,
-                "responseMimeType": "application/json",
-            },
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            url, data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
         try:
-            with urllib.request.urlopen(req, timeout=90) as response:
-                result = json.loads(response.read())
-                response_text = result["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = json.loads(response_text)
+            response_text = call_deep(prompt, temperature=0.1, timeout=90)
+            if response_text is None:
+                return []
+            parsed = json.loads(response_text)
 
-                # Normalize: could be a list or {"items": list}
-                if isinstance(parsed, dict) and "items" in parsed:
-                    raw_items = parsed["items"]
-                elif isinstance(parsed, list):
-                    raw_items = parsed
-                else:
-                    return []
+            # Normalize: could be a list or {"items": list}
+            if isinstance(parsed, dict) and "items" in parsed:
+                raw_items = parsed["items"]
+            elif isinstance(parsed, list):
+                raw_items = parsed
+            else:
+                return []
 
-                return [self._normalize_item(item) for item in raw_items if item]
+            return [self._normalize_item(item) for item in raw_items if item]
         except Exception as e:
-            logger.warning(f"Gemini bid extraction failed: {e}")
+            logger.warning("Gemini bid extraction failed: %s", e)
             return []
 
     def _build_extraction_prompt(self, text: str) -> str:

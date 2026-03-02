@@ -11,11 +11,10 @@ uses its own template-based output. Never crashes.
 
 import json
 import logging
-import os
 import re
-import urllib.request
-import urllib.error
 from typing import Optional, List, Dict
+
+from ..gemini_client import call_deep, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -104,15 +103,13 @@ class AICutListGenerator:
             Each dict has: description, material_type, profile, length_inches,
             quantity, cut_type, cut_angle, weld_process, weld_type, group, notes.
         """
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        if not is_configured():
             logger.info("No GEMINI_API_KEY — skipping AI cut list")
             return None
 
         try:
             prompt = self._build_prompt(job_type, fields)
-            cutlist_model = os.getenv("GEMINI_CUTLIST_MODEL", "gemini-2.5-flash")
-            response_text = self._call_gemini(prompt, model=cutlist_model)
+            response_text = self._call_gemini(prompt)
             cuts = self._parse_response(response_text)
             if cuts and len(cuts) > 0:
                 return cuts
@@ -136,8 +133,7 @@ class AICutListGenerator:
             List of step dicts [{step, title, description, tools, duration_minutes,
             weld_process, safety_notes}], or None on failure.
         """
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
+        if not is_configured():
             logger.info("No GEMINI_API_KEY — skipping build instructions")
             return None
 
@@ -476,36 +472,12 @@ Return ONLY valid JSON — an array of step objects:
 
         return prompt
 
-    def _call_gemini(self, prompt: str, model: Optional[str] = None) -> str:
-        """Call Gemini API. Raises on failure."""
-        api_key = os.getenv("GEMINI_API_KEY")
-        if model is None:
-            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            "%s:generateContent?key=%s" % (model, api_key)
-        )
-
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "responseMimeType": "application/json",
-            },
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
-        with urllib.request.urlopen(req, timeout=180) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            return text
+    def _call_gemini(self, prompt: str) -> str:
+        """Call Gemini API. Raises RuntimeError on failure."""
+        text = call_deep(prompt, timeout=180)
+        if text is None:
+            raise RuntimeError("Gemini returned no response")
+        return text
 
     def _parse_response(self, response_text: str) -> Optional[List[Dict]]:
         """Parse Gemini response into cut list items with expanded schema."""

@@ -14,9 +14,8 @@ The app NEVER fails because the AI is down.
 
 import json
 import logging
-import os
-import urllib.request
-import urllib.error
+
+from .gemini_client import call_deep
 
 logger = logging.getLogger(__name__)
 
@@ -401,34 +400,11 @@ Return ONLY valid JSON:
         return "\n".join(lines)
 
     def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini API. Raises on failure (caller handles fallback)."""
-        api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{model}:generateContent?key={api_key}"
-        )
-
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "responseMimeType": "application/json",
-            },
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
-        with urllib.request.urlopen(req, timeout=90) as response:
-            result = json.loads(response.read())
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-            return text
+        """Call Gemini API. Raises RuntimeError on failure."""
+        text = call_deep(prompt, timeout=90)
+        if text is None:
+            raise RuntimeError("Gemini returned no response")
+        return text
 
     def _parse_response(self, response_text: str, user_rates: dict, is_onsite: bool) -> dict:
         """

@@ -27,7 +27,8 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 - **Auth:** JWT access/refresh tokens, guest/register/login, profile management
 - **Database:** PostgreSQL on Railway (SQLite for tests), all v2 tables implemented
 - **Async AI Processing:** POST `/api/ai/estimate` and `/api/ai/quote` return `job_id` immediately, Gemini runs in background thread, frontend polls `GET /api/ai/job/{job_id}` — prevents Railway 30s proxy 503 timeout
-- **Tests:** 357 passing tests across 14 test files
+- **Centralized Gemini Client:** All Gemini API calls go through `backend/gemini_client.py` — tiered model selection (fast/deep), unified error handling with 429 retry, structured logging
+- **Tests:** 384 passing tests across 15 test files
 
 ### Post Session 10 Hotfix — AI Cut List Bug Fixes
 
@@ -70,6 +71,7 @@ createstage-quoting-app/
 │   ├── database.py          — DB engine, SessionLocal, Base
 │   ├── config.py            — Settings via pydantic-settings (env vars)
 │   ├── auth.py              — JWT creation/validation, bcrypt hashing, get_current_user dependency
+│   ├── gemini_client.py     — Centralized Gemini API client (call_fast, call_deep, call_vision, tiered model resolution)
 │   ├── weights.py           — Steel weight calculator by profile type (DO NOT MODIFY)
 │   ├── labor_estimator.py   — Stage 4: AI labor estimation (Gemini) + rule-based fallback
 │   ├── finishing.py         — Stage 4: FinishingBuilder (raw/clearcoat/paint/powder_coat/galvanized)
@@ -180,6 +182,7 @@ createstage-quoting-app/
 │   ├── test_ai_cut_list.py             — 20 tests (AI cut list, furniture fixes, PDF sections)
 │   ├── test_session10_intelligence.py  — 39 tests (intelligence layer, AI-first, weld process)
 │   ├── test_async_jobs.py              — 17 tests (async job store, polling endpoints, background tasks)
+│   ├── test_gemini_client.py           — 21 tests (centralized Gemini client, model resolution, error handling)
 │   └── fixtures/
 │       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
 ├── alembic/                 — Database migrations
@@ -571,15 +574,23 @@ Profile key format: `{shape}_{dimensions}_{gauge}` — e.g. `sq_tube_2x2_11ga`, 
 
 ## 12. AI Model Assignments
 
-| Usage | Model | Config |
-|---|---|---|
-| Job type detection (Stage 1) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
-| Question clarification (Stage 2) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
-| Labor estimation (Stage 4) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
-| Photo vision | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
-| Bid parsing (Session 7) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
+All Gemini calls go through `backend/gemini_client.py` with tiered model selection:
 
-Upgrade path: set `GEMINI_MODEL=gemini-3.0-flash` env var to upgrade all without code changes.
+| Usage | Tier | Default | Env Override |
+|---|---|---|---|
+| Job type detection (Stage 1) | fast | `gemini-2.5-flash` | `GEMINI_FAST_MODEL` |
+| Field extraction (Stage 2) | fast | `gemini-2.5-flash` | `GEMINI_FAST_MODEL` |
+| Photo vision (Stage 2) | fast | `gemini-2.5-flash` | `GEMINI_FAST_MODEL` |
+| AI cut list (Stage 3) | deep | `gemini-2.5-flash` | `GEMINI_DEEP_MODEL` |
+| Labor estimation (Stage 4) | deep | `gemini-2.5-flash` | `GEMINI_DEEP_MODEL` |
+| Bid parsing (Session 7) | deep | `gemini-2.5-flash` | `GEMINI_DEEP_MODEL` |
+| Legacy AI quote | deep | `gemini-2.5-flash` | `GEMINI_DEEP_MODEL` |
+
+Model resolution chains (backward-compatible):
+- **Fast:** `GEMINI_FAST_MODEL` → `GEMINI_CUTLIST_MODEL` → `gemini-2.5-flash`
+- **Deep:** `GEMINI_DEEP_MODEL` → `GEMINI_MODEL` → `gemini-2.5-flash`
+
+Upgrade path: set `GEMINI_DEEP_MODEL=gemini-3.0-flash` to upgrade deep calls without affecting fast detection.
 
 ---
 
@@ -592,7 +603,9 @@ GEMINI_API_KEY=...          # Gemini API key
 JWT_SECRET=...              # openssl rand -hex 32
 
 # Optional (with defaults)
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-2.5-flash          # Deep tier fallback
+GEMINI_FAST_MODEL=                     # Fast tier primary (default: GEMINI_CUTLIST_MODEL → gemini-2.5-flash)
+GEMINI_DEEP_MODEL=                     # Deep tier primary (default: GEMINI_MODEL → gemini-2.5-flash)
 JWT_ALGORITHM=HS256
 JWT_ACCESS_EXPIRE_MINUTES=15
 JWT_REFRESH_EXPIRE_DAYS=30
@@ -674,7 +687,8 @@ pip install pytest-randomly && pytest tests/ -v -p randomly
 | `test_ai_cut_list.py` | 20 |
 | `test_session10_intelligence.py` | 39 |
 | `test_async_jobs.py` | 17 |
-| **Total** | **357** |
+| `test_gemini_client.py` | 21 |
+| **Total** | **384** |
 
 ---
 
