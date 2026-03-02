@@ -717,3 +717,43 @@ def test_grind_split_decorative_flat_bar():
     assert result["stock_prep_grind"] > 0, "Should have stock prep grind hours"
     assert result["post_weld_cleanup"] > 0, "Should have post-weld cleanup hours"
     assert result["grind_clean"] == 0.0, "grind_clean should be zeroed when split"
+
+
+# ============================================================
+# Fabrication reasoning tests
+# ============================================================
+
+def test_fab_knowledge_returns_reasoning_principles():
+    """get_relevant_knowledge ALWAYS includes reasoning principles for any job type."""
+    from backend.calculators.fab_knowledge import get_relevant_knowledge
+
+    # Test with multiple job types — reasoning principles should always be present
+    for jt in ["furniture_table", "cantilever_gate", "straight_railing", "custom_fab"]:
+        result = get_relevant_knowledge(jt, "raw")
+        assert "Principle 1" in result or "Workability" in result, (
+            "Reasoning principles missing for job_type=%s" % jt
+        )
+        assert "Principle 2" in result or "Access Decreases" in result, (
+            "Principle 2 missing for job_type=%s" % jt
+        )
+
+
+def test_fab_knowledge_returns_decorative_stock_prep():
+    """get_relevant_knowledge includes decorative stock prep for decorative + bare metal."""
+    from backend.calculators.fab_knowledge import get_relevant_knowledge
+
+    # Decorative keywords + bare metal finish → should include stock prep
+    result = get_relevant_knowledge(
+        "furniture_table", "clearcoat",
+        description="end table with flat bar pyramid pattern"
+    )
+    assert "DECORATIVE STOCK PREP" in result, "Should include decorative stock prep"
+
+    # Decorative keywords + paint finish → should NOT include stock prep
+    result_paint = get_relevant_knowledge(
+        "furniture_table", "powder_coat",
+        description="end table with flat bar pyramid pattern"
+    )
+    assert "DECORATIVE STOCK PREP" not in result_paint, (
+        "Should NOT include decorative stock prep for powder coat"
+    )

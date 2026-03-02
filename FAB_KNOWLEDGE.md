@@ -350,6 +350,16 @@ Cut list must show INDIVIDUAL pieces, not assembled spacers.
 - Overhead (4F/4G): 1.7×
 - TIG vs MIG: 2.5-3× for same weld
 
+### Finishing Tiers — Labor Multipliers
+| Tier | Description | Multiplier |
+|---|---|---|
+| Industrial/Textured | 1 pass, texture IS the finish | 1.0× |
+| Smooth Brushed | Consistent directional grain | 1.5× |
+| Satin | Minimal scratches, soft sheen | 2.5× |
+| Mirror Polish | Reflective, no visible marks | 4.0× |
+
+Default: Industrial/Textured unless customer specifies otherwise.
+
 ### Complexity Factors (Apply to Total Estimate)
 - Simple, familiar job type: 1.0×
 - First time building job type: 1.3× (learning curve)
@@ -437,10 +447,62 @@ Split grind hours into TWO line items:
 - **Stock Prep & Grind:** Heavy grinding on raw stock before cutting. 60-70% of total grind time.
 - **Post-Weld Cleanup:** Light blending of weld areas only after assembly. 1-2 hours max.
 
+### Spacer and Shim Dimensions
+When a design calls for spacers built from stacked material, the cut list shows individual PIECE dimensions, not the assembled unit or the gap they create. These are often three different numbers.
+
 ### Vinegar Bath Labor
 Soak is NOT labor. Active handling only: setup/submersion 15-30 min + pull/rinse/neutralize/dry 30-45 min = 0.75-1.25 hours total.
 
 ---
 
-*Last updated: 2026-03-01*
+## 12. FABRICATION REASONING PRINCIPLES
+
+These are thinking patterns experienced fabricators use. They are NOT rules for specific jobs — they apply universally.
+
+### Principle 1: Workability Drives Process Order
+Before assigning any operation to a step, ask: "Can I physically perform this operation on this piece, at this size, in this context?"
+- Can the piece be safely held against a grinder at its current size?
+- Is there physical access to reach the work area at this stage of assembly?
+- Will a later assembly step block access to something that needs finishing?
+If an operation becomes impossible or impractical after a certain step, it MUST happen before that step.
+
+### Principle 2: Access Decreases as Assembly Progresses
+Physical access to interior areas DECREASES as pieces are added. Recognize when:
+- Adding the next piece blocks access to grind, clean, or finish behind it
+- Workspace is too constrained for clamps, grinders, or torch access
+- A piece can't be independently held because there's nothing stable to brace against until adjacent pieces are fixed
+When access decreases progressively, complete each area before it becomes unreachable. This may mean permanently fixing each piece as it's placed rather than positioning everything first.
+
+### Principle 3: Component vs Assembly vs Spacing Dimensions
+A description may reference multiple dimensions that sound similar but are physically different:
+- Size of an INDIVIDUAL COMPONENT (what you cut)
+- Size of an ASSEMBLED UNIT (multiple components joined)
+- SPACING or GAP between elements (empty space, not a physical piece)
+The cut list shows what the fabricator PHYSICALLY CUTS — individual component dimensions. Ask: "What does the saw actually cut?"
+
+### Principle 4: Joint Design Determines Cut Geometry
+Before specifying how to cut a piece, ask: "What happens where this piece meets the next one?"
+- If two pieces form a CONTINUOUS PROFILE at a corner (eye sees one unbroken line) → cut must create that seamless meeting
+- If two pieces CROSS, OVERLAP, LAP, or STACK → each piece needs its full cross-section visible at the intersection — that's the design
+- If pieces BUTT end-to-end → joint is about fit and weld access
+Same material can require different cut geometries depending on where it sits. Assign cut type by JOINT INTENT, not material.
+
+### Principle 5: Surface Finish Is a Design Choice, Not Just Prep
+Grinding isn't always about smoothness. Different grits create different TEXTURES, and the texture may BE the finish:
+- Coarse abrasive = bold industrial texture with visible directional lines
+- Fine abrasive = smooth refined surface
+- Multiple progressively finer passes REMOVE texture toward polish
+Ask: "Is the customer trying to CREATE a texture, or REMOVE one?" If a single pass IS the look, additional passes waste time and money. Only escalate when customer explicitly asks for smoother/polished.
+
+### Principle 6: Constraints Propagate Forward
+Every fabrication decision constrains later steps:
+- Cutting to size constrains finishing (small pieces harder to hold/grind)
+- Welding in place constrains access behind it
+- Finish type determines which prep steps exist
+- Assembly sequence determines which pieces can be independently positioned
+Trace through each step and ask: "What does this step make impossible or harder later?" Reorder to avoid conflicts.
+
+---
+
+*Last updated: 2026-03-01 (Session 11 — fabrication reasoning principles)*
 *Source: CreateStage shop practices + AWS D1.1 field experience + welding engineering fundamentals*

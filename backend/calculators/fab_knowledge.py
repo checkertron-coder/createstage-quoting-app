@@ -106,10 +106,13 @@ def _build_distortion_table() -> str:
 
 
 def _build_mill_scale_rules() -> str:
-    """Extract mill scale decision tree."""
+    """Extract mill scale decision tree — reflects both before-cutting and after-welding paths."""
     return """MILL SCALE DECISION:
 - Powder coat or paint: SKIP mill scale removal. Clean + degrease only.
-- Clear coat / raw / brushed / patina: REMOVE mill scale AFTER all welding is done.
+- Clear coat / raw / brushed / patina: REMOVE mill scale. WHEN depends on the pieces:
+  - Decorative flat bar / small pieces that will be hard to grind after cutting: Remove on RAW STOCK BEFORE cutting (Principle 1 — workability). Vinegar bath full lengths, heavy grind to finish, then cut to size.
+  - Large structural pieces / tube frames: Remove AFTER all welding is done. Assembly is stable enough to grind.
+  - Apply Principle 1 (workability) and Principle 2 (access) to determine which path fits the specific job.
 - TIG weld areas: remove scale at weld zones before welding (grind or flap disc) — mill scale causes porosity with TIG.
 - Methods: vinegar bath (small parts, 12-24hr soak), flap disc grind (fastest for accessible areas), wire wheel (welds/transitions)."""
 
@@ -125,21 +128,27 @@ def _build_stainless_notes() -> str:
 
 
 def _build_furniture_sequence() -> str:
-    """Extract furniture build sequence."""
+    """Extract furniture build sequence from current FAB_KNOWLEDGE.md Section 5."""
     raw = _find_section("BUILD SEQUENCE")
     if not raw:
         return ""
-    return """FURNITURE BUILD SEQUENCE:
-1. Cut all tube stock (legs, aprons, stretchers). Deburr all cuts.
-2. Cut and fit decorative elements (flat bar, sheet).
-3. Fixture legs and aprons on flat table, check square.
-4. Tack all corners, check square (diagonal measurement), adjust.
-5. Complete apron welds — alternate sides to manage distortion pull.
-6. Add stretchers and lower elements.
-7. Fit and weld decorative elements.
-8. Check for level and twist — correct with press or targeted heat.
-9. Grind welds per finish spec. Surface prep. Apply finish.
-10. Install glass/wood elements AFTER finish. Install hardware last."""
+    # Extract the Furniture subsection from the full build sequence section
+    lines = raw.split("\n")
+    furniture_lines = []
+    in_furniture = False
+    for line in lines:
+        if "### Furniture" in line:
+            in_furniture = True
+            continue
+        elif line.startswith("### ") and in_furniture:
+            break  # Hit next subsection
+        elif in_furniture:
+            furniture_lines.append(line)
+    if furniture_lines:
+        return "FURNITURE BUILD SEQUENCE (from FAB_KNOWLEDGE.md):\n" + "\n".join(
+            l for l in furniture_lines if l.strip()
+        )
+    return ""
 
 
 def _build_railing_sequence() -> str:
@@ -168,6 +177,22 @@ def _build_gate_sequence() -> str:
 8. Surface prep and finish. Install hardware. Install gate."""
 
 
+def _build_reasoning_principles() -> str:
+    """Extract Section 12 — Fabrication Reasoning Principles. Always included."""
+    raw = _find_section("FABRICATION REASONING PRINCIPLES")
+    if not raw:
+        return ""
+    return "FABRICATION REASONING PRINCIPLES:\n" + _trim_to_rules(raw, max_lines=40)
+
+
+def _build_decorative_stock_prep() -> str:
+    """Extract Section 11 — Decorative Stock Prep. Included for decorative + bare metal jobs."""
+    raw = _find_section("DECORATIVE STOCK PREP")
+    if not raw:
+        return ""
+    return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + _trim_to_rules(raw, max_lines=30)
+
+
 # Cache the always-included snippets
 _WELDING_SUMMARY = _build_welding_summary()
 _LABOR_SUMMARY = _build_labor_summary()
@@ -177,10 +202,13 @@ _STAINLESS_NOTES = _build_stainless_notes()
 _FURNITURE_SEQ = _build_furniture_sequence()
 _RAILING_SEQ = _build_railing_sequence()
 _GATE_SEQ = _build_gate_sequence()
+_REASONING_PRINCIPLES = _build_reasoning_principles()
+_DECORATIVE_STOCK_PREP = _build_decorative_stock_prep()
 
 
 def get_relevant_knowledge(job_type: str, finish_type: str,
-                           has_stainless: bool = False) -> str:
+                           has_stainless: bool = False,
+                           description: str = "") -> str:
     """
     Return a focused knowledge snippet for AI prompt injection.
 
@@ -188,15 +216,20 @@ def get_relevant_knowledge(job_type: str, finish_type: str,
         job_type: The job type string (e.g. "furniture_table")
         finish_type: The finish description from user fields
         has_stainless: True if stainless steel is involved
+        description: Job description text (for keyword detection)
 
     Returns:
-        A string of ~300-500 words with relevant fab knowledge,
+        A string of relevant fab knowledge,
         or empty string if FAB_KNOWLEDGE.md is missing.
     """
     if not _SECTIONS:
         return ""
 
     sections = []
+
+    # ALWAYS include reasoning principles — these apply to every job
+    if _REASONING_PRINCIPLES:
+        sections.append(_REASONING_PRINCIPLES)
 
     # Always include welding process summary and distortion table
     if _WELDING_SUMMARY:
@@ -212,8 +245,19 @@ def get_relevant_knowledge(job_type: str, finish_type: str,
         "brushed", "brushed_steel", "brushed steel",
         "patina", "chemical_patina",
     ]
-    if any(k in finish_lower for k in bare_metal_keywords):
+    is_bare_metal = any(k in finish_lower for k in bare_metal_keywords)
+    if is_bare_metal:
         sections.append(_MILL_SCALE_RULES)
+
+    # Decorative stock prep — when description has decorative keywords + bare metal
+    desc_lower = str(description).lower()
+    decorative_keywords = [
+        "decorative", "pattern", "layered", "woven", "ornamental",
+        "pyramid", "concentric", "inlay", "flat bar",
+    ]
+    has_decorative = any(k in desc_lower for k in decorative_keywords)
+    if has_decorative and is_bare_metal and _DECORATIVE_STOCK_PREP:
+        sections.append(_DECORATIVE_STOCK_PREP)
 
     # Job-type-specific build sequences
     jt = str(job_type).lower()

@@ -196,9 +196,11 @@ class AICutListGenerator:
 
         # Inject relevant fabrication knowledge
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
+        description = str(fields.get("description", "") or "")
         has_stainless = is_stainless
         from .fab_knowledge import get_relevant_knowledge
-        knowledge_snippet = get_relevant_knowledge(job_type, finish_type, has_stainless)
+        knowledge_snippet = get_relevant_knowledge(
+            job_type, finish_type, has_stainless, description=description)
         knowledge_block = ""
         if knowledge_snippet:
             knowledge_block = """
@@ -259,6 +261,9 @@ CRITICAL RULES FOR CUSTOM FEATURES:
   WRONG: 18, 16, 15, 14, 12, 10, 9 (inconsistent steps of -2, -1, -1, -2, -2, -1).
   RIGHT: 18, 16, 14, 12, 10, 8, 6, 4 (uniform -2" steps).
 - Do NOT invent structural pieces (tabs, supports, connectors, spacers) that were not mentioned in the description. Only include pieces the user asked for.
+- JOINT DESIGN determines cut geometry: Before assigning a cut type, determine the JOINT DESIGN at each end. Does it form a continuous profile at a corner, or does it cross/overlap/stack? Joint intent determines cut geometry, not material type.
+- COMPONENT vs ASSEMBLED dimensions: When a description specifies component construction ("two pieces stacked," "assembled from smaller parts"), list the INDIVIDUAL pieces the fabricator physically cuts. Distinguish between: individual piece dimension, assembled unit dimension, and spacing/gap dimension. These are often different numbers.
+- For repeating geometric patterns, calculate step increment from geometry and keep it UNIFORM unless description explicitly specifies variation. Irregular increments = calculation error — recheck math.
 
 RULES:
 1. Every piece must have a SPECIFIC length in inches — no "TBD" or "varies".
@@ -369,7 +374,7 @@ Return ONLY valid JSON — an array of objects:
         if "tig" in weld_processes:
             weld_note = "\nNOTE: This project includes TIG welding. Steps involving TIG should specify appropriate gas (argon), filler rod, and amperage range."
 
-        # Detect finish type to determine mill scale removal and build sequence
+        # Detect finish type for mill scale hint
         all_fields_lower = " ".join(str(v) for v in fields.values()).lower()
         bare_metal_keywords = [
             "clear_coat", "clear coat", "clearcoat",
@@ -388,11 +393,13 @@ Return ONLY valid JSON — an array of objects:
             and any(k in all_fields_lower for k in bare_metal_keywords)
         )
 
-        # Inject relevant fabrication knowledge
+        # Inject relevant fabrication knowledge (includes reasoning principles)
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
+        description = str(fields.get("description", "") or "")
         is_stainless = "stainless" in all_fields_lower or "304" in all_fields_lower or "316" in all_fields_lower
         from .fab_knowledge import get_relevant_knowledge
-        knowledge_snippet = get_relevant_knowledge(job_type, finish_type, is_stainless)
+        knowledge_snippet = get_relevant_knowledge(
+            job_type, finish_type, is_stainless, description=description)
         knowledge_block = ""
         if knowledge_snippet:
             knowledge_block = """
@@ -401,59 +408,33 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
 ---
 """ % knowledge_snippet
 
-        # Detect decorative flat bar items in cut list
-        has_decorative_flat_bar = any(
-            "flat_bar" in str(item.get("profile", "")).lower()
-            for item in cut_list
-        )
-
-        if needs_mill_scale_removal and has_decorative_flat_bar:
-            build_sequence = """
-BUILD SEQUENCE (decorative flat bar + bare metal finish — stock prep BEFORE cutting):
-This project has decorative flat bar with a bare metal finish. You CANNOT grind tiny cut pieces to a furniture finish — stock prep must happen on raw stock BEFORE cutting.
-1. Vinegar bath raw flat bar stock (full lengths, not cut pieces). Submerge 24-48 hrs to remove mill scale.
-2. Remove from vinegar, clean with warm water + dish soap, scrub with scotch-brite pad, rinse, towel dry immediately.
-3. Heavy grind raw flat bar stock to furniture finish (flap disc 80 -> 120 grit on full-length stock). This is your "Stock Prep & Grind" — the bulk of the grind hours.
-4. Layout and mark all pieces on prepped stock. Use tape/sharpie, not soapstone (soapstone scratches the finish).
-5. Cut all tube/structural pieces (chop saw, band saw).
-6. Weld structural tube frame (MIG). Square-check after tacking.
-7. Grind frame welds smooth (angle grinder, flap disc).
-8. Cut flat bar pieces from prepped stock (band saw or chop saw with fine blade). Handle with gloves to avoid fingerprints.
-9. Cut and prep spacers from leftover tube or flat bar stock.
-10. Dry-fit spacers into position on frame. Verify uniform spacing.
-11. Fit, tack, and weld decorative flat bar pieces (TIG). Use physical spacers. Work from center outward.
-12. Light post-weld cleanup on decorative weld areas ONLY (wire brush, light scotch-brite). Do NOT heavy grind — you already prepped the stock.
-13. Acetone wipe entire piece to remove oils, fingerprints, dust.
-14. Apply finish (clear coat, wax, patina treatment, etc.).
-15. Install hardware (leveling feet, mounting brackets, etc.).
-"""
-        elif needs_mill_scale_removal:
-            build_sequence = """
-BUILD SEQUENCE (bare metal finish — mill scale removal AFTER welding):
-This project has a bare metal finish (clear coat, brushed, raw, or patina). Mill scale must be removed for proper adhesion and appearance. Do this AFTER all welding is complete.
-1. Layout and mark all pieces
-2. Cut all pieces
-3. Fit, tack, and weld main structural frame (MIG)
-4. Grind frame welds smooth
-5. Attach decorative/thin elements (TIG) using physical spacers where needed
-6. Grind and blend all remaining welds
-7. Mill scale removal on the completed assembly (vinegar bath, acid wash, flap disc grind, or needle scaler — use what you have available)
-8. Wire brush, clean, and dry immediately after mill scale removal
-9. Final finish (clear coat, wax, brushed finish, patina treatment, etc.)
-Do NOT place mill scale removal before welding — it goes AFTER all welding and grinding is done.
+        # Finish context — hints, not rigid templates
+        if needs_mill_scale_removal:
+            finish_context = """
+FINISH CONTEXT:
+This job requires mill scale removal (bare metal finish: clear coat, raw, brushed, or patina).
+Apply Principles 1 (workability) and 2 (access) to determine WHEN mill scale removal happens based on the specific pieces and assembly in this project.
+- Decorative flat bar / small pieces that will be hard to grind after cutting → remove on RAW STOCK before cutting.
+- Large structural pieces / tube frames → remove AFTER all welding is done.
+Think through which pieces need prep before cutting vs after assembly.
 """
         else:
-            build_sequence = """
-BUILD SEQUENCE (paint/powder coat/galvanized finish — NO mill scale removal):
-This project will be painted, powder coated, or galvanized. Mill scale removal is NOT needed. Do NOT include vinegar bath, acid wash, or mill scale removal steps.
-1. Layout and mark all pieces
-2. Cut all pieces
-3. Degrease and scuff all pieces
-4. Build and fully weld main structural frame (MIG)
-5. Grind welds to required finish level
-6. Attach decorative elements (TIG)
-7. Surface prep for coating (sand, degrease, wipe down)
-8. Paint or send out for powder coat / galvanizing
+            finish_context = """
+FINISH CONTEXT:
+This job will be painted, powder coated, or galvanized. No mill scale removal needed.
+Do NOT include vinegar bath, acid wash, or mill scale removal steps.
+"""
+
+        # Reasoning-based process order instruction
+        reasoning_instruction = """
+PROCESS ORDER — REASON THROUGH IT:
+Determine the correct fabrication sequence by applying the reasoning principles from the SHOP KNOWLEDGE BASE above. For each step, verify:
+- Is this operation physically workable at this stage? (Principle 1 — Workability)
+- Will a later step block access to something I need to finish first? (Principle 2 — Access)
+- Am I using component dimensions, not assembled or spacing dimensions? (Principle 3 — Dimensions)
+- Does my cut type match how this piece joins its neighbor? (Principle 4 — Joint Design)
+- Am I specifying only the finishing passes the customer's finish level requires? (Principle 5 — Finish as Design)
+- Have I thought forward through how this step constrains later steps? (Principle 6 — Constraints)
 """
 
         prompt = """You are an expert metal fabricator creating step-by-step build instructions.
@@ -466,20 +447,18 @@ PROJECT DETAILS:
 
 CUT LIST:
 %s
-%s%s
+%s%s%s
 TASK: Generate a practical fabrication sequence — the exact steps a fabricator follows
 to build this project from raw material to finished product.
-Follow the BUILD SEQUENCE above as the template for step order.
 
 RULES:
-1. Follow the BUILD SEQUENCE order above. Do not rearrange steps or add mill scale removal if the sequence says to skip it.
-2. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.
-3. Include the correct tools for each step (chop saw, band saw, TIG welder, MIG welder, angle grinder, etc.).
-4. Specify weld process (MIG vs TIG) for each welding step.
-5. Estimate realistic duration in minutes for each step.
-6. Include safety notes where relevant (PPE, ventilation for galvanized, etc.).
-7. 8-15 steps is typical. Group related operations but don't skip important steps.
-8. Include quality checks: square check after tacking, level check, fit check before welding.
+1. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.
+2. Include the correct tools for each step (chop saw, band saw, TIG welder, MIG welder, angle grinder, etc.).
+3. Specify weld process (MIG vs TIG) for each welding step.
+4. Estimate realistic duration in minutes for each step.
+5. Include safety notes where relevant (PPE, ventilation for galvanized, etc.).
+6. 8-15 steps is typical. Group related operations but don't skip important steps.
+7. Include quality checks: square check after tacking, level check, fit check before welding.
 
 Return ONLY valid JSON — an array of step objects:
 [
@@ -492,7 +471,8 @@ Return ONLY valid JSON — an array of step objects:
         "weld_process": null,
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
-]""" % (job_type, knowledge_block, fields_text, cuts_text, weld_note, build_sequence)
+]""" % (job_type, knowledge_block, fields_text, cuts_text,
+        weld_note, finish_context, reasoning_instruction)
 
         return prompt
 
