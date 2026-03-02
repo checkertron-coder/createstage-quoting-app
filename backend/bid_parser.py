@@ -197,7 +197,7 @@ class BidParser:
         Returns list of ExtractedItem dicts.
         """
         api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         if not api_key:
             logger.warning("No GEMINI_API_KEY — using keyword-based fallback for bid parsing")

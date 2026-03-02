@@ -278,7 +278,7 @@ def _call_gemini_extract(prompt: str) -> dict:
     import urllib.error
 
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     if not api_key:
         # No API key — return empty extraction (tests and dev without Gemini)
@@ -413,7 +413,7 @@ def _call_gemini_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     import urllib.error
 
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     if not api_key:
         return _empty_photo_result()
@@ -554,7 +554,7 @@ def detect_job_type(description: str) -> dict:
 
     # Step 3: Try Gemini for better accuracy
     api_key = os.getenv("GEMINI_API_KEY")
-    model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     if not api_key:
         # No API key — use keyword result or default

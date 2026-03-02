@@ -573,11 +573,11 @@ Profile key format: `{shape}_{dimensions}_{gauge}` — e.g. `sq_tube_2x2_11ga`, 
 
 | Usage | Model | Config |
 |---|---|---|
-| Job type detection (Stage 1) | `gemini-2.0-flash` | `settings.GEMINI_MODEL` |
-| Question clarification (Stage 2) | `gemini-2.0-flash` | `settings.GEMINI_MODEL` |
-| Labor estimation (Stage 4) | `gemini-2.0-flash` | `settings.GEMINI_MODEL` |
-| Photo vision | `gemini-2.0-flash` | `settings.GEMINI_MODEL` |
-| Bid parsing (Session 7) | `gemini-2.0-flash` | `settings.GEMINI_MODEL` |
+| Job type detection (Stage 1) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
+| Question clarification (Stage 2) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
+| Labor estimation (Stage 4) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
+| Photo vision | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
+| Bid parsing (Session 7) | `gemini-2.5-flash` | `settings.GEMINI_MODEL` |
 
 Upgrade path: set `GEMINI_MODEL=gemini-3.0-flash` env var to upgrade all without code changes.
 
@@ -592,7 +592,7 @@ GEMINI_API_KEY=...          # Gemini API key
 JWT_SECRET=...              # openssl rand -hex 32
 
 # Optional (with defaults)
-GEMINI_MODEL=gemini-2.0-flash
+GEMINI_MODEL=gemini-2.5-flash
 JWT_ALGORITHM=HS256
 JWT_ACCESS_EXPIRE_MINUTES=15
 JWT_REFRESH_EXPIRE_DAYS=30

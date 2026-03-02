@@ -52,7 +52,7 @@ Read it before starting any session. It is the ground truth.
   - `data/README.md` — instructions for adding invoice data
 
 - **Config updates**
-  - `backend/config.py` — added `JWT_SECRET`, `JWT_ACCESS_EXPIRE_MINUTES`, `JWT_REFRESH_EXPIRE_DAYS`, Cloudflare R2 vars, fixed `GEMINI_MODEL` default to `gemini-2.0-flash`
+  - `backend/config.py` — added `JWT_SECRET`, `JWT_ACCESS_EXPIRE_MINUTES`, `JWT_REFRESH_EXPIRE_DAYS`, Cloudflare R2 vars, fixed `GEMINI_MODEL` default to `gemini-2.5-flash`
 
 - **Dependencies added**
   - `python-jose[cryptography]==3.3.0`, `passlib[bcrypt]==1.7.4`, `bcrypt==4.1.3`, `pytest==8.1.1`, `pytest-asyncio==0.23.5`

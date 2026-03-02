@@ -480,7 +480,7 @@ Return ONLY valid JSON — an array of step objects:
         """Call Gemini API. Raises on failure."""
         api_key = os.getenv("GEMINI_API_KEY")
         if model is None:
-            model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"

@@ -118,7 +118,7 @@ CLOUDFLARE_R2_ACCOUNT_ID: str = ""    # Optional now, required in Session 3
 CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
 CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""
 CLOUDFLARE_R2_BUCKET: str = "createstage-quotes"
-GEMINI_MODEL: str = "gemini-2.0-flash"   # Upgradeable via env var
+GEMINI_MODEL: str = "gemini-2.5-flash"   # Upgradeable via env var
 ```
 
 ---

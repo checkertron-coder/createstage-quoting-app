@@ -403,7 +403,7 @@ Return ONLY valid JSON:
     def _call_gemini(self, prompt: str) -> str:
         """Call Gemini API. Raises on failure (caller handles fallback)."""
         api_key = os.getenv("GEMINI_API_KEY")
-        model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"

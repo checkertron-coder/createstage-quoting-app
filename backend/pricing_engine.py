@@ -198,7 +198,7 @@ class PricingEngine:
                 "AI estimator was unavailable. Consider re-running when available."
             )
         else:
-            model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+            model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
             assumptions.append(
                 "Labor hours estimated by AI (%s) with domain guidance." % model_name
             )
