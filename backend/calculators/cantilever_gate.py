@@ -48,7 +48,6 @@ class CantileverGateCalculator(BaseCalculator):
 
     def calculate(self, fields: dict) -> dict:
         items = []
-        hardware = []
         total_weight = 0.0
         total_sq_ft = 0.0
         total_weld_inches = 0.0
@@ -56,13 +55,30 @@ class CantileverGateCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # --- Parse inputs needed for hardware (before AI check) ---
+        has_motor = "Yes" in fields.get("has_motor", "No")
+        motor_brand = fields.get("motor_brand", "")
+        latch_type = fields.get("latch_lock", "Gravity latch")
+        roller_type = fields.get("roller_carriages", "Standard duty (gates under 1,000 lbs)")
+        bottom_guide_type = fields.get("bottom_guide", "Surface mount guide roller")
+        is_top_hung = (
+            "No bottom guide" in bottom_guide_type
+            or "top-hung" in bottom_guide_type.lower()
+        )
+
+        # --- Build hardware list BEFORE AI check (shared by both paths) ---
+        hardware = self._build_hardware(
+            has_motor, motor_brand, latch_type, roller_type, is_top_hung, fields)
+
         # Try AI cut list for custom/complex designs
         if self._has_description(fields):
             ai_cuts = self._try_ai_cut_list("cantilever_gate", fields)
             if ai_cuts is not None:
-                return self._build_from_ai_cuts("cantilever_gate", ai_cuts, fields, assumptions)
+                return self._build_from_ai_cuts(
+                    "cantilever_gate", ai_cuts, fields, assumptions,
+                    hardware=hardware)
 
-        # --- Parse inputs ---
+        # --- Parse remaining inputs ---
         clear_width_ft = self.parse_feet(fields.get("clear_width"), default=10.0)
         height_ft = self.parse_feet(fields.get("height"), default=6.0)
         clear_width_in = self.feet_to_inches(clear_width_ft)
@@ -83,13 +99,6 @@ class CantileverGateCalculator(BaseCalculator):
         infill_type = fields.get("infill_type", "Expanded metal")
         infill_spacing_in = self._parse_spacing(fields.get("picket_spacing",
                                                            fields.get("flat_bar_spacing", "4\" on-center")))
-
-        has_motor = "Yes" in fields.get("has_motor", "No")
-        motor_brand = fields.get("motor_brand", "")
-
-        latch_type = fields.get("latch_lock", "Gravity latch")
-
-        roller_type = fields.get("roller_carriages", "Standard duty (gates under 1,000 lbs)")
 
         finish = fields.get("finish", "Powder coat")
 
@@ -277,10 +286,40 @@ class CantileverGateCalculator(BaseCalculator):
             assumptions.append(f"Post concrete: {total_cu_yd:.2f} cu yd based on {post_count} holes × 12\" diameter × {post_concrete_depth_in}\" deep.")
 
         # 6. Bottom guide rail — conditional on bottom_guide field
-        bottom_guide_type = fields.get("bottom_guide", "Surface mount guide roller")
-        if "No bottom guide" in bottom_guide_type or "top-hung" in bottom_guide_type.lower():
-            # Top-hung only — no bottom guide material
-            assumptions.append("No bottom guide rail — top-hung (cantilever-only) configuration.")
+        if is_top_hung:
+            # Top-hung / top-mount — no bottom guide, add overhead support beam
+            # Gate weight estimation for beam sizing
+            estimated_gate_weight = total_weight  # Weight so far (frame + infill)
+            if estimated_gate_weight < 800:
+                beam_profile = "hss_4x4_0.25"
+                beam_desc = "HSS 4×4×1/4\""
+            else:
+                beam_profile = "hss_6x4_0.25"
+                beam_desc = "HSS 6×4×1/4\""
+            beam_length_in = total_gate_length_in + 24  # Span + 12" overhang each side
+            beam_length_ft = self.inches_to_feet(beam_length_in)
+            beam_price_ft = lookup.get_price_per_foot(beam_profile)
+            beam_weight = self.get_weight_lbs(beam_profile, beam_length_ft)
+            if beam_weight == 0.0:
+                beam_weight = beam_length_ft * 12.0  # ~12 lbs/ft estimate for HSS
+
+            items.append(self.make_material_item(
+                description=f"Overhead support beam — {beam_desc} ({beam_length_ft:.1f} ft)",
+                material_type="square_tubing",
+                profile=beam_profile,
+                length_inches=beam_length_in,
+                quantity=self.linear_feet_to_pieces(beam_length_ft),
+                unit_price=round(beam_length_ft * beam_price_ft, 2),
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+            total_weight += beam_weight
+            total_weld_inches += self.weld_inches_for_joints(4, 6.0)  # Beam-to-post welds
+            min_clearance_in = height_in + 6
+            assumptions.append(
+                "Top-hung system — overhead %s beam supports top-mount roller carriages. "
+                "Minimum overhead clearance: %d\" (%.1f ft)."
+                % (beam_desc, int(min_clearance_in), self.inches_to_feet(min_clearance_in)))
         elif "Embedded" in bottom_guide_type:
             # Embedded track — use channel instead of angle
             guide_rail_in = total_gate_length_in + 24  # Extra 24" for approach
@@ -320,45 +359,7 @@ class CantileverGateCalculator(BaseCalculator):
             ))
             total_weight += guide_weight
 
-        # 7. Roller carriages (hardware)
-        carriage_count = 2  # Standard: 2 carriages on 2 rear posts
-        if "Heavy" in roller_type or "heavy" in roller_type:
-            carriage_key = "roller_carriage_heavy"
-        else:
-            carriage_key = "roller_carriage_standard"
-
-        hardware.append(self.make_hardware_item(
-            description=f"Roller carriage — {'heavy duty' if 'heavy' in carriage_key else 'standard'}",
-            quantity=carriage_count,
-            options=lookup.get_hardware_options(carriage_key),
-        ))
-
-        # 8. Gate stops/bumpers
-        hardware.append(self.make_hardware_item(
-            description="Gate stop/bumper",
-            quantity=2,
-            options=lookup.get_hardware_options("gate_stop"),
-        ))
-
-        # 9. Motor (if applicable)
-        if has_motor:
-            motor_key = self._lookup_motor(motor_brand)
-            hardware.append(self.make_hardware_item(
-                description=f"Gate operator — {motor_brand or 'LiftMaster LA412'}",
-                quantity=1,
-                options=lookup.get_hardware_options(motor_key),
-            ))
-
-        # 10. Latch
-        latch_key = self._lookup_latch(latch_type)
-        if latch_key:
-            hardware.append(self.make_hardware_item(
-                description=f"Gate latch — {latch_type}",
-                quantity=1,
-                options=lookup.get_hardware_options(latch_key),
-            ))
-
-        # 11. Square footage for finishing
+        # 7. Square footage for finishing
         # Both sides of gate face + posts (approximate)
         face_sqft = self.sq_ft_from_dimensions(clear_width_in, height_in) * 2  # Both sides
         tail_sqft = self.sq_ft_from_dimensions(tail_length_in, height_in) * 2
@@ -368,10 +369,10 @@ class CantileverGateCalculator(BaseCalculator):
         ) * 0.1  # Rough post area factor
         total_sq_ft = face_sqft + tail_sqft + post_sqft
 
-        # 12. Total weld inches (add post-to-frame brackets etc.)
+        # 8. Total weld inches (add post-to-frame brackets etc.)
         total_weld_inches += self.weld_inches_for_joints(post_count * 2, 4.0)  # Post brackets
 
-        # 11. Adjacent fence sections (compound job)
+        # 9. Adjacent fence sections (compound job)
         adjacent_fence = fields.get("adjacent_fence", "No")
         if "Yes" in str(adjacent_fence):
             fence_result = self._generate_fence_sections(
@@ -403,6 +404,57 @@ class CantileverGateCalculator(BaseCalculator):
         )
 
     # --- Private helpers ---
+
+    def _build_hardware(self, has_motor, motor_brand, latch_type, roller_type,
+                        is_top_hung, fields):
+        """
+        Build the hardware list for the gate. Called BEFORE the AI check so
+        hardware (with correct quantities) flows through both AI and rule-based paths.
+        """
+        hardware = []
+        carriage_count = 2  # Standard: 2 carriages on 2 rear posts
+
+        # Roller carriages
+        if "Heavy" in str(roller_type) or "heavy" in str(roller_type):
+            carriage_key = "roller_carriage_heavy"
+        else:
+            carriage_key = "roller_carriage_standard"
+
+        carriage_desc = "Top-mount roller carriage" if is_top_hung else "Roller carriage"
+        carriage_desc += " — %s" % ("heavy duty" if "heavy" in carriage_key else "standard")
+
+        hardware.append(self.make_hardware_item(
+            description=carriage_desc,
+            quantity=carriage_count,
+            options=lookup.get_hardware_options(carriage_key),
+        ))
+
+        # Gate stops/bumpers
+        hardware.append(self.make_hardware_item(
+            description="Gate stop/bumper",
+            quantity=2,
+            options=lookup.get_hardware_options("gate_stop"),
+        ))
+
+        # Motor (if applicable)
+        if has_motor:
+            motor_key = self._lookup_motor(motor_brand)
+            hardware.append(self.make_hardware_item(
+                description="Gate operator — %s" % (motor_brand or "LiftMaster LA412"),
+                quantity=1,
+                options=lookup.get_hardware_options(motor_key),
+            ))
+
+        # Latch
+        latch_key = self._lookup_latch(latch_type)
+        if latch_key:
+            hardware.append(self.make_hardware_item(
+                description="Gate latch — %s" % latch_type,
+                quantity=1,
+                options=lookup.get_hardware_options(latch_key),
+            ))
+
+        return hardware
 
     def _normalize_gauge(self, gauge_str: str) -> str:
         """Extract gauge label like '11 gauge' from answer string."""
@@ -475,8 +527,8 @@ class CantileverGateCalculator(BaseCalculator):
 
         side_1_ft = self.parse_feet(fields.get("fence_side_1_length"), default=0.0)
         side_2_ft = self.parse_feet(fields.get("fence_side_2_length"), default=0.0)
-        post_spacing_ft = self._parse_fence_post_spacing(
-            fields.get("fence_post_spacing", "6 ft on-center (standard residential)"))
+        # Use explicit post count if provided, otherwise estimate from spacing
+        fence_post_count_raw = self.parse_int(fields.get("fence_post_count"), default=0)
         fence_match = fields.get("fence_infill_match", "Yes — match gate infill exactly")
 
         sides = []
@@ -489,12 +541,20 @@ class CantileverGateCalculator(BaseCalculator):
             return {"items": items, "hardware": hardware, "weight": weight,
                     "sq_ft": sq_ft, "weld_inches": weld_inches, "assumptions": assumptions}
 
+        # Distribute explicit post count across sides, or estimate
+        total_fence_ft = sum(l for _, l in sides)
         for side_name, length_ft in sides:
             length_in = self.feet_to_inches(length_ft)
 
             # Fence posts (line posts between gate post and termination)
             # Gate post is shared, so we only need intermediate + terminal posts
-            post_count = max(1, math.ceil(length_ft / post_spacing_ft))  # at least terminal
+            if fence_post_count_raw > 0:
+                # Distribute user-specified posts proportionally across sides
+                side_fraction = length_ft / total_fence_ft if total_fence_ft > 0 else 0.5
+                post_count = max(1, round(fence_post_count_raw * side_fraction))
+            else:
+                # Estimate: one post every 6-8 ft
+                post_count = max(1, math.ceil(length_ft / 6.0))
             above_grade_in = height_in + 2
             post_total_length_in = above_grade_in + post_concrete_depth_in
             post_total_ft = self.inches_to_feet(post_total_length_in) * post_count
@@ -605,7 +665,7 @@ class CantileverGateCalculator(BaseCalculator):
             fence_sqft = self.sq_ft_from_dimensions(length_in, height_in) * 2  # Both sides
             sq_ft += fence_sqft
 
-            assumptions.append(f"Adjacent fence {side_name}: {length_ft:.0f} ft, {post_count} posts at {post_spacing_ft:.0f} ft spacing.")
+            assumptions.append(f"Adjacent fence {side_name}: {length_ft:.0f} ft, {post_count} posts.")
 
         return {
             "items": items,
@@ -615,15 +675,6 @@ class CantileverGateCalculator(BaseCalculator):
             "weld_inches": weld_inches,
             "assumptions": assumptions,
         }
-
-    def _parse_fence_post_spacing(self, spacing_str: str) -> float:
-        """Extract fence post spacing in feet from answer string."""
-        s = str(spacing_str)
-        if "8" in s:
-            return 8.0
-        if "10" in s:
-            return 10.0
-        return 6.0  # Default residential
 
     def _lookup_latch(self, latch_str: str) -> str:
         """Map latch answer to hardware catalog key."""

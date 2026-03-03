@@ -291,53 +291,51 @@
         },
         {
             "id": "adjacent_fence",
-            "text": "Does this project include adjacent fence sections connected to the gate posts?",
+            "text": "Are there fence sections connecting to this gate?",
             "type": "choice",
-            "options": ["Yes — fence on one or both sides", "No — gate only"],
+            "options": ["Yes — fence on both sides", "Yes — fence on one side only", "No — gate only"],
             "required": false,
-            "hint": "Many gate jobs include matching fence sections running from the gate posts to the house or property line.",
+            "hint": "Many gate installations include connecting fence sections. We can quote the complete job.",
             "depends_on": null,
             "branches": {
-                "Yes — fence on one or both sides": ["fence_side_1_length", "fence_side_2_length", "fence_post_spacing", "fence_infill_match"]
+                "Yes — fence on both sides": ["fence_side_1_length", "fence_side_2_length", "fence_post_count", "fence_infill_match"],
+                "Yes — fence on one side only": ["fence_side_1_length", "fence_post_count", "fence_infill_match"]
             }
         },
         {
             "id": "fence_side_1_length",
-            "text": "How long is the fence section on the first side? (from gate post to termination point)",
-            "type": "measurement",
-            "unit": "feet",
-            "required": false,
-            "hint": "Measure from the gate post to where the fence ends (house wall, property corner, etc.). Enter 0 if no fence on this side.",
+            "text": "Length of fence section 1? (in feet)",
+            "type": "number",
+            "required": true,
+            "hint": "Measure the total run from the gate post to the end/corner.",
             "depends_on": "adjacent_fence",
             "branches": null
         },
         {
             "id": "fence_side_2_length",
-            "text": "How long is the fence section on the second side? (enter 0 if only one side)",
-            "type": "measurement",
-            "unit": "feet",
-            "required": false,
-            "hint": "Enter 0 if fence is only on one side of the gate.",
+            "text": "Length of fence section 2? (in feet)",
+            "type": "number",
+            "required": true,
+            "hint": "Measure the total run of the second fence section.",
             "depends_on": "adjacent_fence",
             "branches": null
         },
         {
-            "id": "fence_post_spacing",
-            "text": "What spacing between fence posts?",
-            "type": "choice",
-            "options": ["6 ft on-center (standard residential)", "8 ft on-center (common commercial)", "Custom spacing"],
+            "id": "fence_post_count",
+            "text": "How many fence posts total? (not counting gate posts)",
+            "type": "number",
             "required": false,
-            "hint": "6 ft is standard for residential. 8 ft for commercial or taller fences with heavier material.",
+            "hint": "Typical: one post every 6-8 feet. We'll estimate if you skip this.",
             "depends_on": "adjacent_fence",
             "branches": null
         },
         {
             "id": "fence_infill_match",
-            "text": "Should the fence infill match the gate design?",
+            "text": "Should the fence infill match the gate?",
             "type": "choice",
-            "options": ["Yes — match gate infill exactly", "No — simpler/different design for fence", "Fence is solid panel (privacy)"],
+            "options": ["Yes — match the gate exactly", "No — simpler/different infill"],
             "required": false,
-            "hint": "Matching the gate design gives a cohesive look but costs more. Simpler picket infill is common for fence sections.",
+            "hint": "Matching infill looks best but costs more.",
             "depends_on": "adjacent_fence",
             "branches": null
         },
