@@ -27,21 +27,38 @@ class FurnitureTableCalculator(BaseCalculator):
             quantity = 1
 
         # Hardware — created before AI/template branch so both paths get it
-        hardware = [self.make_hardware_item(
-            description="Adjustable leveling feet",
-            quantity=4 * quantity,
-            options=[
-                {"supplier": "McMaster-Carr", "price": 5.00,
-                 "url": "https://www.mcmaster.com/leveling-feet",
-                 "part_number": None, "lead_days": 3},
-                {"supplier": "Amazon", "price": 3.50,
-                 "url": "https://www.amazon.com/s?k=adjustable+leveling+feet+3/8-16",
-                 "part_number": None, "lead_days": 5},
-                {"supplier": "Grainger", "price": 6.00,
-                 "url": "https://www.grainger.com/category/leveling-feet",
-                 "part_number": None, "lead_days": 2},
-            ],
-        )]
+        hardware = [
+            self.make_hardware_item(
+                description="Adjustable leveling feet",
+                quantity=4 * quantity,
+                options=[
+                    {"supplier": "McMaster-Carr", "price": 5.00,
+                     "url": "https://www.mcmaster.com/leveling-feet",
+                     "part_number": None, "lead_days": 3},
+                    {"supplier": "Amazon", "price": 3.50,
+                     "url": "https://www.amazon.com/s?k=adjustable+leveling+feet+3/8-16",
+                     "part_number": None, "lead_days": 5},
+                    {"supplier": "Grainger", "price": 6.00,
+                     "url": "https://www.grainger.com/category/leveling-feet",
+                     "part_number": None, "lead_days": 2},
+                ],
+            ),
+            self.make_hardware_item(
+                description="3/8-16 weld-in threaded bung (for leveling feet)",
+                quantity=4 * quantity,
+                options=[
+                    {"supplier": "McMaster-Carr", "price": 4.00,
+                     "url": "https://www.mcmaster.com/weld-in-threaded-bungs",
+                     "part_number": None, "lead_days": 3},
+                    {"supplier": "Amazon", "price": 2.50,
+                     "url": "https://www.amazon.com/s?k=3/8-16+weld+in+threaded+bung",
+                     "part_number": None, "lead_days": 5},
+                    {"supplier": "Grainger", "price": 3.75,
+                     "url": "https://www.grainger.com/search?searchQuery=weld+in+threaded+bung",
+                     "part_number": None, "lead_days": 2},
+                ],
+            ),
+        ]
 
         # Try AI cut list when description exists
         if self._has_description(fields):

@@ -784,6 +784,11 @@ PROCESSES = {
             "grind after cutting small pieces",
             "re-grind finished surfaces after assembly",
             "skip stock prep grinding",
+            # Progressive grit sequences are wrong — 40 grit IS the finish
+            "80 grit then 120 grit",
+            "80-grit followed by 120-grit",
+            "120 grit for final finish",
+            "progressive grit sequence",
         ],
     },
 
@@ -1409,6 +1414,60 @@ PROCESSES = {
             "Long hair tied back",
         ],
         "NEVER": [],
+    },
+
+    # ===================================================================
+    # LEVELER / FURNITURE HARDWARE
+    # ===================================================================
+
+    # SHOP: CreateStage — correct method for threaded leveler feet on hollow tube
+    "leveler_foot_install": {
+        "name": "Leveler Foot Installation (Weld-In Threaded Bung)",
+        "category": "install",
+        "steps": [
+            "Weld threaded bung (3/8-16) into bottom of each tube leg",
+            "Bung sits flush with tube end — full fillet weld around perimeter",
+            "Let cool, then thread leveling foot into bung",
+            "Adjust all feet until table sits level on flat surface",
+        ],
+        "tools": [
+            "MIG or TIG welder",
+            "level",
+            "adjustable wrench",
+        ],
+        "consumables": [],
+        "applies_when": [
+            "furniture_table",
+            "furniture_other",
+            "adjustable_feet",
+            "leveling_feet",
+        ],
+        "skip_when": [
+            "solid_bar_legs",
+            "no_levelers",
+        ],
+        "labor_type": "per_piece",
+        "time_minutes": {
+            "weld_plate": 12,   # weld a flat plate with threaded hole — slower
+            "weld_bung": 8,     # weld-in threaded bung — faster, preferred
+        },
+        "notes": (
+            "Hollow square tube has NO MEAT to tap threads into. "
+            "You MUST weld in a threaded bung or plate to accept leveling feet. "
+            "3/8-16 is the standard thread for furniture levelers. "
+            "Bung method preferred — faster, cleaner, stronger than plate method."
+        ),
+        "safety": [
+            "Small weld area — good ventilation still required",
+        ],
+        "NEVER": [
+            "drill into tube",
+            "drill into the tube",
+            "drill through tube wall",
+            "drill and tap tube wall",
+            "tap directly into tube",
+            "self-tapping screw into tube",
+        ],
     },
 }
 

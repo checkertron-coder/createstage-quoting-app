@@ -307,7 +307,7 @@ CONSUMABLES = {
     "shielding_gas_75_25": {
         "description": "75/25 Ar/CO2 shielding gas",
         "price_per_cu_ft": 0.08,
-        "usage_cu_ft_per_weld_hour": 25.0,  # cu ft/hr at ~10 in/hr welding
+        "usage_cu_ft_per_weld_hour": 25.0,  # CFH at standard flow rate
     },
     "clearcoat_spray": {
         "description": "Clear coat spray",
@@ -432,7 +432,7 @@ class HardwareSourcer:
 
         # Shielding gas
         gas = CONSUMABLES["shielding_gas_75_25"]
-        weld_hours = weld_linear_inches / 10.0  # ~10 in/hr
+        weld_hours = weld_linear_inches / 80.0  # ~80 in/hr effective welding rate
         gas_cu_ft = math.ceil(weld_hours * gas["usage_cu_ft_per_weld_hour"])
         if gas_cu_ft > 0:
             items.append({

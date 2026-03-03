@@ -18,6 +18,43 @@ from ..gemini_client import call_fast, is_configured
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# BANNED TERM REPLACEMENTS — customer-facing text must use correct shop terms
+# ---------------------------------------------------------------------------
+# Maps banned phrases to their correct replacements. Applied to build
+# instruction steps before returning to the caller.
+
+BANNED_TERM_REPLACEMENTS = {
+    # Vinegar bath cleanup — SHOP: CreateStage
+    "baking soda": "dish soap",
+    "neutralize with baking soda": "scrub with dish soap and red scotch-brite pad",
+    "baking soda solution": "dish soap and warm water",
+    "compressed air": "clean towel",
+    "blow dry": "towel dry",
+    "wire brush": "red scotch-brite pad",
+    "chemical neutralizer": "dish soap",
+    "neutralizing agent": "dish soap",
+    # Decorative stock prep grind spec — 40 grit IS the finish
+    "80 grit then 120 grit": "40-grit flap disc (this IS the finish)",
+    "80-grit followed by 120-grit": "40-grit flap disc (this IS the finish)",
+    "120 grit for final finish": "40-grit flap disc for final finish",
+    "progressive grit sequence": "single-pass 40-grit flap disc",
+    # Decorative assembly — sequential, not dry-fit
+    "dry fit entire pattern": "assemble sequentially — measure, position, weld each piece",
+    "dry-fit entire pattern": "assemble sequentially — measure, position, weld each piece",
+    "dry fit all pieces": "assemble one piece at a time",
+    "lay out all pieces first": "assemble sequentially from outside in",
+    "position all pieces before welding": "position and weld one piece at a time",
+    "pre-position entire assembly": "assemble sequentially — one piece at a time",
+    # Leveler installation — never drill into hollow tube
+    "drill into tube": "weld in threaded bung",
+    "drill into the tube": "weld in threaded bung",
+    "drill through tube wall": "weld in threaded bung",
+    "drill and tap tube wall": "weld in threaded bung",
+    "tap directly into tube": "weld in threaded bung",
+    "self-tapping screw into tube": "weld in threaded bung and thread leveling foot",
+}
+
 # Valid cut types
 VALID_CUT_TYPES = ("square", "miter_45", "miter_22.5", "cope", "notch", "compound")
 
@@ -75,6 +112,86 @@ _JOB_TYPE_PROFILES = {
 
 # All groups — used for custom_fab and unknown job types
 _ALL_PROFILE_GROUPS = list(_PROFILE_GROUPS.keys())
+
+
+def _strip_banned_terms_from_steps(steps):
+    # type: (List[Dict]) -> None
+    """
+    Replace banned terms in build instruction steps with correct shop terms.
+
+    Modifies steps in-place. Handles description, safety_notes, and tools fields.
+    Case-insensitive matching, preserves original casing in surrounding text.
+    """
+    for step in steps:
+        for field_name in ("description", "safety_notes"):
+            text = step.get(field_name, "")
+            if not text:
+                continue
+            for banned, replacement in BANNED_TERM_REPLACEMENTS.items():
+                # Case-insensitive replacement
+                pattern = re.compile(re.escape(banned), re.IGNORECASE)
+                text = pattern.sub(replacement, text)
+            step[field_name] = text
+
+        # Clean tools list
+        tools = step.get("tools", [])
+        if isinstance(tools, list):
+            cleaned_tools = []
+            for tool in tools:
+                tool_str = str(tool)
+                for banned, replacement in BANNED_TERM_REPLACEMENTS.items():
+                    pattern = re.compile(re.escape(banned), re.IGNORECASE)
+                    tool_str = pattern.sub(replacement, tool_str)
+                cleaned_tools.append(tool_str)
+            step["tools"] = cleaned_tools
+
+
+def _build_geometry_summary(cut_list):
+    # type: (List[Dict]) -> str
+    """
+    Build a geometry summary from the cut list for the build instructions prompt.
+
+    Groups items by their 'group' field, lists piece counts and unique lengths,
+    and detects uniform step patterns (concentric/pyramid layers).
+
+    Returns a GEOMETRY SUMMARY block string, or empty string if no groups found.
+    """
+    if not cut_list:
+        return ""
+
+    groups = {}  # type: Dict[str, List[Dict]]
+    for item in cut_list:
+        group = item.get("group", "general")
+        if group not in groups:
+            groups[group] = []
+        groups[group].append(item)
+
+    if not groups:
+        return ""
+
+    lines = ["GEOMETRY SUMMARY (from cut list — use these dimensions in build steps):"]
+
+    for group_name, items in sorted(groups.items()):
+        total_pieces = sum(i.get("quantity", 1) for i in items)
+        lengths = sorted(set(i.get("length_inches", 0) for i in items))
+        profiles = sorted(set(i.get("profile", "") for i in items))
+
+        lines.append("  %s: %d pieces, profiles: %s" % (
+            group_name, total_pieces, ", ".join(profiles) if profiles else "mixed"))
+        if len(lengths) > 1:
+            length_strs = ["%.1f\"" % l for l in lengths]
+            lines.append("    lengths: %s" % ", ".join(length_strs))
+
+            # Detect uniform step pattern
+            if len(lengths) >= 3:
+                diffs = [round(lengths[i+1] - lengths[i], 2) for i in range(len(lengths) - 1)]
+                if len(set(diffs)) == 1:
+                    lines.append("    uniform step: %.1f\" increment (%d layers)" % (
+                        abs(diffs[0]), len(lengths)))
+        elif len(lengths) == 1:
+            lines.append("    all pieces: %.1f\"" % lengths[0])
+
+    return "\n".join(lines)
 
 
 class AICutListGenerator:
@@ -148,7 +265,7 @@ class AICutListGenerator:
 
                 # Check for banned terms in key contexts
                 for context in ["vinegar_bath_cleanup", "decorative_stock_prep",
-                                "decorative_assembly"]:
+                                "decorative_assembly", "leveler_install"]:
                     violations = check_banned_terms(full_text, context)
                     if violations:
                         logger.warning(
@@ -162,6 +279,9 @@ class AICutListGenerator:
                                         desc + " [REVIEW: contains banned "
                                         "term '%s']" % v
                                     )
+
+                # Strip banned terms from customer-facing text
+                _strip_banned_terms_from_steps(steps)
 
                 return steps
             logger.warning("AI build instructions returned empty — skipping")
@@ -292,6 +412,8 @@ RULES:
 7. Be practical — use sizes a real fab shop would stock and cut.
 8. Include piece_name for what the part IS (e.g., "leg", "top_rail", "picket").
 9. Quantity means the number of IDENTICAL pieces to cut. Waste factor is handled separately — do not inflate quantity to account for waste.
+10. Decorative flat bar pieces in concentric/pyramid/grid patterns are ALWAYS square cut (cut_type: "square"). Only frame rails that form miter joints at corners get miter_45.
+11. Spacers are ALWAYS square cut (cut_type: "square").
 
 Return ONLY valid JSON — an array of objects:
 [
@@ -442,6 +564,12 @@ This job will be painted, powder coated, or galvanized. No mill scale removal ne
 Do NOT include vinegar bath, acid wash, or mill scale removal steps.
 """
 
+        # Build geometry summary from cut list
+        geometry_summary = _build_geometry_summary(cut_list)
+        geometry_block = ""
+        if geometry_summary:
+            geometry_block = "\n%s\n" % geometry_summary
+
         # Reasoning-based process order instruction
         reasoning_instruction = """
 PROCESS ORDER — REASON THROUGH IT:
@@ -464,7 +592,7 @@ PROJECT DETAILS:
 
 CUT LIST:
 %s
-%s%s%s
+%s%s%s%s
 TASK: Generate a practical fabrication sequence — the exact steps a fabricator follows
 to build this project from raw material to finished product.
 
@@ -489,7 +617,7 @@ Return ONLY valid JSON — an array of step objects:
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
 ]""" % (job_type, knowledge_block, fields_text, cuts_text,
-        weld_note, finish_context, reasoning_instruction)
+        geometry_block, weld_note, finish_context, reasoning_instruction)
 
         return prompt
 
