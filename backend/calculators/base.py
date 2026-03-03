@@ -151,12 +151,32 @@ class BaseCalculator(ABC):
             "lead_days": lead_days,
         }
 
+    def _apply_hardware_fallback(self, job_type, fields, hardware):
+        """
+        If hardware list is empty, try the hardware mapper for common items.
+        Calculators that already populate hardware (swing_gate, cantilever_gate)
+        pass non-empty lists so this never runs for them.
+        """
+        if hardware:
+            return hardware
+        try:
+            from .hardware_mapper import map_hardware
+            mapped = map_hardware(job_type, fields)
+            return mapped if mapped else []
+        except Exception as e:
+            logger.warning("Hardware mapper fallback failed: %s", e)
+            return []
+
     def make_material_list(self, job_type: str, items: list, hardware: list,
                            total_weight_lbs: float, total_sq_ft: float,
                            weld_linear_inches: float,
                            assumptions: list = None,
-                           cut_list: list = None) -> dict:
+                           cut_list: list = None,
+                           fields: dict = None) -> dict:
         """Build the MaterialList output dict matching the CLAUDE.md contract."""
+        # Apply hardware fallback if hardware list is empty and fields provided
+        if not hardware and fields is not None:
+            hardware = self._apply_hardware_fallback(job_type, fields, hardware)
         result = {
             "job_type": job_type,
             "items": items,
@@ -297,4 +317,5 @@ class BaseCalculator(ABC):
             weld_linear_inches=total_weld_inches,
             assumptions=assumptions,
             cut_list=cut_list_items,
+            fields=fields,
         )

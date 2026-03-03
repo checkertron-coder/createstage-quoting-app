@@ -509,6 +509,13 @@ const QuoteFlow = {
 
                 ${this._renderValidationWarnings(pq)}
 
+                ${pq.job_description ? `
+                    <div class="job-description-section">
+                        <h3 class="section-title">Job Description</h3>
+                        <p class="job-description-text">${pq.job_description}</p>
+                    </div>
+                ` : ''}
+
                 ${this._renderSection('Materials', this._renderMaterialsTable(pq))}
                 ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq))}
                 ${pq.consumables && pq.consumables.length ? this._renderSection('Consumables', this._renderConsumablesTable(pq)) : ''}
@@ -619,23 +626,25 @@ const QuoteFlow = {
 
         return `
             <table class="data-table">
-                <thead><tr><th>Material</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
+                <thead><tr><th>Material</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th><th></th></tr></thead>
                 <tbody>
-                    ${items.map(m => `
+                    ${items.map((m, i) => `
                         <tr>
                             <td>${m.description || ''}</td>
                             <td>${m.quantity || 1}</td>
                             <td class="r">${this._fmt(m.unit_price)}</td>
                             <td class="r">${this._fmt(m.line_total)}</td>
+                            <td>${m.profile ? `<button class="btn btn-ghost btn-xs swap-btn" onclick="QuoteFlow.openSwapModal(${i})">Swap</button>` : ''}</td>
                         </tr>
                     `).join('')}
                     <tr class="subtotal-row">
-                        <td colspan="3">Material Subtotal</td>
+                        <td colspan="4">Material Subtotal</td>
                         <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
             ${stockSummary}
+            <div id="swap-modal-container"></div>
         `;
     },
 
@@ -871,6 +880,74 @@ const QuoteFlow = {
         // Open PDF in new tab with auth token as query param
         const url = API.getPdfUrl(this.quoteId);
         window.open(url, '_blank');
+    },
+
+    async openSwapModal(itemIndex) {
+        if (!this.quoteId) return;
+        const container = document.getElementById('swap-modal-container');
+        if (!container) return;
+        container.innerHTML = `
+            <div class="swap-modal-overlay" onclick="QuoteFlow.closeSwapModal()">
+                <div class="swap-modal" onclick="event.stopPropagation()">
+                    <div class="swap-modal-header">
+                        <h3>Swap Material</h3>
+                        <button class="swap-close" onclick="QuoteFlow.closeSwapModal()">&times;</button>
+                    </div>
+                    <div class="swap-modal-body">
+                        <div class="spinner-sm"></div> Loading alternatives...
+                    </div>
+                </div>
+            </div>
+        `;
+        try {
+            const alts = await API.getMaterialAlternatives(this.quoteId);
+            const match = alts.find(a => a.item_index === itemIndex);
+            if (!match || !match.alternatives.length) {
+                container.querySelector('.swap-modal-body').innerHTML =
+                    '<p class="empty-section">No alternative profiles available for this material.</p>';
+                return;
+            }
+            container.querySelector('.swap-modal-body').innerHTML = `
+                <p class="swap-current">Current: <strong>${match.current_profile.replace(/_/g, ' ')}</strong> at ${this._fmt(match.current_price)}/ft</p>
+                <table class="data-table swap-table">
+                    <thead><tr><th>Profile</th><th class="r">Price/ft</th><th class="r">Delta</th><th></th></tr></thead>
+                    <tbody>
+                        ${match.alternatives.map(a => `
+                            <tr>
+                                <td>${a.description}</td>
+                                <td class="r">${this._fmt(a.price)}</td>
+                                <td class="r ${a.delta < 0 ? 'delta-savings' : a.delta > 0 ? 'delta-increase' : ''}">${a.delta >= 0 ? '+' : ''}${this._fmt(a.delta)}</td>
+                                <td><button class="btn btn-accent btn-xs" onclick="QuoteFlow.confirmSwap(${itemIndex}, '${a.profile}')">Select</button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        } catch (e) {
+            container.querySelector('.swap-modal-body').innerHTML =
+                '<p class="error-text">' + e.message + '</p>';
+        }
+    },
+
+    closeSwapModal() {
+        const container = document.getElementById('swap-modal-container');
+        if (container) container.innerHTML = '';
+    },
+
+    async confirmSwap(itemIndex, newProfile) {
+        if (!this.quoteId) return;
+        try {
+            const updated = await API.swapMaterial(this.quoteId, itemIndex, newProfile);
+            this.pricedQuote = updated;
+            this.closeSwapModal();
+            this._renderResults({
+                quote_number: updated.quote_number || '',
+                priced_quote: updated,
+            });
+            this._showStep('results');
+        } catch (e) {
+            alert('Swap failed: ' + e.message);
+        }
     },
 
     newQuote() {

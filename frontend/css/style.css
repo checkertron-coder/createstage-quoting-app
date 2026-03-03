@@ -602,6 +602,45 @@ body {
 }
 .photo-obs-icon { font-size: 1.1rem; }
 
+/* --- Job Description --- */
+.job-description-section { margin-bottom: 20px; }
+.job-description-text {
+    font-size: 0.9rem; color: var(--text-secondary);
+    font-style: italic; line-height: 1.6;
+    padding: 8px 0;
+}
+
+/* --- Material Swap Modal --- */
+.swap-modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200;
+}
+.swap-modal {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    max-width: 600px; width: 90%;
+    max-height: 80vh; overflow-y: auto;
+}
+.swap-modal-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.swap-modal-header h3 { font-size: 1rem; margin: 0; }
+.swap-close {
+    background: none; border: none; font-size: 1.4rem;
+    cursor: pointer; color: var(--text-secondary); line-height: 1;
+}
+.swap-close:hover { color: var(--text); }
+.swap-modal-body { padding: 20px; }
+.swap-current { margin-bottom: 12px; font-size: 0.9rem; }
+.swap-table { margin-top: 8px; }
+.swap-btn { white-space: nowrap; }
+.delta-savings { color: var(--success); font-weight: 600; }
+.delta-increase { color: var(--error); font-weight: 600; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
     .app-nav { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }

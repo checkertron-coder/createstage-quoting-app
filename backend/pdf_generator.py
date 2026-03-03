@@ -341,6 +341,16 @@ def generate_quote_pdf(
     summary = generate_job_summary(job_type, fields)
     pdf.set_font("Helvetica", "", 9)
     pdf.multi_cell(0, 4.5, _safe(summary))
+
+    # Job description (user's original text)
+    job_desc = priced_quote.get("job_description", "") or fields.get("description", "")
+    if job_desc:
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(60, 60, 60)
+        pdf.multi_cell(0, 4.5, _safe(job_desc))
+        pdf.set_text_color(0, 0, 0)
+
     pdf.ln(6)
 
     # ── SECTION 2: Materials ──

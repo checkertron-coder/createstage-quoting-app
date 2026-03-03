@@ -124,6 +124,7 @@ createstage-quoting-app/
 │   │   ├── sign_frame.py        — Frame tube + mounting by sign_type
 │   │   ├── led_sign_custom.py   — Channel letters / cabinet estimate
 │   │   ├── product_firetable.py — BOM-based from firetable_pro_bom.json
+│   │   ├── hardware_mapper.py   — Hardware mapping from question tree fields → hardware catalog
 │   │   ├── ai_cut_list.py      — AI-assisted cut list + build instructions (Gemini)
 │   │   ├── fab_knowledge.py    — FAB_KNOWLEDGE.md parser, targeted section injection into AI prompts
 │   │   └── labor_calculator.py — Deterministic labor hours from cut list (replaces AI labor estimation)

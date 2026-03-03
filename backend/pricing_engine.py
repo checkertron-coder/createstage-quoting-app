@@ -49,6 +49,7 @@ class PricingEngine:
         finishing = session_data.get("finishing", {})
         fields = session_data.get("fields", {})
         job_type = session_data.get("job_type", "custom_fab")
+        job_description = fields.get("description", "")
 
         # --- Price hardware ---
         raw_hardware = material_list.get("hardware", [])
@@ -123,6 +124,7 @@ class PricingEngine:
             "user_id": user.get("id"),
             "job_type": job_type,
             "client_name": user.get("shop_name"),
+            "job_description": job_description,
             "materials": materials,
             "hardware": priced_hardware,
             "consumables": consumables,

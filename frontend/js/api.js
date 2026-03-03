@@ -230,6 +230,23 @@ const API = {
         return data;
     },
 
+    async getMaterialAlternatives(quoteId) {
+        const resp = await this._fetch(`/quotes/${quoteId}/material-alternatives`);
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Failed to get alternatives');
+        return data;
+    },
+
+    async swapMaterial(quoteId, itemIndex, newProfile) {
+        const resp = await this._fetch(`/quotes/${quoteId}/swap-material`, {
+            method: 'POST',
+            body: JSON.stringify({ item_index: itemIndex, new_profile: newProfile }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Material swap failed');
+        return data;
+    },
+
     getPdfUrl(quoteId) {
         return `${this.base}/quotes/${quoteId}/pdf?token=${this._accessToken}`;
     },

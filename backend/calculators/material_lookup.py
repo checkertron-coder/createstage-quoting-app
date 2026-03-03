@@ -295,6 +295,15 @@ HARDWARE_CATALOG = {
             {"supplier": "Grainger", "price": 60.00, "url": "", "part_number": None, "lead_days": 2},
         ],
     },
+    # Anchor bolts
+    "anchor_bolt_set": {
+        "category": "hardware",
+        "options": [
+            {"supplier": "McMaster-Carr", "price": 18.00, "url": "", "part_number": None, "lead_days": 3},
+            {"supplier": "Amazon", "price": 12.00, "url": "", "part_number": None, "lead_days": 5},
+            {"supplier": "Grainger", "price": 20.00, "url": "", "part_number": None, "lead_days": 2},
+        ],
+    },
 }
 
 
@@ -357,6 +366,93 @@ class MaterialLookup:
         """Returns the category for a hardware key."""
         entry = HARDWARE_CATALOG.get(hardware_key)
         return entry["category"] if entry else "hardware"
+
+    def get_alternatives(self, profile):
+        """
+        Returns all profiles of the same shape family, sorted by price.
+        Excludes the input profile itself.
+
+        Returns: list of {"profile": str, "price": float, "description": str}
+        """
+        shape = self._extract_shape(profile)
+        if not shape:
+            return []
+
+        alternatives = []
+        # Scan all known profiles in PRICE_PER_FOOT + seeded
+        all_profiles = set(PRICE_PER_FOOT.keys())
+        all_profiles.update(_SEEDED_PRICES.keys())
+
+        for p in all_profiles:
+            if p == profile:
+                continue
+            if self._extract_shape(p) == shape:
+                price = self.get_price_per_foot(p)
+                if price > 0:
+                    alternatives.append({
+                        "profile": p,
+                        "price": price,
+                        "description": self._profile_to_description(p),
+                    })
+
+        alternatives.sort(key=lambda x: x["price"])
+        return alternatives
+
+    @staticmethod
+    def _extract_shape(profile):
+        """
+        Extract the shape family from a profile key.
+        e.g. 'sq_tube_2x2_11ga' -> 'sq_tube'
+             'flat_bar_1x0.25' -> 'flat_bar'
+             'round_tube_1.5_14ga' -> 'round_tube'
+             'pipe_4_sch40' -> 'pipe'
+        """
+        if not profile:
+            return ""
+        # Known multi-word shape prefixes (order matters — longest first)
+        prefixes = [
+            "sq_tube", "rect_tube", "round_tube",
+            "sq_bar", "round_bar", "flat_bar",
+            "angle", "channel", "pipe",
+        ]
+        for prefix in prefixes:
+            if profile.startswith(prefix + "_") or profile == prefix:
+                return prefix
+        # Fallback: first segment before underscore
+        parts = profile.split("_")
+        return parts[0] if parts else ""
+
+    @staticmethod
+    def _profile_to_description(profile):
+        """
+        Convert a profile key to a human-readable description.
+        e.g. 'sq_tube_2x2_11ga' -> '2x2 Square Tube 11ga'
+             'flat_bar_1x0.25' -> '1x0.25 Flat Bar'
+        """
+        if not profile:
+            return ""
+        shape_names = {
+            "sq_tube": "Square Tube",
+            "rect_tube": "Rectangular Tube",
+            "round_tube": "Round Tube",
+            "sq_bar": "Square Bar",
+            "round_bar": "Round Bar",
+            "flat_bar": "Flat Bar",
+            "angle": "Angle Iron",
+            "channel": "Channel",
+            "pipe": "Pipe",
+        }
+        prefixes = [
+            "sq_tube", "rect_tube", "round_tube",
+            "sq_bar", "round_bar", "flat_bar",
+            "angle", "channel", "pipe",
+        ]
+        for prefix in prefixes:
+            if profile.startswith(prefix + "_"):
+                suffix = profile[len(prefix) + 1:]
+                shape_label = shape_names.get(prefix, prefix.replace("_", " ").title())
+                return "%s %s" % (suffix.replace("_", " "), shape_label)
+        return profile.replace("_", " ").title()
 
     @staticmethod
     def has_seeded_prices() -> bool:

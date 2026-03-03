@@ -134,6 +134,11 @@ class MarkupRequest(BaseModel):
     markup_pct: int
 
 
+class SwapMaterialRequest(BaseModel):
+    item_index: int
+    new_profile: str
+
+
 class QuoteUpdate(BaseModel):
     status: Optional[str] = None
     project_description: Optional[str] = None
@@ -336,6 +341,149 @@ def update_markup(
         "total": new_total,
         "markup_options": pricing_engine._build_markup_options(subtotal),
     }
+
+
+@router.post("/{quote_id}/swap-material")
+def swap_material(
+    quote_id: int,
+    request: SwapMaterialRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Swap a material item's profile and recalculate pricing.
+
+    Replaces profile + recalculates unit_price, line_total,
+    material_subtotal, subtotal, markup_options, total.
+    """
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your quote")
+    if not quote.outputs_json:
+        raise HTTPException(status_code=400, detail="Quote has no outputs")
+
+    from ..calculators.material_lookup import MaterialLookup, PRICE_PER_FOOT
+    lookup = MaterialLookup()
+
+    outputs = dict(quote.outputs_json)
+    materials = outputs.get("materials", [])
+
+    if request.item_index < 0 or request.item_index >= len(materials):
+        raise HTTPException(status_code=400, detail="Invalid item_index")
+
+    # Verify the new profile exists
+    new_price = lookup.get_price_per_foot(request.new_profile)
+    if new_price == 0.0:
+        raise HTTPException(
+            status_code=400,
+            detail="Unknown profile: %s" % request.new_profile,
+        )
+
+    item = materials[request.item_index]
+    old_profile = item.get("profile", "")
+
+    # Update the item
+    item["profile"] = request.new_profile
+    item["description"] = "%s -- %.1f ft" % (
+        request.new_profile,
+        (item.get("length_inches", 0) or 0) / 12.0,
+    )
+
+    # Recalculate line_total: for AI-consolidated items, unit_price IS line_total
+    length_ft = (item.get("length_inches", 0) or 0) / 12.0
+    quantity = item.get("quantity", 1)
+    waste = item.get("waste_factor", 0.05)
+    new_line_total = round(length_ft * (1 + waste) * new_price * quantity, 2)
+    item["unit_price"] = round(new_line_total / max(quantity, 1), 2)
+    item["line_total"] = new_line_total
+
+    # Recalculate material_subtotal
+    material_subtotal = round(sum(m.get("line_total", 0) for m in materials), 2)
+    outputs["materials"] = materials
+    outputs["material_subtotal"] = material_subtotal
+
+    # Recalculate subtotal and total
+    subtotal = round(
+        material_subtotal
+        + outputs.get("hardware_subtotal", 0)
+        + outputs.get("consumable_subtotal", 0)
+        + outputs.get("labor_subtotal", 0)
+        + outputs.get("finishing_subtotal", 0),
+        2,
+    )
+    outputs["subtotal"] = subtotal
+
+    # Rebuild markup options
+    from ..pricing_engine import PricingEngine
+    pe = PricingEngine()
+    outputs["markup_options"] = pe._build_markup_options(subtotal)
+
+    markup_pct = outputs.get("selected_markup_pct", 0)
+    outputs["total"] = outputs["markup_options"].get(str(markup_pct), subtotal)
+
+    # Persist
+    quote.outputs_json = outputs
+    quote.subtotal = subtotal
+    quote.total = outputs["total"]
+    quote.updated_at = datetime.utcnow()
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(quote, "outputs_json")
+    db.commit()
+    db.refresh(quote)
+
+    return outputs
+
+
+@router.get("/{quote_id}/material-alternatives")
+def get_material_alternatives(
+    quote_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    For each material item with a profile, return alternative profiles
+    in the same shape family with price deltas.
+    """
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your quote")
+    if not quote.outputs_json:
+        raise HTTPException(status_code=400, detail="Quote has no outputs")
+
+    from ..calculators.material_lookup import MaterialLookup
+    lookup = MaterialLookup()
+
+    materials = quote.outputs_json.get("materials", [])
+    results = []
+
+    for idx, item in enumerate(materials):
+        profile = item.get("profile", "")
+        if not profile:
+            continue
+        current_price = lookup.get_price_per_foot(profile)
+        alternatives = lookup.get_alternatives(profile)
+        if not alternatives:
+            continue
+        results.append({
+            "item_index": idx,
+            "current_profile": profile,
+            "current_price": current_price,
+            "alternatives": [
+                {
+                    "profile": a["profile"],
+                    "description": a["description"],
+                    "price": a["price"],
+                    "delta": round(a["price"] - current_price, 2),
+                }
+                for a in alternatives
+            ],
+        })
+
+    return results
 
 
 @router.get("/{quote_id}/breakdown")
