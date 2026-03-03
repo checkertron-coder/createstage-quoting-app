@@ -103,6 +103,17 @@ class PricingEngine:
                 f"Consider sourcing alternatives for cost savings."
             )
 
+        # --- Enrich materials with stock length info ---
+        try:
+            from .knowledge.materials import get_stock_length
+            for item in materials:
+                profile = item.get("profile", "")
+                sl = get_stock_length(profile)
+                if sl is not None:
+                    item["stock_length_ft"] = sl
+        except Exception:
+            pass  # non-critical enrichment
+
         # --- Optional AI sections ---
         detailed_cut_list = session_data.get("detailed_cut_list", [])
         build_instructions = session_data.get("build_instructions", [])

@@ -507,20 +507,37 @@ const QuoteFlow = {
                     </div>
                 </div>
 
+                ${this._renderValidationWarnings(pq)}
+
                 ${this._renderSection('Materials', this._renderMaterialsTable(pq))}
                 ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq))}
                 ${pq.consumables && pq.consumables.length ? this._renderSection('Consumables', this._renderConsumablesTable(pq)) : ''}
+
+                ${pq.detailed_cut_list && pq.detailed_cut_list.length ? this._renderSection('Cut List', this._renderCutListTable(pq)) : ''}
+                ${pq.build_instructions && pq.build_instructions.length ? this._renderSection('Build Sequence', this._renderBuildInstructions(pq)) : ''}
+
                 ${this._renderSection('Labor', this._renderLaborTable(pq))}
                 ${this._renderSection('Finishing', this._renderFinishing(pq))}
 
                 <div class="totals-section">
+                    <div class="rate-input-section">
+                        <label class="rate-label">Shop Rate:</label>
+                        <div class="rate-input-wrap">
+                            <span class="rate-prefix">$</span>
+                            <input type="number" id="shop-rate-input" class="rate-input"
+                                value="${this._getShopRate(pq)}" step="5" min="0"
+                                onchange="QuoteFlow.changeRate(parseFloat(this.value))">
+                            <span class="rate-suffix">/hr</span>
+                        </div>
+                    </div>
+
                     <div class="totals-grid">
                         <div class="total-row"><span>Materials</span><span>${this._fmt(pq.material_subtotal)}</span></div>
                         <div class="total-row"><span>Hardware</span><span>${this._fmt(pq.hardware_subtotal)}</span></div>
                         <div class="total-row"><span>Consumables</span><span>${this._fmt(pq.consumable_subtotal)}</span></div>
-                        <div class="total-row"><span>Labor</span><span>${this._fmt(pq.labor_subtotal)}</span></div>
+                        <div class="total-row"><span>Labor</span><span id="labor-subtotal-amount">${this._fmt(pq.labor_subtotal)}</span></div>
                         <div class="total-row"><span>Finishing</span><span>${this._fmt(pq.finishing_subtotal)}</span></div>
-                        <div class="total-row subtotal"><span>Subtotal</span><span>${this._fmt(pq.subtotal)}</span></div>
+                        <div class="total-row subtotal"><span>Subtotal</span><span id="subtotal-amount">${this._fmt(pq.subtotal)}</span></div>
                     </div>
 
                     <div class="markup-section">
@@ -573,6 +590,33 @@ const QuoteFlow = {
     _renderMaterialsTable(pq) {
         const items = pq.materials || [];
         if (!items.length) return '<p class="empty-section">No materials</p>';
+
+        // Group by profile for stock ordering summary
+        const stockGroups = {};
+        items.forEach(m => {
+            const profile = m.profile || 'unknown';
+            const stockFt = m.stock_length_ft;
+            if (!stockFt) return;
+            const lenFt = (m.length_inches || 0) / 12;
+            const qty = m.quantity || 1;
+            const totalFt = lenFt * qty;
+            if (!stockGroups[profile]) {
+                stockGroups[profile] = { stockFt: stockFt, totalFt: 0, desc: m.description || profile };
+            }
+            stockGroups[profile].totalFt += totalFt;
+        });
+
+        const stockSummary = Object.keys(stockGroups).length > 0
+            ? `<div class="stock-order-summary">
+                <strong>Stock Order:</strong>
+                ${Object.entries(stockGroups).map(([profile, info]) => {
+                    const sticks = Math.ceil(info.totalFt / info.stockFt);
+                    const remainder = Math.round((sticks * info.stockFt - info.totalFt) * 10) / 10;
+                    return `<span class="stock-item">${sticks} x ${info.stockFt}' ${profile.replace(/_/g, ' ')} (${info.totalFt.toFixed(1)}' needed, ${remainder}' remaining)</span>`;
+                }).join('')}
+            </div>`
+            : '';
+
         return `
             <table class="data-table">
                 <thead><tr><th>Material</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
@@ -591,6 +635,7 @@ const QuoteFlow = {
                     </tr>
                 </tbody>
             </table>
+            ${stockSummary}
         `;
     },
 
@@ -689,19 +734,133 @@ const QuoteFlow = {
         `;
     },
 
+    _renderValidationWarnings(pq) {
+        const warnings = pq.validation_warnings || [];
+        if (!warnings.length) return '';
+        const errors = warnings.filter(w => w.startsWith('[ERROR]'));
+        const warns = warnings.filter(w => w.startsWith('[WARNING]'));
+        const infos = warnings.filter(w => !w.startsWith('[ERROR]') && !w.startsWith('[WARNING]'));
+        return `
+            <div class="validation-warnings">
+                <h3 class="validation-title">REVIEW REQUIRED</h3>
+                ${errors.map(w => `<div class="vw-error">${w}</div>`).join('')}
+                ${warns.map(w => `<div class="vw-warn">${w}</div>`).join('')}
+                ${infos.map(w => `<div class="vw-info">${w}</div>`).join('')}
+            </div>
+        `;
+    },
+
+    _renderCutListTable(pq) {
+        const items = pq.detailed_cut_list || [];
+        if (!items.length) return '<p class="empty-section">No cut list</p>';
+        return `
+            <table class="data-table">
+                <thead><tr>
+                    <th>Piece</th><th>Profile</th><th>Length</th><th>Cut</th><th>Qty</th>
+                </tr></thead>
+                <tbody>
+                    ${items.map(c => {
+                        const lenIn = parseFloat(c.length_inches || 0);
+                        const lenStr = lenIn >= 12
+                            ? (lenIn / 12).toFixed(1) + ' ft'
+                            : lenIn.toFixed(1) + ' in';
+                        return `
+                            <tr>
+                                <td>${c.piece_name || c.description || ''}</td>
+                                <td class="profile-cell">${(c.profile || '').replace(/_/g, ' ')}</td>
+                                <td class="r">${lenStr}</td>
+                                <td>${c.cut_type || 'square'}</td>
+                                <td class="r">${c.quantity || 1}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </tbody>
+            </table>
+        `;
+    },
+
+    _renderBuildInstructions(pq) {
+        const steps = pq.build_instructions || [];
+        if (!steps.length) return '<p class="empty-section">No build instructions</p>';
+        return `
+            <ol class="build-steps">
+                ${steps.map(s => {
+                    const hasReview = (s.description || '').includes('[REVIEW');
+                    return `
+                        <li class="build-step ${hasReview ? 'build-step-flagged' : ''}">
+                            <strong>${s.title || 'Step ' + (s.step || '')}</strong>
+                            <p>${s.description || ''}</p>
+                            ${s.safety_notes ? `<p class="safety-note">Safety: ${s.safety_notes}</p>` : ''}
+                        </li>
+                    `;
+                }).join('')}
+            </ol>
+        `;
+    },
+
+    _getShopRate(pq) {
+        const procs = pq.labor || [];
+        for (const p of procs) {
+            if (p.rate && p.rate > 0) return p.rate;
+        }
+        return 125;
+    },
+
+    changeRate(newRate) {
+        if (!this.pricedQuote || !newRate || newRate <= 0) return;
+        const pq = this.pricedQuote;
+        let laborTotal = 0;
+        (pq.labor || []).forEach(p => {
+            p.rate = newRate;
+            laborTotal += (p.hours || 0) * newRate;
+        });
+        pq.labor_subtotal = Math.round(laborTotal * 100) / 100;
+        pq.subtotal = Math.round((
+            (pq.material_subtotal || 0) +
+            (pq.hardware_subtotal || 0) +
+            (pq.consumable_subtotal || 0) +
+            pq.labor_subtotal +
+            (pq.finishing_subtotal || 0)
+        ) * 100) / 100;
+        const markupPct = pq.selected_markup_pct || 0;
+        pq.total = Math.round(pq.subtotal * (1 + markupPct / 100) * 100) / 100;
+
+        // Update display
+        const laborEl = document.getElementById('labor-subtotal-amount');
+        const subEl = document.getElementById('subtotal-amount');
+        const totalEl = document.getElementById('grand-total-amount');
+        if (laborEl) laborEl.textContent = this._fmt(pq.labor_subtotal);
+        if (subEl) subEl.textContent = this._fmt(pq.subtotal);
+        if (totalEl) totalEl.textContent = this._fmt(pq.total);
+
+        // Re-render labor table to show updated rates
+        const laborSection = document.querySelector('.result-section:has(table) h3.section-title');
+        const laborSections = document.querySelectorAll('.result-section');
+        laborSections.forEach(sec => {
+            const title = sec.querySelector('.section-title');
+            if (title && title.textContent === 'Labor') {
+                sec.innerHTML = '<h3 class="section-title">Labor</h3>' + this._renderLaborTable(pq);
+            }
+        });
+    },
+
     async changeMarkup(pct, btn) {
         if (!this.quoteId) return;
         // Update UI immediately
         document.querySelectorAll('.markup-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
+        // Local recalculation (handles rate changes)
+        if (this.pricedQuote) {
+            this.pricedQuote.selected_markup_pct = pct;
+            this.pricedQuote.total = Math.round(
+                (this.pricedQuote.subtotal || 0) * (1 + pct / 100) * 100
+            ) / 100;
+            document.getElementById('grand-total-amount').textContent = this._fmt(this.pricedQuote.total);
+        }
+
         try {
-            const data = await API.updateMarkup(this.quoteId, pct);
-            document.getElementById('grand-total-amount').textContent = this._fmt(data.total);
-            if (this.pricedQuote) {
-                this.pricedQuote.selected_markup_pct = pct;
-                this.pricedQuote.total = data.total;
-            }
+            await API.updateMarkup(this.quoteId, pct);
         } catch (e) {
             console.error('Markup update failed:', e);
         }

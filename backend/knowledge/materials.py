@@ -746,6 +746,39 @@ PROFILES = {
 
 
 # ---------------------------------------------------------------------------
+# STANDARD STOCK LENGTHS (feet) — what suppliers sell
+# ---------------------------------------------------------------------------
+# Most structural steel comes in 20' or 24' lengths. Sheet/plate sold by area.
+# Used for "full stick ordering" — showing how many sticks to order.
+
+STOCK_LENGTHS = {
+    "square_tube": 24,
+    "rectangular_tube": 24,
+    "round_tube": 24,
+    "dom_tube": 20,
+    "flat_bar": 20,
+    "angle": 20,
+    "square_bar": 20,
+    "round_bar": 20,
+    "channel": 20,
+    "pipe": 21,
+    "sheet": None,     # sold by area, not length
+    "plate": None,     # sold by area, not length
+}
+
+
+def get_stock_length(profile_key):
+    """Get standard stock length in feet for a profile key.
+
+    Returns None for area-sold materials (sheet, plate).
+    """
+    profile = PROFILES.get(profile_key)
+    if not profile:
+        return 20  # default assumption
+    return STOCK_LENGTHS.get(profile.get("shape"), 20)
+
+
+# ---------------------------------------------------------------------------
 # LABOR MULTIPLIERS BY MATERIAL
 # ---------------------------------------------------------------------------
 

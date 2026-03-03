@@ -81,6 +81,19 @@
             "required": true,
             "hint": "Round tube 1.25-2\" OD is required for ADA-compliant handrails. Square tube and flat bar are for decorative railings where a separate handrail is provided.",
             "depends_on": null,
+            "branches": {
+                "Square tube 1-1/2\"": ["post_gauge"],
+                "Square tube 2\"": ["post_gauge"]
+            }
+        },
+        {
+            "id": "post_gauge",
+            "text": "What wall thickness for the posts and rail?",
+            "type": "choice",
+            "options": ["14ga (0.075\" wall) — standard residential railing", "11ga (0.120\" wall) — commercial/heavy-duty", "Not sure — let us recommend"],
+            "required": false,
+            "hint": "14ga is standard for most residential railings. 11ga for commercial, high-traffic, or extra rigidity. Post spacing also affects stiffness.",
+            "depends_on": "top_rail_profile",
             "branches": null
         },
         {

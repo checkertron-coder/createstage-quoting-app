@@ -78,6 +78,19 @@
             "required": false,
             "hint": "Square tube is most common for modern furniture. Round tube for mid-century modern. Flat bar for minimalist/contemporary.",
             "depends_on": null,
+            "branches": {
+                "1-1/2\" square tube (standard)": ["tube_wall_thickness"],
+                "2\" square tube (heavy/large tables)": ["tube_wall_thickness"]
+            }
+        },
+        {
+            "id": "tube_wall_thickness",
+            "text": "What wall thickness for the tubing?",
+            "type": "choice",
+            "options": ["14ga (0.075\" wall) — lighter, fine for decorative", "11ga (0.120\" wall) — standard structural", "Not sure — let us recommend"],
+            "required": false,
+            "hint": "11ga is stronger and heavier — use for dining tables, heavy tops, or commercial. 14ga is lighter — fine for coffee tables, decorative pieces, or light residential use.",
+            "depends_on": "leg_material_profile",
             "branches": null
         },
         {

@@ -58,6 +58,34 @@
             "required": true,
             "hint": null,
             "depends_on": null,
+            "branches": {
+                "Mild steel (most common / cheapest)": ["material_profile"],
+                "Stainless steel (304)": ["material_profile"],
+                "Stainless steel (316 — marine/food grade)": ["material_profile"]
+            }
+        },
+        {
+            "id": "material_profile",
+            "text": "What type of steel shapes/profiles? (select the primary one)",
+            "type": "choice",
+            "options": ["Square tube", "Round tube", "Rectangular tube", "Flat bar", "Angle iron", "Plate / sheet", "Mixed / not sure"],
+            "required": false,
+            "hint": "If your project uses multiple profiles (e.g. tube frame with flat bar details), pick the primary one. The AI will figure out the rest from your description.",
+            "depends_on": "material",
+            "branches": {
+                "Square tube": ["material_gauge"],
+                "Round tube": ["material_gauge"],
+                "Rectangular tube": ["material_gauge"]
+            }
+        },
+        {
+            "id": "material_gauge",
+            "text": "What wall thickness/gauge for the tubing?",
+            "type": "choice",
+            "options": ["14ga (0.075\" wall) — lighter/decorative", "11ga (0.120\" wall) — standard structural", "7ga (0.1875\" wall) — heavy duty", "Not sure — let us recommend"],
+            "required": false,
+            "hint": "11ga is the standard for most structural fab work (gates, railings, frames). 14ga is fine for light furniture or non-structural items. 7ga for heavy industrial or vehicle applications.",
+            "depends_on": "material_profile",
             "branches": null
         },
         {
