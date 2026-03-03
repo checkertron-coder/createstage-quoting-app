@@ -118,6 +118,14 @@ BANNED_TERMS = {
         "drill and tap tube wall",
         "tap directly into tube",
         "self-tapping screw into tube",
+        "drill a hole in the tube",
+        "drill a hole in the leg",
+        "drill into the bottom of the leg",
+        "drill a 3/8 hole",
+        "drill a pilot hole",
+        "drill and tap",
+        "tap a thread into",
+        "self-tapping screw",
     ],
 }
 

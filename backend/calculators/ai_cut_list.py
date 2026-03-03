@@ -53,6 +53,13 @@ BANNED_TERM_REPLACEMENTS = {
     "drill and tap tube wall": "weld in threaded bung",
     "tap directly into tube": "weld in threaded bung",
     "self-tapping screw into tube": "weld in threaded bung and thread leveling foot",
+    # Additional drill/tap patterns for leveler feet
+    "drill a pilot hole": "weld a threaded bung",
+    "drill and tap": "weld in a threaded bung and tap",
+    "drill a hole in the bottom": "weld a threaded bung into the bottom",
+    "drill a hole into the bottom": "weld a threaded bung into the bottom",
+    "tap a thread into the bottom": "weld a threaded bung into the bottom",
+    "drill press, hand drill, tap set, cutting fluid": "MIG welder, threaded bungs",
 }
 
 # Valid cut types
@@ -121,29 +128,42 @@ def _strip_banned_terms_from_steps(steps):
 
     Modifies steps in-place. Handles description, safety_notes, and tools fields.
     Case-insensitive matching, preserves original casing in surrounding text.
+    Sorts replacements longest-first to prevent partial matches
+    (e.g., "baking soda solution" must match before "baking soda").
     """
+    # Sort by length of banned term (longest first) to prevent partial matches
+    sorted_replacements = sorted(
+        BANNED_TERM_REPLACEMENTS.items(),
+        key=lambda x: len(x[0]),
+        reverse=True
+    )
+
     for step in steps:
         for field_name in ("description", "safety_notes"):
             text = step.get(field_name, "")
             if not text:
                 continue
-            for banned, replacement in BANNED_TERM_REPLACEMENTS.items():
-                # Case-insensitive replacement
+            for banned, replacement in sorted_replacements:
                 pattern = re.compile(re.escape(banned), re.IGNORECASE)
                 text = pattern.sub(replacement, text)
             step[field_name] = text
 
-        # Clean tools list
-        tools = step.get("tools", [])
+        # Clean tools list/string
+        tools = step.get("tools", "")
         if isinstance(tools, list):
             cleaned_tools = []
             for tool in tools:
                 tool_str = str(tool)
-                for banned, replacement in BANNED_TERM_REPLACEMENTS.items():
+                for banned, replacement in sorted_replacements:
                     pattern = re.compile(re.escape(banned), re.IGNORECASE)
                     tool_str = pattern.sub(replacement, tool_str)
                 cleaned_tools.append(tool_str)
             step["tools"] = cleaned_tools
+        elif isinstance(tools, str):
+            for banned, replacement in sorted_replacements:
+                pattern = re.compile(re.escape(banned), re.IGNORECASE)
+                tools = pattern.sub(replacement, tools)
+            step["tools"] = tools
 
 
 def _build_geometry_summary(cut_list):
@@ -153,6 +173,7 @@ def _build_geometry_summary(cut_list):
 
     Groups items by their 'group' field, lists piece counts and unique lengths,
     and detects uniform step patterns (concentric/pyramid layers).
+    Adds HARD CONSTRAINT for decorative layer counts.
 
     Returns a GEOMETRY SUMMARY block string, or empty string if no groups found.
     """
@@ -168,6 +189,22 @@ def _build_geometry_summary(cut_list):
 
     if not groups:
         return ""
+
+    # Count decorative layers and spacers from cut list
+    layer_count = 0
+    spacer_count = 0
+    for item in cut_list:
+        desc_lower = item.get("description", "").lower()
+        group_lower = item.get("group", "").lower()
+        qty = item.get("quantity", 1)
+        is_decorative = (
+            "layer" in desc_lower or "decorative" in desc_lower
+            or "pattern" in group_lower or "decorative" in group_lower
+        )
+        if is_decorative and "spacer" not in desc_lower:
+            layer_count += 1  # each unique line item = 1 layer
+        if "spacer" in desc_lower:
+            spacer_count += qty
 
     lines = ["GEOMETRY SUMMARY (from cut list — use these dimensions in build steps):"]
 
@@ -190,6 +227,18 @@ def _build_geometry_summary(cut_list):
                         abs(diffs[0]), len(lengths)))
         elif len(lengths) == 1:
             lines.append("    all pieces: %.1f\"" % lengths[0])
+
+    # Add hard constraint for decorative layers
+    if layer_count > 0:
+        lines.append("")
+        lines.append("HARD CONSTRAINT: The build sequence MUST install exactly %d decorative layers." % layer_count)
+        lines.append("Each layer MUST use the EXACT dimensions from the cut list above.")
+        lines.append("Do NOT consolidate layers. Do NOT skip layers. Do NOT change dimensions.")
+        if layer_count > 5:
+            lines.append("If the cut list says %d layers, the build sequence must reference all %d layers." % (
+                layer_count, layer_count))
+    if spacer_count > 0:
+        lines.append("Spacers: %d total spacer pieces in the cut list." % spacer_count)
 
     return "\n".join(lines)
 
@@ -259,18 +308,22 @@ class AICutListGenerator:
             response_text = self._call_gemini(prompt)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
-                # Validate build sequence before returning
-                from ..knowledge.validation import check_banned_terms
-                full_text = " ".join(s.get("description", "") for s in steps)
+                # 1. Strip banned terms from customer-facing text FIRST
+                _strip_banned_terms_from_steps(steps)
 
-                # Check for banned terms in key contexts
+                # 2. THEN check for any remaining banned terms the stripping missed
+                from ..knowledge.validation import check_banned_terms
+                full_text = " ".join(
+                    s.get("description", "") + " " + s.get("safety_notes", "")
+                    for s in steps
+                )
                 for context in ["vinegar_bath_cleanup", "decorative_stock_prep",
                                 "decorative_assembly", "leveler_install"]:
                     violations = check_banned_terms(full_text, context)
                     if violations:
                         logger.warning(
-                            "BUILD SEQUENCE VALIDATION FAILED — banned terms "
-                            "found [%s]: %s", context, violations)
+                            "BUILD SEQUENCE — banned terms remain after "
+                            "stripping [%s]: %s", context, violations)
                         for step in steps:
                             desc = step.get("description", "")
                             for v in violations:
@@ -279,9 +332,6 @@ class AICutListGenerator:
                                         desc + " [REVIEW: contains banned "
                                         "term '%s']" % v
                                     )
-
-                # Strip banned terms from customer-facing text
-                _strip_banned_terms_from_steps(steps)
 
                 return steps
             logger.warning("AI build instructions returned empty — skipping")
@@ -513,8 +563,20 @@ Return ONLY valid JSON — an array of objects:
         if "tig" in weld_processes:
             weld_note = "\nNOTE: This project includes TIG welding. Steps involving TIG should specify appropriate gas (argon), filler rod, and amperage range."
 
-        # Detect finish type for mill scale hint
+        # Force TIG for decorative elements
         all_fields_lower = " ".join(str(v) for v in fields.values()).lower()
+        decorative_keywords = ["decorative", "flat bar", "ornamental", "pattern",
+                               "layered", "woven", "pyramid", "concentric"]
+        has_decorative = any(k in all_fields_lower for k in decorative_keywords)
+        if has_decorative:
+            weld_note += (
+                "\nCRITICAL: All decorative flat bar welding MUST use TIG (GTAW), "
+                "not MIG. The flat bar is 1/8\" thick with pre-finished surfaces — "
+                "MIG would cause burn-through, excess spatter, and damage the finish. "
+                "Use MIG only for the structural square tube frame."
+            )
+
+        # Detect finish type for mill scale hint
         bare_metal_keywords = [
             "clear_coat", "clear coat", "clearcoat",
             "raw", "waxed", "raw_steel", "raw steel",
@@ -552,6 +614,13 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
             finish_context = """
 FINISH CONTEXT:
 This job requires mill scale removal (bare metal finish: clear coat, raw, brushed, or patina).
+
+CRITICAL SCHEDULING RULE: The vinegar bath takes 12-24 hours and is UNATTENDED.
+- Step 1 MUST be: Submerge flat bar/decorative stock in vinegar bath (this takes 30 seconds of labor).
+- Steps 2-N: Do ALL frame/structural work while the vinegar bath runs overnight.
+- After frame work is done: Pull stock from bath, rinse with warm water, scrub with dish soap and red scotch-brite pad, dry with clean towel, then heavy grind with 40-grit flap disc.
+- NEVER schedule the vinegar bath AFTER frame work. That wastes an entire day.
+
 Apply Principles 1 (workability) and 2 (access) to determine WHEN mill scale removal happens based on the specific pieces and assembly in this project.
 - Decorative flat bar / small pieces that will be hard to grind after cutting → remove on RAW STOCK before cutting.
 - Large structural pieces / tube frames → remove AFTER all welding is done.
@@ -604,6 +673,9 @@ RULES:
 5. Include safety notes where relevant (PPE, ventilation for galvanized, etc.).
 6. 8-15 steps is typical. Group related operations but don't skip important steps.
 7. Include quality checks: square check after tacking, level check, fit check before welding.
+8. SCHEDULING: Unattended processes with long wait times (vinegar bath 12-24hr, paint cure, epoxy set) must be the FIRST step. Start the clock immediately. All attended work (cutting, welding, grinding) happens WHILE the unattended process runs. Never schedule an unattended long-duration process AFTER attended work — that wastes an entire day of shop time.
+9. For jobs requiring vinegar bath / mill scale removal on stock that needs finish grinding before cutting: Step 1 is ALWAYS "Submerge stock in vinegar bath." Steps 2-N are frame/structural work done WHILE the bath runs. The step AFTER all frame work is "Pull stock from vinegar bath, wash, grind, cut."
+10. WELD PROCESS SELECTION: Decorative flat bar work (1/8" or thinner, visible joints, furniture/ornamental pieces) MUST use TIG (GTAW), not MIG. TIG gives cleaner, more precise welds with less spatter and less heat input — critical for pre-finished decorative surfaces. MIG is for structural frame assembly (square tube joints, leg-to-frame connections). Spacer blocks can use either MIG (for speed) or TIG (for precision on small parts).
 
 Return ONLY valid JSON — an array of step objects:
 [

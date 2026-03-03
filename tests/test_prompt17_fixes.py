@@ -1,7 +1,7 @@
 """
-Prompt 17 fixes — 18 tests.
+Prompt 17 + 18 fixes — 30 tests.
 
-Tests:
+Prompt 17 (1-18):
 1-3.   Banned term stripping (replacements dict, step cleaning, tools cleaning)
 4-5.   Gas estimation (500 weld inches < 200 cu ft, small job < $5)
 6-7.   Geometry summary (prompt includes GEOMETRY SUMMARY, uniform step detected)
@@ -11,6 +11,19 @@ Tests:
 13-14. Grind spec NEVER list (80→120 in NEVER list, in replacements dict)
 15-18. Leveler install (process exists, drill-into-tube banned, threaded bung
        in hardware, context checked in ai_cut_list)
+
+Prompt 18 (19-30):
+19.    Vinegar bath scheduling rule in build instructions prompt
+20.    Vinegar-first in finish context for bare metal
+21.    TIG enforced for decorative flat bar in weld_note
+22.    TIG rule in build instructions RULES section
+23.    Longest-match-first replacement ordering
+24-25. Additional drill/tap patterns in replacements + validation
+26.    Layer count hard constraint in geometry summary
+27.    Spacer count in geometry summary
+28.    Strip runs BEFORE validation check
+29.    Tools as string handled by strip function
+30.    No false positive after stripping
 """
 
 from backend.calculators.ai_cut_list import (
@@ -281,3 +294,214 @@ def test_leveler_install_context_checked_in_ai_cut_list():
     # Verify the replacement dict covers leveler terms
     assert "drill into tube" in BANNED_TERM_REPLACEMENTS
     assert "weld in threaded bung" in BANNED_TERM_REPLACEMENTS["drill into tube"]
+
+
+# =========================================================================
+# PROMPT 18 TESTS (19-30)
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# 19-20: Vinegar bath scheduling
+# -------------------------------------------------------------------------
+
+def test_vinegar_scheduling_rule_in_build_prompt():
+    """Build instructions prompt should contain vinegar-first scheduling rule."""
+    gen = AICutListGenerator()
+    cut_list = [
+        {"description": "Leg", "group": "frame", "profile": "sq_tube_2x2_11ga",
+         "length_inches": 30.0, "quantity": 4, "cut_type": "miter_45",
+         "weld_process": "tig"},
+    ]
+    prompt = gen._build_instructions_prompt("furniture_table", {
+        "description": "End table with decorative flat bar",
+        "finish": "clear_coat",
+    }, cut_list)
+    assert "SCHEDULING" in prompt
+    assert "FIRST step" in prompt
+
+
+def test_vinegar_first_in_finish_context():
+    """Bare metal finish context should require vinegar bath as Step 1."""
+    gen = AICutListGenerator()
+    cut_list = [
+        {"description": "Leg", "group": "frame", "profile": "sq_tube_2x2_11ga",
+         "length_inches": 30.0, "quantity": 4},
+    ]
+    prompt = gen._build_instructions_prompt("furniture_table", {
+        "description": "Table with flat bar pattern",
+        "finish": "clear_coat",
+    }, cut_list)
+    assert "Step 1 MUST be" in prompt
+    assert "vinegar bath" in prompt.lower()
+    assert "NEVER schedule the vinegar bath AFTER frame work" in prompt
+
+
+# -------------------------------------------------------------------------
+# 21-22: TIG for decorative flat bar
+# -------------------------------------------------------------------------
+
+def test_tig_enforced_for_decorative_flat_bar():
+    """Weld note should enforce TIG for decorative flat bar."""
+    gen = AICutListGenerator()
+    cut_list = [
+        {"description": "Decorative layer", "group": "pattern",
+         "profile": "flat_bar_1x0.125", "length_inches": 18.0, "quantity": 4},
+    ]
+    prompt = gen._build_instructions_prompt("furniture_table", {
+        "description": "End table with decorative flat bar pyramid pattern",
+        "finish": "clear_coat",
+    }, cut_list)
+    assert "CRITICAL" in prompt
+    assert "TIG" in prompt
+    assert "MIG" in prompt  # should mention MIG for structural only
+    assert "burn-through" in prompt.lower()
+
+
+def test_tig_rule_in_build_instructions_rules():
+    """Build instructions RULES should include weld process selection rule."""
+    gen = AICutListGenerator()
+    cut_list = [
+        {"description": "Leg", "group": "frame", "profile": "sq_tube_2x2_11ga",
+         "length_inches": 30.0, "quantity": 4},
+    ]
+    prompt = gen._build_instructions_prompt("furniture_table", {
+        "description": "Table",
+        "finish": "raw",
+    }, cut_list)
+    assert "WELD PROCESS SELECTION" in prompt
+    assert "Decorative flat bar work" in prompt
+
+
+# -------------------------------------------------------------------------
+# 23: Longest-match-first replacement ordering
+# -------------------------------------------------------------------------
+
+def test_longest_match_first_prevents_partial():
+    """Longer banned term should match before shorter partial match."""
+    steps = [
+        {
+            "step": 1,
+            "title": "Cleanup",
+            "description": "Neutralize with a baking soda solution after pulling.",
+            "tools": [],
+            "safety_notes": "",
+        },
+    ]
+    _strip_banned_terms_from_steps(steps)
+    desc = steps[0]["description"]
+    # "baking soda solution" (longer) should match first → "dish soap and warm water"
+    # NOT "baking soda" → "dish soap" leaving "dish soap solution"
+    assert "baking soda" not in desc.lower()
+    assert "dish soap and warm water" in desc.lower()
+
+
+# -------------------------------------------------------------------------
+# 24-25: Additional drill/tap patterns
+# -------------------------------------------------------------------------
+
+def test_drill_pilot_hole_in_replacements():
+    """drill a pilot hole should be in BANNED_TERM_REPLACEMENTS."""
+    assert "drill a pilot hole" in BANNED_TERM_REPLACEMENTS
+    assert "threaded bung" in BANNED_TERM_REPLACEMENTS["drill a pilot hole"]
+
+
+def test_expanded_leveler_banned_terms():
+    """Expanded leveler_install banned terms in validation.py."""
+    terms = BANNED_TERMS["leveler_install"]
+    assert "drill a pilot hole" in terms
+    assert "drill and tap" in terms
+    assert "tap a thread into" in terms
+    assert "self-tapping screw" in terms
+
+
+# -------------------------------------------------------------------------
+# 26-27: Layer count and spacer enforcement
+# -------------------------------------------------------------------------
+
+def test_geometry_summary_has_layer_count_constraint():
+    """Geometry summary should include HARD CONSTRAINT with layer count."""
+    cut_list = [
+        {"description": "Decorative layer 1", "group": "pattern",
+         "profile": "flat_bar_1x0.125", "length_inches": 20.0, "quantity": 4},
+        {"description": "Decorative layer 2", "group": "pattern",
+         "profile": "flat_bar_1x0.125", "length_inches": 18.0, "quantity": 4},
+        {"description": "Decorative layer 3", "group": "pattern",
+         "profile": "flat_bar_1x0.125", "length_inches": 16.0, "quantity": 4},
+    ]
+    summary = _build_geometry_summary(cut_list)
+    assert "HARD CONSTRAINT" in summary
+    assert "exactly 3 decorative layers" in summary
+
+
+def test_geometry_summary_includes_spacer_count():
+    """Geometry summary should count spacer pieces."""
+    cut_list = [
+        {"description": "Decorative layer 1", "group": "pattern",
+         "profile": "flat_bar_1x0.125", "length_inches": 20.0, "quantity": 4},
+        {"description": "Spacer block", "group": "spacer",
+         "profile": "sq_bar_0.5", "length_inches": 0.5, "quantity": 40},
+    ]
+    summary = _build_geometry_summary(cut_list)
+    assert "Spacers: 40" in summary
+
+
+# -------------------------------------------------------------------------
+# 28: Strip runs BEFORE validation
+# -------------------------------------------------------------------------
+
+def test_strip_before_validation_no_false_positive():
+    """After stripping, 'dish soap' should NOT trigger a banned term warning."""
+    from backend.knowledge.validation import check_banned_terms
+    # Simulate post-strip text — should only contain clean replacements
+    cleaned_text = "scrub with dish soap and red scotch-brite pad, dry with clean towel"
+    # Check against all contexts
+    for context in ["vinegar_bath_cleanup", "decorative_stock_prep",
+                    "decorative_assembly", "leveler_install"]:
+        violations = check_banned_terms(cleaned_text, context)
+        assert len(violations) == 0, (
+            "False positive: '%s' flagged in context '%s'" % (violations, context)
+        )
+
+
+# -------------------------------------------------------------------------
+# 29: Tools as string handled
+# -------------------------------------------------------------------------
+
+def test_strip_handles_tools_as_string():
+    """_strip_banned_terms_from_steps should handle tools as string (not list)."""
+    steps = [
+        {
+            "step": 1,
+            "title": "Prep",
+            "description": "Some step.",
+            "tools": "wire brush, compressed air, bucket",
+            "safety_notes": "",
+        },
+    ]
+    _strip_banned_terms_from_steps(steps)
+    tools = steps[0]["tools"]
+    assert isinstance(tools, str)
+    assert "wire brush" not in tools.lower()
+    assert "compressed air" not in tools.lower()
+
+
+# -------------------------------------------------------------------------
+# 30: Drill-and-tap full sentence replacement
+# -------------------------------------------------------------------------
+
+def test_drill_and_tap_replaced_in_steps():
+    """'Drill a pilot hole, then tap' should be replaced with bung method."""
+    steps = [
+        {
+            "step": 1,
+            "title": "Install levelers",
+            "description": "Drill a pilot hole in the bottom of each leg, then tap a thread into the bottom for the leveling feet.",
+            "tools": ["drill press, hand drill, tap set, cutting fluid"],
+            "safety_notes": "",
+        },
+    ]
+    _strip_banned_terms_from_steps(steps)
+    desc = steps[0]["description"]
+    assert "drill a pilot hole" not in desc.lower()
+    assert "tap a thread into the bottom" not in desc.lower()
+    assert "threaded bung" in desc.lower()
