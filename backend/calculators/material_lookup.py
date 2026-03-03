@@ -80,6 +80,9 @@ PRICE_PER_FOOT = {
     "pipe_6_sch40": 12.00,
     "pipe_3.5_sch40": 5.00,
     "pipe_3_sch40": 4.00,
+    # HSS (structural tube — thicker wall for posts/columns)
+    "hss_4x4_0.25": 9.50,
+    "hss_6x4_0.25": 12.00,
 }
 
 # Prices per square foot
@@ -413,7 +416,7 @@ class MaterialLookup:
         prefixes = [
             "sq_tube", "rect_tube", "round_tube",
             "sq_bar", "round_bar", "flat_bar",
-            "angle", "channel", "pipe",
+            "dom_tube", "angle", "channel", "pipe", "hss",
         ]
         for prefix in prefixes:
             if profile.startswith(prefix + "_") or profile == prefix:
@@ -438,14 +441,16 @@ class MaterialLookup:
             "sq_bar": "Square Bar",
             "round_bar": "Round Bar",
             "flat_bar": "Flat Bar",
+            "dom_tube": "DOM Tube",
             "angle": "Angle Iron",
             "channel": "Channel",
             "pipe": "Pipe",
+            "hss": "HSS",
         }
         prefixes = [
             "sq_tube", "rect_tube", "round_tube",
             "sq_bar", "round_bar", "flat_bar",
-            "angle", "channel", "pipe",
+            "dom_tube", "angle", "channel", "pipe", "hss",
         ]
         for prefix in prefixes:
             if profile.startswith(prefix + "_"):

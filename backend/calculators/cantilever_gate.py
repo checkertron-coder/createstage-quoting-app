@@ -276,23 +276,49 @@ class CantileverGateCalculator(BaseCalculator):
             ))
             assumptions.append(f"Post concrete: {total_cu_yd:.2f} cu yd based on {post_count} holes × 12\" diameter × {post_concrete_depth_in}\" deep.")
 
-        # 6. Bottom guide rail
-        guide_rail_in = total_gate_length_in + 24  # Extra 24" for approach
-        guide_rail_ft = self.inches_to_feet(guide_rail_in)
-        guide_price_ft = lookup.get_price_per_foot("angle_2x2x0.25")
-        guide_weight = self.get_weight_lbs("angle_2x2x0.25", guide_rail_ft)
+        # 6. Bottom guide rail — conditional on bottom_guide field
+        bottom_guide_type = fields.get("bottom_guide", "Surface mount guide roller")
+        if "No bottom guide" in bottom_guide_type or "top-hung" in bottom_guide_type.lower():
+            # Top-hung only — no bottom guide material
+            assumptions.append("No bottom guide rail — top-hung (cantilever-only) configuration.")
+        elif "Embedded" in bottom_guide_type:
+            # Embedded track — use channel instead of angle
+            guide_rail_in = total_gate_length_in + 24  # Extra 24" for approach
+            guide_rail_ft = self.inches_to_feet(guide_rail_in)
+            guide_profile = "channel_4x5.4"
+            guide_price_ft = lookup.get_price_per_foot(guide_profile)
+            guide_weight = self.get_weight_lbs(guide_profile, guide_rail_ft)
 
-        items.append(self.make_material_item(
-            description=f"Bottom guide rail — 2\"×2\"×1/4\" angle ({guide_rail_ft:.1f} ft)",
-            material_type="angle_iron",
-            profile="angle_2x2x0.25",
-            length_inches=guide_rail_in,
-            quantity=self.linear_feet_to_pieces(guide_rail_ft),
-            unit_price=round(guide_rail_ft * guide_price_ft, 2),
-            cut_type="square",
-            waste_factor=self.WASTE_TUBE,
-        ))
-        total_weight += guide_weight
+            items.append(self.make_material_item(
+                description=f"Bottom guide — embedded C4×5.4 channel ({guide_rail_ft:.1f} ft)",
+                material_type="channel",
+                profile=guide_profile,
+                length_inches=guide_rail_in,
+                quantity=self.linear_feet_to_pieces(guide_rail_ft),
+                unit_price=round(guide_rail_ft * guide_price_ft, 2),
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+            total_weight += guide_weight
+            assumptions.append("Embedded bottom guide: C4×5.4 channel flush-mounted in concrete.")
+        else:
+            # Surface mount (default) — angle iron guide rail
+            guide_rail_in = total_gate_length_in + 24  # Extra 24" for approach
+            guide_rail_ft = self.inches_to_feet(guide_rail_in)
+            guide_price_ft = lookup.get_price_per_foot("angle_2x2x0.25")
+            guide_weight = self.get_weight_lbs("angle_2x2x0.25", guide_rail_ft)
+
+            items.append(self.make_material_item(
+                description=f"Bottom guide rail — 2\"×2\"×1/4\" angle ({guide_rail_ft:.1f} ft)",
+                material_type="angle_iron",
+                profile="angle_2x2x0.25",
+                length_inches=guide_rail_in,
+                quantity=self.linear_feet_to_pieces(guide_rail_ft),
+                unit_price=round(guide_rail_ft * guide_price_ft, 2),
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+            total_weight += guide_weight
 
         # 7. Roller carriages (hardware)
         carriage_count = 2  # Standard: 2 carriages on 2 rear posts
@@ -344,6 +370,21 @@ class CantileverGateCalculator(BaseCalculator):
 
         # 12. Total weld inches (add post-to-frame brackets etc.)
         total_weld_inches += self.weld_inches_for_joints(post_count * 2, 4.0)  # Post brackets
+
+        # 11. Adjacent fence sections (compound job)
+        adjacent_fence = fields.get("adjacent_fence", "No")
+        if "Yes" in str(adjacent_fence):
+            fence_result = self._generate_fence_sections(
+                fields, height_in, infill_type, infill_spacing_in,
+                frame_key, frame_size, frame_gauge, frame_price_ft,
+                post_profile_key, post_price_ft, post_concrete_depth_in,
+            )
+            items.extend(fence_result["items"])
+            hardware.extend(fence_result["hardware"])
+            total_weight += fence_result["weight"]
+            total_sq_ft += fence_result["sq_ft"]
+            total_weld_inches += fence_result["weld_inches"]
+            assumptions.extend(fence_result["assumptions"])
 
         # Assumptions
         assumptions.append(f"Counterbalance tail: {self.inches_to_feet(tail_length_in):.1f} ft ({self.TAIL_RATIO*100:.0f}% of {clear_width_ft:.0f} ft opening).")
@@ -420,6 +461,169 @@ class CantileverGateCalculator(BaseCalculator):
         if "patriot" in brand or "us automatic" in brand:
             return "us_automatic_patriot"
         return "liftmaster_la412"  # Default
+
+    def _generate_fence_sections(self, fields, height_in, infill_type, infill_spacing_in,
+                                    frame_key, frame_size, frame_gauge, frame_price_ft,
+                                    post_profile_key, post_price_ft, post_concrete_depth_in):
+        """Generate material items for adjacent fence sections."""
+        items = []
+        hardware = []
+        weight = 0.0
+        sq_ft = 0.0
+        weld_inches = 0.0
+        assumptions = []
+
+        side_1_ft = self.parse_feet(fields.get("fence_side_1_length"), default=0.0)
+        side_2_ft = self.parse_feet(fields.get("fence_side_2_length"), default=0.0)
+        post_spacing_ft = self._parse_fence_post_spacing(
+            fields.get("fence_post_spacing", "6 ft on-center (standard residential)"))
+        fence_match = fields.get("fence_infill_match", "Yes — match gate infill exactly")
+
+        sides = []
+        if side_1_ft > 0:
+            sides.append(("Side 1", side_1_ft))
+        if side_2_ft > 0:
+            sides.append(("Side 2", side_2_ft))
+
+        if not sides:
+            return {"items": items, "hardware": hardware, "weight": weight,
+                    "sq_ft": sq_ft, "weld_inches": weld_inches, "assumptions": assumptions}
+
+        for side_name, length_ft in sides:
+            length_in = self.feet_to_inches(length_ft)
+
+            # Fence posts (line posts between gate post and termination)
+            # Gate post is shared, so we only need intermediate + terminal posts
+            post_count = max(1, math.ceil(length_ft / post_spacing_ft))  # at least terminal
+            above_grade_in = height_in + 2
+            post_total_length_in = above_grade_in + post_concrete_depth_in
+            post_total_ft = self.inches_to_feet(post_total_length_in) * post_count
+            post_weight = self.get_weight_lbs(post_profile_key, post_total_ft)
+
+            items.append(self.make_material_item(
+                description=f"Fence posts — {side_name} × {post_count} ({self.inches_to_feet(post_total_length_in):.1f} ft each)",
+                material_type="square_tubing",
+                profile=post_profile_key,
+                length_inches=post_total_length_in,
+                quantity=post_count,
+                unit_price=round(self.inches_to_feet(post_total_length_in) * post_price_ft, 2),
+                cut_type="square",
+                waste_factor=0.0,
+            ))
+            weight += post_weight
+
+            # Post concrete for fence posts
+            if post_concrete_depth_in > 0:
+                hole_diameter_in = 12.0
+                cu_in_per_hole = math.pi * (hole_diameter_in / 2) ** 2 * post_concrete_depth_in
+                total_cu_in = cu_in_per_hole * post_count
+                total_cu_yd = total_cu_in / 46656.0
+                concrete_price = lookup.get_unit_price("concrete_per_cuyd")
+
+                items.append(self.make_material_item(
+                    description=f"Fence post concrete — {side_name} × {post_count} holes",
+                    material_type="concrete",
+                    profile="concrete_footing",
+                    length_inches=post_concrete_depth_in,
+                    quantity=post_count,
+                    unit_price=round(total_cu_yd * concrete_price / post_count, 2),
+                    cut_type="n/a",
+                    waste_factor=0.0,
+                ))
+
+            # Fence rails — top and bottom rails spanning between posts
+            # Number of panel spans = post_count (gate post to first, intermediate spans, to terminal)
+            rail_count = 2  # top + bottom
+            rail_total_in = length_in * rail_count
+            rail_total_ft = self.inches_to_feet(rail_total_in)
+            rail_weight = self.get_weight_lbs(frame_key, rail_total_ft)
+
+            items.append(self.make_material_item(
+                description=f"Fence rails — {side_name} top + bottom ({length_ft:.1f} ft each)",
+                material_type="square_tubing",
+                profile=frame_key,
+                length_inches=length_in,
+                quantity=self.apply_waste(self.linear_feet_to_pieces(rail_total_ft), self.WASTE_TUBE),
+                unit_price=round(length_ft * frame_price_ft, 2),
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+            weight += rail_weight
+            weld_inches += self.weld_inches_for_joints(post_count * rail_count * 2, 2.0)
+
+            # Fence infill (pickets/bars matching gate or simplified)
+            use_solid = "solid" in str(fence_match).lower() or "Solid" in infill_type
+            use_pickets = (
+                "Pickets" in infill_type or "Flat bar" in infill_type
+                or "Horizontal" in infill_type
+                or "match" in str(fence_match).lower()
+            )
+
+            if use_solid or "Expanded" in infill_type:
+                # Sheet or expanded metal infill
+                infill_sqft = self.sq_ft_from_dimensions(length_in, height_in)
+                profile_key = "expanded_metal_13ga" if "Expanded" in infill_type else "sheet_14ga"
+                sheet_price = lookup.get_price_per_sqft(profile_key)
+                infill_sheets = self.apply_waste(math.ceil(infill_sqft / 32.0), self.WASTE_SHEET)
+                infill_weight = self.get_plate_weight_lbs(length_in, height_in, 0.075)
+
+                items.append(self.make_material_item(
+                    description=f"Fence infill — {side_name} ({profile_key})",
+                    material_type="plate",
+                    profile=profile_key,
+                    length_inches=length_in,
+                    quantity=infill_sheets,
+                    unit_price=round(32.0 * sheet_price, 2),
+                    cut_type="square",
+                    waste_factor=self.WASTE_SHEET,
+                ))
+                weight += infill_weight
+                weld_inches += self.perimeter_inches(length_in, height_in) * 0.5
+            elif use_pickets:
+                # Vertical picket/bar infill
+                picket_profile = INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
+                picket_price_ft = lookup.get_price_per_foot(picket_profile)
+                picket_count = math.ceil(length_in / infill_spacing_in) + 1
+                picket_length_in = height_in - 2
+                picket_total_ft = self.inches_to_feet(picket_length_in * picket_count)
+                picket_weight = self.get_weight_lbs(picket_profile, picket_total_ft)
+
+                items.append(self.make_material_item(
+                    description=f"Fence pickets — {side_name} × {picket_count} pcs",
+                    material_type="flat_bar" if "Flat" in infill_type else "square_tubing",
+                    profile=picket_profile,
+                    length_inches=picket_length_in,
+                    quantity=self.apply_waste(picket_count, self.WASTE_FLAT if "Flat" in infill_type else self.WASTE_TUBE),
+                    unit_price=round(self.inches_to_feet(picket_length_in) * picket_price_ft, 2),
+                    cut_type="square",
+                    waste_factor=self.WASTE_FLAT if "Flat" in infill_type else self.WASTE_TUBE,
+                ))
+                weight += picket_weight
+                weld_inches += self.weld_inches_for_joints(picket_count * 2, 1.5)
+
+            # Fence square footage for finishing
+            fence_sqft = self.sq_ft_from_dimensions(length_in, height_in) * 2  # Both sides
+            sq_ft += fence_sqft
+
+            assumptions.append(f"Adjacent fence {side_name}: {length_ft:.0f} ft, {post_count} posts at {post_spacing_ft:.0f} ft spacing.")
+
+        return {
+            "items": items,
+            "hardware": hardware,
+            "weight": weight,
+            "sq_ft": sq_ft,
+            "weld_inches": weld_inches,
+            "assumptions": assumptions,
+        }
+
+    def _parse_fence_post_spacing(self, spacing_str: str) -> float:
+        """Extract fence post spacing in feet from answer string."""
+        s = str(spacing_str)
+        if "8" in s:
+            return 8.0
+        if "10" in s:
+            return 10.0
+        return 6.0  # Default residential
 
     def _lookup_latch(self, latch_str: str) -> str:
         """Map latch answer to hardware catalog key."""

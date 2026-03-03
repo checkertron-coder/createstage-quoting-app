@@ -87,11 +87,12 @@ _PROFILE_GROUPS = {
     "pipe": "  Pipe: pipe_3_sch40, pipe_4_sch40, pipe_6_sch40",
     "sheet_plate": "  Sheet/plate: sheet_11ga, sheet_14ga, sheet_16ga, plate_0.25, plate_0.375, plate_0.5",
     "dom_tube": "  DOM tube: dom_tube_1.75x0.120",
+    "hss": "  HSS (structural tube): hss_4x4_0.25, hss_6x4_0.25",
 }
 
 # Which profile groups each job type needs
 _JOB_TYPE_PROFILES = {
-    "cantilever_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate"],
+    "cantilever_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate", "hss"],
     "swing_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate"],
     "straight_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
     "stair_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
@@ -396,6 +397,9 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
 ---
 """ % knowledge_snippet
 
+        # Build structured context blocks for compound/complex jobs
+        context_blocks = self._build_field_context(job_type, fields)
+
         prompt = """You are an expert metal fabricator with 25+ years of shop experience.
 You are generating a DETAILED cut list for a fabrication project.
 
@@ -404,6 +408,7 @@ IMPORTANT: Think through this design BEFORE listing pieces.
 JOB TYPE: %s
 %s
 USER-PROVIDED INFORMATION:
+%s
 %s
 
 === STEP 1: DESIGN ANALYSIS ===
@@ -481,9 +486,76 @@ Return ONLY valid JSON — an array of objects:
         "weld_type": "fillet",
         "notes": "4 legs at 30 inches for 30-inch table height. Miter bottom for leveling feet."
     }
-]""" % (job_type, knowledge_block, fields_text, weld_guidance, profiles_text)
+]""" % (job_type, knowledge_block, fields_text, context_blocks,
+        weld_guidance, profiles_text)
 
         return prompt
+
+    def _build_field_context(self, job_type, fields):
+        # type: (str, dict) -> str
+        """
+        Build structured context blocks from fields for compound/complex jobs.
+
+        Provides explicit guidance to Gemini about compound elements like
+        adjacent fence sections, bottom guide types, mounting styles, etc.
+        so cuts are generated for the ENTIRE job, not just the primary element.
+        """
+        blocks = []
+
+        # --- Cantilever gate compound job context ---
+        if job_type == "cantilever_gate":
+            # Bottom guide context
+            bottom_guide = str(fields.get("bottom_guide", ""))
+            if "No bottom guide" in bottom_guide or "top-hung" in bottom_guide.lower():
+                blocks.append(
+                    "BOTTOM GUIDE: None — this is a top-hung (cantilever-only) gate. "
+                    "Do NOT include any bottom guide rail or embedded track in the cut list."
+                )
+            elif "Embedded" in bottom_guide:
+                blocks.append(
+                    "BOTTOM GUIDE: Embedded track (flush with ground). "
+                    "Include a C4x5.4 channel as the embedded guide rail, "
+                    "length = gate total length + 24\" approach."
+                )
+            elif bottom_guide:
+                blocks.append(
+                    "BOTTOM GUIDE: Surface mount guide roller. "
+                    "Include a 2\"x2\"x1/4\" angle iron guide rail, "
+                    "length = gate total length + 24\" approach."
+                )
+
+            # Adjacent fence context
+            adjacent = str(fields.get("adjacent_fence", ""))
+            if "Yes" in adjacent:
+                side_1 = fields.get("fence_side_1_length", "0")
+                side_2 = fields.get("fence_side_2_length", "0")
+                spacing = fields.get("fence_post_spacing", "6 ft")
+                match = fields.get("fence_infill_match", "match")
+                blocks.append(
+                    "ADJACENT FENCE SECTIONS (compound job — include in cut list):\n"
+                    "  Side 1 length: %s ft\n"
+                    "  Side 2 length: %s ft\n"
+                    "  Post spacing: %s\n"
+                    "  Infill: %s\n"
+                    "  The fence uses the same height and frame material as the gate.\n"
+                    "  Include fence rails (top + bottom per side), fence pickets/infill, "
+                    "and fence posts in the cut list. Gate post is shared — do not duplicate."
+                    % (side_1, side_2, spacing, match)
+                )
+
+        # --- Generic compound context for any job type ---
+        # Pass through any fields that indicate compound elements
+        for key in ("additional_sections", "extension_length", "return_wall_length"):
+            val = fields.get(key)
+            if val and str(val).strip() and str(val).strip() != "0":
+                blocks.append(
+                    "ADDITIONAL ELEMENT — %s: %s. Include this in the cut list." % (
+                        key.replace("_", " "), val)
+                )
+
+        if not blocks:
+            return ""
+        return "\nSTRUCTURED CONTEXT:\n" + "\n".join("- " + b for b in blocks) + "\n"
 
     def _build_weld_guidance(self, needs_tig, is_stainless, is_aluminum):
         """Build weld process guidance section for the prompt."""
