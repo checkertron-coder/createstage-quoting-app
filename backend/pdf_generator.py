@@ -542,6 +542,19 @@ def generate_quote_pdf(
 
         pdf.ln(2)
 
+    # ── SECTION 8B: Review Required (validation warnings, when present) ──
+    validation_warnings = priced_quote.get("validation_warnings", [])
+    if validation_warnings:
+        pdf.section_header("REVIEW REQUIRED")
+        pdf.set_font("Helvetica", "", 8)
+        pdf.set_text_color(180, 0, 0)
+        for warning in validation_warnings:
+            pdf.set_x(pdf.l_margin + 3)
+            pdf.multi_cell(pw - 3, 4, _safe(str(warning)))
+            pdf.ln(1)
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(2)
+
     # ── SECTION 9: Project Total ──
     pdf.section_header("PROJECT TOTAL")
     pdf.set_font("Helvetica", "", 10)

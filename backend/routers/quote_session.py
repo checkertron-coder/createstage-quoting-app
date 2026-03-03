@@ -9,6 +9,7 @@ POST /api/session/{id}/estimate  — Run Stage 4 labor estimator on calculated s
 POST /api/session/{id}/price     — Run Stage 5 pricing engine, create Quote record
 """
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -22,6 +23,13 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
 from ..calculators.registry import get_calculator, has_calculator
+from ..knowledge.validation import (
+    build_instructions_to_text,
+    check_banned_terms,
+    validate_full_output,
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["quote-session"])
 
@@ -602,6 +610,47 @@ def price_quote(
 
     pricing_engine = PricingEngine()
     priced_quote = pricing_engine.build_priced_quote(session_data, user_dict)
+
+    # --- Validation layer: catch AI hallucinations before PDF ---
+    try:
+        build_text = build_instructions_to_text(
+            current_params.get("_build_instructions", [])
+        )
+
+        # Check banned terms on specific contexts
+        validation_warnings = []
+        for context in ("vinegar_bath_cleanup", "decorative_stock_prep",
+                        "decorative_assembly"):
+            found = check_banned_terms(build_text, context)
+            for term in found:
+                validation_warnings.append(
+                    "[ERROR] Banned term '%s' found in build instructions (context: %s)"
+                    % (term, context)
+                )
+
+        # Full output validation
+        vr = validate_full_output(
+            job_type=session.job_type,
+            cut_list_items=current_params.get("_detailed_cut_list", []),
+            labor_processes=current_params.get("_labor_estimate", {}).get("processes", []),
+            build_instructions=build_text,
+            dimensions={k: v for k, v in fields.items()
+                        if isinstance(v, (int, float))},
+        )
+        for msg in vr.errors:
+            validation_warnings.append("[ERROR] %s" % msg)
+        for msg in vr.warnings:
+            validation_warnings.append("[WARNING] %s" % msg)
+        for msg in vr.info:
+            validation_warnings.append("[INFO] %s" % msg)
+
+        if validation_warnings:
+            priced_quote["validation_warnings"] = validation_warnings
+            for w in validation_warnings:
+                if w.startswith("[ERROR]") or w.startswith("[WARNING]"):
+                    logger.warning("Quote validation: %s", w)
+    except Exception:
+        logger.exception("Validation layer failed — continuing without validation")
 
     # Build QuoteParams snapshot (inputs)
     quote_params = engine.get_quote_params(

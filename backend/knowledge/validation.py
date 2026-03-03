@@ -581,6 +581,30 @@ def validate_weld_process_material(weld_process, material_type):
     return result
 
 
+def build_instructions_to_text(steps):
+    # type: (list) -> str
+    """
+    Convert a list of build instruction step dicts to a single text string
+    for banned terms scanning.
+
+    Args:
+        steps: list of step dicts with title, description, safety_notes keys
+
+    Returns:
+        Concatenated text from all steps
+    """
+    if not steps:
+        return ""
+    parts = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        parts.append(str(step.get("title", "")))
+        parts.append(str(step.get("description", "")))
+        parts.append(str(step.get("safety_notes", "")))
+    return " ".join(p for p in parts if p)
+
+
 def check_banned_terms(text, context="general"):
     # type: (str, str) -> List[str]
     """

@@ -22,9 +22,6 @@ from ..knowledge.processes import (
     get_process,
     get_banned_terms,
 )
-from ..knowledge.validation import (
-    check_banned_terms,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -240,31 +237,48 @@ def _build_reasoning_principles():
 
 def _build_decorative_stock_prep():
     # type: () -> str
-    """Build decorative stock prep rules from structured process data + FAB_KNOWLEDGE.md.
+    """Build decorative stock prep from structured process data.
 
-    Uses full text because this section contains critical prose paragraphs
-    (spacer dimensions, why-this-matters) essential for AI reasoning.
+    Structured data in backend/knowledge/processes.py is the source of truth.
+    FAB_KNOWLEDGE.md prose about spacer dimensions is appended as supplemental
+    context, but NEVER overrides the structured process steps or NEVER list.
     """
-    # Try structured data first
     proc = get_process("decorative_stock_prep")
-    if proc:
-        notes = proc.get("notes", "")
-        never = get_banned_terms("decorative_stock_prep")
-        result = "DECORATIVE STOCK PREP — PROCESS ORDER:\n"
-        result += notes + "\n"
-        if never:
-            result += "NEVER: " + ", ".join(never) + "\n"
+    if not proc:
+        # Fall back to FAB_KNOWLEDGE.md only if structured data missing
+        raw = _find_section("DECORATIVE STOCK PREP")
+        if raw:
+            lines = raw.strip().split("\n")
+            kept = [l for l in lines if l.strip()]
+            return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + "\n".join(kept[:50])
+        return ""
 
-    # Supplement with FAB_KNOWLEDGE.md prose (has spacer dimensions, etc.)
+    # Build from structured data (source of truth)
+    steps = proc.get("steps", [])
+    never = proc.get("NEVER", [])
+    notes = proc.get("notes", "")
+
+    result = "DECORATIVE STOCK PREP — PROCESS ORDER:\n"
+    if notes:
+        result += notes + "\n\n"
+    result += "Steps:\n"
+    for i, step in enumerate(steps, 1):
+        result += "%d. %s\n" % (i, step)
+    if never:
+        result += "\nNEVER do any of these during this process:\n"
+        for term in never:
+            result += "- %s\n" % term
+
+    # Append spacer dimension context from FAB_KNOWLEDGE.md (supplemental only)
     raw = _find_section("DECORATIVE STOCK PREP")
     if raw:
-        lines = raw.strip().split("\n")
-        kept = [l for l in lines if l.strip()]
-        return "DECORATIVE STOCK PREP — PROCESS ORDER:\n" + "\n".join(kept[:50])
+        # Extract only the spacer/dimension paragraphs, not the process steps
+        for line in raw.split("\n"):
+            line_lower = line.lower()
+            if any(k in line_lower for k in ["spacer", "0.75", "0.50", "gap between", "why this matters"]):
+                result += "\n" + line
 
-    if proc:
-        return result
-    return ""
+    return result
 
 
 # Cache the always-included snippets at import time

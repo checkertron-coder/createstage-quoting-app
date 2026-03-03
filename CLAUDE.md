@@ -745,7 +745,21 @@ class Fusion360Integration:
 
 ---
 
-## 19. What Not To Touch
+## 19. Integration Rules (Learned from Prompts 13-15)
+
+1. **Building a module is not done until it's CALLED in the pipeline.** After creating any new function, grep the codebase to verify it's called in the actual request flow (not just imported). If `grep -rn "function_name" backend/routers/ backend/calculators/` shows zero calls, you're not done.
+
+2. **Fallback logic must not override the fix.** If you build a new data source to replace an old one, the old source must be REMOVED or SUBORDINATED. Never write `if old_source: return old_data` after building new_data — the old source will always exist and will always win.
+
+3. **FAB_KNOWLEDGE.md is SUPPLEMENTAL, not primary.** Structured data in `backend/knowledge/` is the source of truth. FAB_KNOWLEDGE.md provides prose context for build sequences only. If structured data and FAB_KNOWLEDGE.md contradict, structured data wins. Always.
+
+4. **Test integration, not just units.** After any change, the real test is: generate a quote and verify the output. Unit tests passing means nothing if the integration is broken.
+
+5. **Validation must be in the hot path.** `validate_full_output()` must run on every quote before it reaches PDF generation. If validation isn't in the hot path, it doesn't exist.
+
+---
+
+## 20. What Not To Touch
 
 - `backend/weights.py` — working correctly, used by all calculators
 - `backend/database.py` — working correctly, shared by all modules

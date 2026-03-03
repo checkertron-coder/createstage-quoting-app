@@ -436,9 +436,11 @@ You CANNOT grind tiny cut pieces to a furniture-grade finish. Small pieces move,
 **Phase 1 — Stock Prep (BEFORE any cutting)**
 1. Vinegar bath full-length raw stock — submerge as much as fits in the bath
 2. Soak 12-24 hours (UNATTENDED — this is not labor time)
-3. Pull stock, rinse immediately, neutralize with baking soda/water
-4. Dry instantly with compressed air (prevents flash rust)
-5. Heavy grind with flap disc — 80 grit then 120 grit on ALL faces
+3. Pull stock, rinse immediately with warm water
+4. Scrub with dish soap and red scotch-brite pad (medium grit)
+5. Rinse again thoroughly
+6. Dry with a clean towel
+7. Heavy grind with flap disc — 80 grit then 120 grit on ALL faces
 6. This is where the BULK of grind time happens (60-70% of total grind hours)
 7. Stock is now finish-ready — smooth, scale-free, consistent surface
 

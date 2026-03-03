@@ -142,6 +142,27 @@ class AICutListGenerator:
             response_text = self._call_gemini(prompt)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
+                # Validate build sequence before returning
+                from ..knowledge.validation import check_banned_terms
+                full_text = " ".join(s.get("description", "") for s in steps)
+
+                # Check for banned terms in key contexts
+                for context in ["vinegar_bath_cleanup", "decorative_stock_prep",
+                                "decorative_assembly"]:
+                    violations = check_banned_terms(full_text, context)
+                    if violations:
+                        logger.warning(
+                            "BUILD SEQUENCE VALIDATION FAILED — banned terms "
+                            "found [%s]: %s", context, violations)
+                        for step in steps:
+                            desc = step.get("description", "")
+                            for v in violations:
+                                if v.lower() in desc.lower():
+                                    step["description"] = (
+                                        desc + " [REVIEW: contains banned "
+                                        "term '%s']" % v
+                                    )
+
                 return steps
             logger.warning("AI build instructions returned empty — skipping")
             return None
