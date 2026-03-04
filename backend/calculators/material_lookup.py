@@ -83,6 +83,12 @@ PRICE_PER_FOOT = {
     # HSS (structural tube — thicker wall for posts/columns)
     "hss_4x4_0.25": 9.50,
     "hss_6x4_0.25": 12.00,
+    # Pre-punched U-channel for ornamental fence mid-rails
+    "punched_channel_1x0.5_fits_0.5": 3.50,       # 1"×1/2"×1/8", 9/16" sq holes for 1/2" pickets
+    "punched_channel_1.5x0.5_fits_0.5": 4.50,     # 1-1/2"×1/2"×1/8", 9/16" sq holes for 1/2" pickets
+    "punched_channel_1.5x0.5_fits_0.625": 4.50,   # 1-1/2"×1/2"×1/8", 11/16" sq holes for 5/8" pickets
+    "punched_channel_1.5x0.5_fits_0.75": 4.50,    # 1-1/2"×1/2"×1/8", 13/16" sq holes for 3/4" pickets
+    "punched_channel_2x1_fits_0.75": 7.50,         # 2"×1"×1/8", 13/16" sq holes for 3/4" pickets
 }
 
 # Prices per square foot

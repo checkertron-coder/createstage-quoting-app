@@ -96,9 +96,12 @@ class CantileverGateCalculator(BaseCalculator):
         if self._has_description(fields):
             ai_cuts = self._try_ai_cut_list("cantilever_gate", fields)
             if ai_cuts is not None:
-                return self._build_from_ai_cuts(
+                result = self._build_from_ai_cuts(
                     "cantilever_gate", ai_cuts, fields, assumptions,
                     hardware=hardware)
+                # Post-process: add calculator items that AI missed
+                result = self._post_process_ai_result(result, fields, is_top_hung)
+                return result
 
         # --- Parse remaining inputs ---
         clear_width_ft = self.parse_feet(fields.get("clear_width"), default=10.0)
@@ -426,6 +429,267 @@ class CantileverGateCalculator(BaseCalculator):
         )
 
     # --- Private helpers ---
+
+    def _post_process_ai_result(self, result, fields, is_top_hung):
+        """
+        Supplement AI-generated materials with calculator items that Gemini missed.
+
+        The AI generates great cut lists but frequently omits:
+        - Fence posts (when adjacent fence sections are requested)
+        - Fence post concrete
+        - Overhead beams (for top-hung systems)
+        - Mid-rails / cross braces (for tall fences)
+
+        This method checks for these gaps and adds them.
+        """
+        items = result.get("items", [])
+        assumptions = result.get("assumptions", [])
+        total_weight = result.get("total_weight_lbs", 0.0)
+        total_sq_ft = result.get("total_sq_ft", 0.0)
+        total_weld_inches = result.get("weld_linear_inches", 0.0)
+
+        # Parse key dimensions
+        height_ft = self.parse_feet(fields.get("height"), default=6.0)
+        height_in = self.feet_to_inches(height_ft)
+        post_concrete_depth_in = 42.0  # Chicago frost line
+        if "No" in str(fields.get("post_concrete", "Yes")):
+            post_concrete_depth_in = 0.0
+        above_grade_in = height_in + 2  # 2" clearance above gate
+        post_total_length_in = above_grade_in + post_concrete_depth_in
+
+        post_size = fields.get("post_size", "4\" x 4\" square tube")
+        post_profile = self._lookup_post(post_size)
+        post_price_ft = lookup.get_price_per_foot(post_profile)
+
+        # --- A: Fence Posts ---
+        adjacent_fence = fields.get("adjacent_fence", "No")
+        if "Yes" in str(adjacent_fence):
+            fence_post_count_raw = self.parse_int(fields.get("fence_post_count"), default=0)
+
+            # Auto-calculate if not specified
+            if fence_post_count_raw == 0:
+                side_1_ft = self.parse_feet(fields.get("fence_side_1_length"), default=0)
+                side_2_ft = self.parse_feet(fields.get("fence_side_2_length"), default=0)
+                if side_1_ft > 0:
+                    fence_post_count_raw += max(1, round(side_1_ft / 7))
+                if side_2_ft > 0 and "both" in str(adjacent_fence).lower():
+                    fence_post_count_raw += max(1, round(side_2_ft / 7))
+
+            if fence_post_count_raw > 0:
+                # Check if AI already generated enough fence post material
+                existing_post_ft = 0.0
+                for item in items:
+                    desc_lower = item.get("description", "").lower()
+                    if "post" in desc_lower and "fence" in desc_lower:
+                        existing_post_ft += item.get("length_inches", 0) / 12.0
+
+                fence_post_ft_needed = fence_post_count_raw * self.inches_to_feet(post_total_length_in)
+
+                # Only add if AI under-generated fence posts
+                if existing_post_ft < fence_post_ft_needed * 0.9:
+                    fp_length_ft = self.inches_to_feet(post_total_length_in)
+                    fp_total_ft = fp_length_ft * fence_post_count_raw
+                    fp_weight = self.get_weight_lbs(post_profile, fp_total_ft)
+
+                    items.append(self.make_material_item(
+                        description="Fence posts — %s × %d (%.1f ft each, %.0f\" embed for frost line)"
+                                    % (post_size, fence_post_count_raw, fp_length_ft, post_concrete_depth_in),
+                        material_type="square_tubing",
+                        profile=post_profile,
+                        length_inches=post_total_length_in,
+                        quantity=fence_post_count_raw,
+                        unit_price=round(fp_length_ft * post_price_ft, 2),
+                        cut_type="square",
+                        waste_factor=0.0,
+                    ))
+                    total_weight += fp_weight
+
+                    # Fence post concrete
+                    if post_concrete_depth_in > 0:
+                        hole_diameter_in = 12.0
+                        cu_in_per_hole = math.pi * (hole_diameter_in / 2) ** 2 * post_concrete_depth_in
+                        total_cu_in = cu_in_per_hole * fence_post_count_raw
+                        total_cu_yd = total_cu_in / 46656.0
+                        concrete_price = lookup.get_unit_price("concrete_per_cuyd")
+
+                        items.append(self.make_material_item(
+                            description="Fence post concrete — %d holes × 12\" dia × %.0f\" deep (%.2f cu yd)"
+                                        % (fence_post_count_raw, post_concrete_depth_in, total_cu_yd),
+                            material_type="concrete",
+                            profile="concrete_footing",
+                            length_inches=post_concrete_depth_in,
+                            quantity=fence_post_count_raw,
+                            unit_price=round(total_cu_yd * concrete_price / fence_post_count_raw, 2),
+                            cut_type="n/a",
+                            waste_factor=0.0,
+                        ))
+
+                    assumptions.append(
+                        "Fence posts: %d × %s at %.1f ft each (%.0f\" embed for Chicago frost line)."
+                        % (fence_post_count_raw, post_size, fp_length_ft, post_concrete_depth_in))
+
+        # --- B: Overhead Beam (top-hung) ---
+        if is_top_hung:
+            has_overhead_beam = any(
+                "overhead" in item.get("description", "").lower()
+                or ("beam" in item.get("description", "").lower()
+                    and "hss" in item.get("profile", "").lower())
+                for item in items
+            )
+            if not has_overhead_beam:
+                clear_width_ft = self.parse_feet(fields.get("clear_width"), default=10.0)
+                clear_width_in = self.feet_to_inches(clear_width_ft)
+                tail_length_in = clear_width_in * self.TAIL_RATIO
+                total_gate_length_in = clear_width_in + tail_length_in
+                beam_length_in = total_gate_length_in + 24  # +12" overhang each side
+                beam_length_ft = self.inches_to_feet(beam_length_in)
+
+                # Estimate gate weight from AI result for beam sizing
+                estimated_gate_weight = total_weight
+                if estimated_gate_weight < 800:
+                    beam_profile = "hss_4x4_0.25"
+                    beam_desc = "HSS 4×4×1/4\""
+                else:
+                    beam_profile = "hss_6x4_0.25"
+                    beam_desc = "HSS 6×4×1/4\""
+
+                beam_price_ft = lookup.get_price_per_foot(beam_profile)
+                beam_weight = self.get_weight_lbs(beam_profile, beam_length_ft)
+                if beam_weight == 0.0:
+                    beam_weight = beam_length_ft * 12.0  # ~12 lbs/ft estimate
+
+                items.append(self.make_material_item(
+                    description="Overhead support beam — %s (%.1f ft) for top-mount carriage system"
+                                % (beam_desc, beam_length_ft),
+                    material_type="square_tubing",
+                    profile=beam_profile,
+                    length_inches=beam_length_in,
+                    quantity=self.linear_feet_to_pieces(beam_length_ft),
+                    unit_price=round(beam_length_ft * beam_price_ft, 2),
+                    cut_type="square",
+                    waste_factor=self.WASTE_TUBE,
+                ))
+                total_weight += beam_weight
+                total_weld_inches += self.weld_inches_for_joints(4, 6.0)
+                min_clearance_in = height_in + 6
+                assumptions.append(
+                    "Top-hung system: overhead %s beam spans %.1f ft. "
+                    "Minimum overhead clearance: %.1f ft."
+                    % (beam_desc, beam_length_ft, self.inches_to_feet(min_clearance_in)))
+
+        # --- C: Fence Mid-Rails / Cross Braces ---
+        if "Yes" in str(adjacent_fence) and height_in > 48:
+            mid_rail_count = 2 if height_in > 72 else 1
+
+            # Determine mid-rail material based on picket size and user choice
+            mid_rail_type = fields.get("mid_rail_type", "Not sure")
+            picket_material = str(fields.get("picket_material", ""))
+
+            # Determine if pre-punched channel is appropriate
+            use_punched = False
+            channel_profile = None
+            if "Pre-punched" in str(mid_rail_type) or "Not sure" in str(mid_rail_type):
+                pm_lower = picket_material.lower()
+                if '1/2"' in picket_material or "1/2" in pm_lower:
+                    use_punched = True
+                    channel_profile = "punched_channel_1.5x0.5_fits_0.5"
+                elif '3/4"' in picket_material or "3/4" in pm_lower:
+                    use_punched = True
+                    channel_profile = "punched_channel_1.5x0.5_fits_0.75"
+                elif "5/8" in pm_lower:
+                    use_punched = True
+                    channel_profile = "punched_channel_1.5x0.5_fits_0.625"
+
+            # Check if AI already generated mid-rails for fence sections
+            has_fence_mid_rails = any(
+                "mid" in item.get("description", "").lower()
+                and "fence" in item.get("description", "").lower()
+                for item in items
+            )
+
+            if not has_fence_mid_rails:
+                side_1_ft = self.parse_feet(fields.get("fence_side_1_length"), default=0)
+                side_2_ft = self.parse_feet(fields.get("fence_side_2_length"), default=0)
+
+                fence_sections = []
+                if side_1_ft > 0:
+                    fence_sections.append(("Section 1", side_1_ft))
+                if side_2_ft > 0 and "both" in str(adjacent_fence).lower():
+                    fence_sections.append(("Section 2", side_2_ft))
+
+                for label, length_ft in fence_sections:
+                    if use_punched and channel_profile:
+                        mr_total_ft = length_ft * mid_rail_count
+                        mr_price = lookup.get_price_per_foot(channel_profile)
+                        mr_weight = self.get_weight_lbs(channel_profile, mr_total_ft)
+                        if mr_weight == 0.0:
+                            mr_weight = mr_total_ft * 1.12  # approximate
+
+                        items.append(self.make_material_item(
+                            description="Fence %s pre-punched channel mid-rail%s × %d (%.0f ft each)"
+                                        % (label, "s" if mid_rail_count > 1 else "",
+                                           mid_rail_count, length_ft),
+                            material_type="channel",
+                            profile=channel_profile,
+                            length_inches=length_ft * 12,
+                            quantity=mid_rail_count,
+                            unit_price=round(length_ft * mr_price, 2),
+                            cut_type="square",
+                            waste_factor=self.WASTE_TUBE,
+                        ))
+                        total_weight += mr_weight
+                    else:
+                        # Standard tube mid-rail
+                        frame_profile = self._lookup_frame(
+                            fields.get("frame_size", "2\" x 2\""),
+                            self._normalize_gauge(fields.get("frame_gauge", "11 gauge")))
+                        mr_total_ft = length_ft * mid_rail_count
+                        mr_price = lookup.get_price_per_foot(frame_profile)
+                        mr_weight = self.get_weight_lbs(frame_profile, mr_total_ft)
+
+                        items.append(self.make_material_item(
+                            description="Fence %s mid-rail%s — tube × %d (%.0f ft each)"
+                                        % (label, "s" if mid_rail_count > 1 else "",
+                                           mid_rail_count, length_ft),
+                            material_type="square_tubing",
+                            profile=frame_profile,
+                            length_inches=length_ft * 12,
+                            quantity=mid_rail_count,
+                            unit_price=round(length_ft * mr_price, 2),
+                            cut_type="square",
+                            waste_factor=self.WASTE_TUBE,
+                        ))
+                        total_weight += mr_weight
+
+                if fence_sections:
+                    assumptions.append(
+                        "Fence mid-rails: %d per section (%s)."
+                        % (mid_rail_count,
+                           "pre-punched channel" if use_punched else "standard tube"))
+
+        # --- D: Post Length Validation ---
+        cut_list = result.get("cut_list", [])
+        for cut in cut_list:
+            desc = (str(cut.get("description", "")) + " " + str(cut.get("piece_name", ""))).lower()
+            if "post" in desc:
+                cut_length = cut.get("length_inches", 0)
+                if 0 < cut_length < post_total_length_in - 2:
+                    assumptions.append(
+                        "AI post length (%.0f\") may be short. "
+                        "Chicago frost line requires %.0f\" embed. "
+                        "Minimum post length: %.0f\" (%.1f ft)."
+                        % (cut_length, post_concrete_depth_in,
+                           post_total_length_in, self.inches_to_feet(post_total_length_in)))
+                    break  # Only flag once
+
+        # Update result
+        result["items"] = items
+        result["assumptions"] = assumptions
+        result["total_weight_lbs"] = round(total_weight, 1)
+        result["total_sq_ft"] = round(total_sq_ft, 1)
+        result["weld_linear_inches"] = round(total_weld_inches, 1)
+
+        return result
 
     def _build_hardware(self, has_motor, motor_brand, latch_type, roller_type,
                         is_top_hung, fields):

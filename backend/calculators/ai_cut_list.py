@@ -529,7 +529,7 @@ Return ONLY valid JSON — an array of objects:
                     "length = gate total length + 24\" approach."
                 )
 
-            # Post dimensions context
+            # Post dimensions context — calculator-verified values
             height_str = fields.get("height", fields.get("clear_height", ""))
             post_concrete = fields.get("post_concrete", "Yes")
             if height_str:
@@ -539,32 +539,94 @@ Return ONLY valid JSON — an array of objects:
                     above_grade_in = h_in + 2  # 2" clearance above gate
                     embed_in = 42.0 if "No" not in str(post_concrete) else 0.0
                     total_in = above_grade_in + embed_in
-                    blocks.append(
-                        "POST DIMENSIONS: Above grade %.0fin + %.0fin embed = %.0fin total (%.1f ft). "
-                        "Use EXACTLY these dimensions for posts in cut list."
-                        % (above_grade_in, embed_in, total_in, total_in / 12.0)
+                    gate_post_count = 3  # default
+                    post_count_str = str(fields.get("post_count", "3"))
+                    if "2" in post_count_str:
+                        gate_post_count = 2
+                    elif "4" in post_count_str:
+                        gate_post_count = 4
+
+                    post_block = (
+                        "POST DIMENSIONS (calculator-verified — use EXACTLY):\n"
+                        "  Above grade: %.0fin + %.0fin embed = %.0fin total (%.1f ft)\n"
+                        "  Gate posts: %d\n"
+                        % (above_grade_in, embed_in, total_in, total_in / 12.0, gate_post_count)
                     )
+
+                    # Calculate fence posts if applicable
+                    adjacent = str(fields.get("adjacent_fence", ""))
+                    if "Yes" in adjacent:
+                        import math
+                        fence_post_count = 0
+                        try:
+                            fence_post_count = int(float(str(fields.get("fence_post_count", "0")).strip()))
+                        except (ValueError, TypeError):
+                            pass
+                        if fence_post_count == 0:
+                            s1 = float(str(fields.get("fence_side_1_length", "0")).strip() or "0")
+                            s2 = float(str(fields.get("fence_side_2_length", "0")).strip() or "0")
+                            if s1 > 0:
+                                fence_post_count += max(1, round(s1 / 7))
+                            if s2 > 0 and "both" in adjacent.lower():
+                                fence_post_count += max(1, round(s2 / 7))
+                        post_block += "  Fence posts: %d\n" % fence_post_count
+                        post_block += "  Total posts: %d\n" % (gate_post_count + fence_post_count)
+                    post_block += (
+                        "  All posts must be cut to EXACTLY %.0f inches (%.1f ft). "
+                        "Do NOT calculate your own post length."
+                        % (total_in, total_in / 12.0)
+                    )
+                    blocks.append(post_block)
                 except (ValueError, IndexError):
                     pass
 
-            # Adjacent fence context
+            # Gate mounting context
+            bottom_guide = str(fields.get("bottom_guide", ""))
+            if "No bottom guide" in bottom_guide or "top-hung" in bottom_guide.lower():
+                blocks.append(
+                    "GATE MOUNTING: Top-hung (overhead beam required, no bottom guide). "
+                    "Include overhead HSS beam in cut list."
+                )
+            elif bottom_guide:
+                blocks.append(
+                    "GATE MOUNTING: Standard (bottom guide rail)."
+                )
+
+            # Adjacent fence context with enriched details
             adjacent = str(fields.get("adjacent_fence", ""))
             if "Yes" in adjacent:
                 side_1 = fields.get("fence_side_1_length", "0")
                 side_2 = fields.get("fence_side_2_length", "0")
                 spacing = fields.get("fence_post_spacing", "6 ft")
                 match = fields.get("fence_infill_match", "match")
-                blocks.append(
+
+                mid_rail_count = 0
+                if height_str:
+                    try:
+                        h_in = float(str(height_str).split()[0]) * 12
+                        if h_in > 72:
+                            mid_rail_count = 2
+                        elif h_in > 48:
+                            mid_rail_count = 1
+                    except (ValueError, IndexError):
+                        pass
+
+                fence_block = (
                     "ADJACENT FENCE SECTIONS (compound job — include in cut list):\n"
                     "  Side 1 length: %s ft\n"
                     "  Side 2 length: %s ft\n"
                     "  Post spacing: %s\n"
                     "  Infill: %s\n"
+                    "  Mid-rails per section: %d\n"
                     "  The fence uses the same height and frame material as the gate.\n"
-                    "  Include fence rails (top + bottom per side), fence pickets/infill, "
+                    "  Fence posts are SAME profile and length as gate posts.\n"
+                    "  Each fence section needs: top rail, bottom rail, %d mid-rail(s), "
+                    "vertical pickets at spacing OC.\n"
+                    "  Include fence rails, fence pickets/infill, "
                     "and fence posts in the cut list. Gate post is shared — do not duplicate."
-                    % (side_1, side_2, spacing, match)
+                    % (side_1, side_2, spacing, match, mid_rail_count, mid_rail_count)
                 )
+                blocks.append(fence_block)
 
         # --- Field welding context ---
         installation = str(fields.get("installation", ""))

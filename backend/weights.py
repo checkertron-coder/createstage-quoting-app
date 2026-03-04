@@ -70,6 +70,12 @@ STOCK_WEIGHTS = {
     "round_bar_0.5": 0.668,
     "round_bar_0.625": 1.043,
     "round_bar_0.75": 1.502,
+    # Pre-punched U-channel for ornamental fence mid-rails
+    "punched_channel_1x0.5_fits_0.5": 0.84,
+    "punched_channel_1.5x0.5_fits_0.5": 1.12,
+    "punched_channel_1.5x0.5_fits_0.625": 1.12,
+    "punched_channel_1.5x0.5_fits_0.75": 1.12,
+    "punched_channel_2x1_fits_0.75": 1.78,
 }
 
 # Gauge to thickness conversion (inches)

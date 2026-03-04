@@ -67,7 +67,7 @@
             "hint": null,
             "depends_on": null,
             "branches": {
-                "Pickets (vertical bars)": ["picket_material", "picket_top", "picket_spacing"],
+                "Pickets (vertical bars)": ["picket_material", "picket_top", "picket_spacing", "mid_rail_type"],
                 "Flat bar vertical": ["flat_bar_spacing", "flat_bar_size"],
                 "Expanded metal": ["expanded_metal_gauge"],
                 "Custom design": ["design_reference"]
@@ -100,6 +100,16 @@
             "options": ["4\" on-center (code compliant)", "3.5\" on-center (tighter look)", "6\" on-center (open look)", "Custom spacing"],
             "required": false,
             "hint": "4\" max clear space is required by most residential codes to prevent child entrapment.",
+            "depends_on": "infill_type",
+            "branches": null
+        },
+        {
+            "id": "mid_rail_type",
+            "text": "How should mid-rails / cross braces be built?",
+            "type": "choice",
+            "options": ["Pre-punched channel (pickets slide through — fastest)", "Standard tube rail (pickets welded to flat rail)", "Not sure — recommend based on picket size"],
+            "required": false,
+            "hint": "Pre-punched channel has holes at your picket spacing — pickets slide through and get tack welded. Much faster assembly. Available for 1/2\", 5/8\", and 3/4\" pickets.",
             "depends_on": "infill_type",
             "branches": null
         },

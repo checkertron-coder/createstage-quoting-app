@@ -287,6 +287,15 @@ def calculate_labor_hours(job_type, cut_list, fields):
     fit_min = type_a_count * 5 + picket_count * 2.5  # 2.5 min/picket to position/plumb/tack
     fit_tack = max(1.0, fit_min / 60.0)
 
+    # Pre-punched channel reduces picket positioning time by ~35%
+    # Channel self-spaces pickets — no individual measuring/plumbing needed
+    uses_punched_channel = any(
+        "punched_channel" in str(item.get("profile", ""))
+        for item in cut_list
+    )
+    if uses_punched_channel and picket_count > 0:
+        fit_tack = max(1.0, fit_tack * 0.65)  # 35% reduction
+
     # LAYOUT & SETUP: 1.5 hrs + 0.25 hr per 10 decorative pieces beyond 20
     extra_decorative = max(0, type_b_count - 20)
     layout_setup = 1.5 + (extra_decorative / 10.0) * 0.25
@@ -327,12 +336,13 @@ def calculate_labor_hours(job_type, cut_list, fields):
     # FINAL INSPECTION
     final_inspection = 0.5
 
+    punched_note = " (× 0.65 pre-punched channel)" if uses_punched_channel and picket_count > 0 else ""
     reasoning_lines.append(
         "STEP 4 — CUT: %d pcs × 4 min + %d miter × 2 = %.1f min (%.2f hr). "
-        "FIT: %d TYPE A × 5 min + %d pickets × 2.5 min = %.1f min (%.2f hr). "
+        "FIT: %d TYPE A × 5 min + %d pickets × 2.5 min = %.1f min (%.2f hr)%s. "
         "LAYOUT: 1.5 + 0.25 × %d/10 = %.2f hr."
         % (total_pieces, miter_cuts, cut_min, cut_prep,
-           type_a_count, picket_count, fit_min, fit_tack,
+           type_a_count, picket_count, fit_min, fit_tack, punched_note,
            extra_decorative, layout_setup))
 
     # ======================================================
