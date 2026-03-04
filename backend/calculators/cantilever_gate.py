@@ -41,6 +41,28 @@ INFILL_PROFILES = {
     "Horizontal bars": "sq_bar_0.75",
 }
 
+# Picket material options from question tree → profile keys
+PICKET_MATERIAL_PROFILES = {
+    '1/2" square': "sq_bar_0.5",
+    '5/8" square': "sq_bar_0.625",
+    '3/4" square': "sq_bar_0.75",
+    '1" square': "sq_bar_1.0",
+    '5/8" round': "round_bar_0.625",
+    '3/4" round': "round_bar_0.75",
+    '1/2" round': "round_bar_0.5",
+}
+
+
+def _resolve_picket_profile(fields, infill_type):
+    """Resolve picket profile from picket_material field, with fallback to INFILL_PROFILES."""
+    picket_material = str(fields.get("picket_material", "")).lower()
+    if picket_material:
+        for label, profile in PICKET_MATERIAL_PROFILES.items():
+            if label.lower() in picket_material:
+                return profile
+    # Fallback to old infill_type mapping
+    return INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
+
 
 class CantileverGateCalculator(BaseCalculator):
 
@@ -185,7 +207,7 @@ class CantileverGateCalculator(BaseCalculator):
             total_weld_inches += self.perimeter_inches(face_width_in, face_height_in) * 0.5  # Tack-welded perimeter
 
         elif "Pickets" in infill_type or "Flat bar" in infill_type:
-            picket_profile = INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
+            picket_profile = _resolve_picket_profile(fields, infill_type)
             picket_price_ft = lookup.get_price_per_foot(picket_profile)
             picket_count = math.ceil(face_width_in / infill_spacing_in) + 1
             picket_length_in = face_height_in - 2  # Minus top and bottom rail
@@ -225,7 +247,7 @@ class CantileverGateCalculator(BaseCalculator):
             total_weld_inches += self.perimeter_inches(face_width_in, face_height_in) * 0.5
 
         elif "Horizontal" in infill_type:
-            bar_profile = INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
+            bar_profile = _resolve_picket_profile(fields, infill_type)
             bar_price_ft = lookup.get_price_per_foot(bar_profile)
             bar_count = math.ceil(face_height_in / infill_spacing_in) + 1
             bar_length_in = face_width_in
@@ -611,6 +633,35 @@ class CantileverGateCalculator(BaseCalculator):
             weight += rail_weight
             weld_inches += self.weld_inches_for_joints(post_count * rail_count * 2, 2.0)
 
+            # Fence mid-rails (horizontal stiffeners for tall fence sections)
+            fence_mid_rail_count = 0
+            if height_in > 72:
+                fence_mid_rail_count = 2
+            elif height_in > 48:
+                fence_mid_rail_count = 1
+
+            if fence_mid_rail_count > 0:
+                mid_rail_total_in = length_in * fence_mid_rail_count
+                mid_rail_total_ft = self.inches_to_feet(mid_rail_total_in)
+                mid_rail_weight = self.get_weight_lbs(frame_key, mid_rail_total_ft)
+
+                items.append(self.make_material_item(
+                    description=f"Fence mid-rails — {side_name} × {fence_mid_rail_count} ({length_ft:.1f} ft each)",
+                    material_type="square_tubing",
+                    profile=frame_key,
+                    length_inches=length_in,
+                    quantity=self.apply_waste(
+                        self.linear_feet_to_pieces(mid_rail_total_ft), self.WASTE_TUBE),
+                    unit_price=round(length_ft * frame_price_ft, 2),
+                    cut_type="square",
+                    waste_factor=self.WASTE_TUBE,
+                ))
+                weight += mid_rail_weight
+                weld_inches += self.weld_inches_for_joints(
+                    post_count * fence_mid_rail_count * 2, 2.0)
+                assumptions.append(
+                    f"Fence {side_name}: {fence_mid_rail_count} mid-rail(s) added for {height_in:.0f}\" height.")
+
             # Fence infill (pickets/bars matching gate or simplified)
             use_solid = "solid" in str(fence_match).lower() or "Solid" in infill_type
             use_pickets = (
@@ -641,7 +692,7 @@ class CantileverGateCalculator(BaseCalculator):
                 weld_inches += self.perimeter_inches(length_in, height_in) * 0.5
             elif use_pickets:
                 # Vertical picket/bar infill
-                picket_profile = INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
+                picket_profile = _resolve_picket_profile(fields, infill_type)
                 picket_price_ft = lookup.get_price_per_foot(picket_profile)
                 picket_count = math.ceil(length_in / infill_spacing_in) + 1
                 picket_length_in = height_in - 2

@@ -351,8 +351,12 @@ class TestAICutListContext:
             "clear_width": "12",
             "height": "6",
         })
-        # No bottom_guide or adjacent_fence → no context
-        assert ctx == ""
+        # No bottom_guide or adjacent_fence → only post dimensions context (Prompt 22)
+        assert "BOTTOM GUIDE" not in ctx
+        assert "ADJACENT FENCE" not in ctx
+        # Post dimensions are now always injected for cantilever_gate when height is present
+        if ctx:
+            assert "POST DIMENSIONS" in ctx
 
 
 # ---------------------------------------------------------------------------

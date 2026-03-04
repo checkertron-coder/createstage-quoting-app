@@ -85,9 +85,19 @@
             "id": "picket_material",
             "text": "What picket/infill material?",
             "type": "choice",
-            "options": ["3/4\" square bar (standard)", "1\" square bar (heavy duty)", "5/8\" round bar", "3/4\" round bar", "1\" x 1/4\" flat bar"],
+            "options": ["1/2\" square bar", "5/8\" square bar", "3/4\" square bar (standard)", "1\" square bar (heavy duty)", "5/8\" round bar", "3/4\" round bar", "1/2\" round bar"],
             "required": false,
             "hint": "3/4\" square bar is the industry standard for ornamental fence pickets.",
+            "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "picket_top",
+            "text": "What picket top style?",
+            "type": "choice",
+            "options": ["Plain (cut square)", "Pressed spear", "Welded-on spear", "Ball top", "Quad flare"],
+            "required": false,
+            "hint": "Plain is most economical. Spear tips add $2-4 per picket. Ball tops add $3-5 per picket.",
             "depends_on": null,
             "branches": null
         },

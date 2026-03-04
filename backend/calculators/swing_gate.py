@@ -125,7 +125,8 @@ class SwingGateCalculator(BaseCalculator):
 
             if "Pickets" in infill_type or "Flat bar" in infill_type:
                 is_flat = "Flat" in infill_type
-                picket_profile = "flat_bar_1x0.25" if is_flat else "sq_bar_0.75"
+                from .cantilever_gate import _resolve_picket_profile
+                picket_profile = "flat_bar_1x0.25" if is_flat else _resolve_picket_profile(fields, infill_type)
                 picket_price_ft = lookup.get_price_per_foot(picket_profile)
                 picket_count = math.ceil(face_width_in / infill_spacing_in) + 1
                 picket_length_in = face_height_in - 4  # Minus top/bottom rail heights

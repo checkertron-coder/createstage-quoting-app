@@ -61,6 +61,15 @@ STOCK_WEIGHTS = {
     "dom_round_1.5od_11ga": 1.769,
     "dom_round_1.5od_0.125wall": 1.611,
     "dom_round_2od_0.125wall": 2.194,
+    # Solid square bar (A36) — lb/ft = side^2 * 12 * 0.2833
+    "sq_bar_0.5": 0.850,
+    "sq_bar_0.625": 1.328,
+    "sq_bar_0.75": 1.912,
+    "sq_bar_1.0": 3.400,
+    # Solid round bar (A36) — lb/ft = pi/4 * dia^2 * 12 * 0.2833
+    "round_bar_0.5": 0.668,
+    "round_bar_0.625": 1.043,
+    "round_bar_0.75": 1.502,
 }
 
 # Gauge to thickness conversion (inches)

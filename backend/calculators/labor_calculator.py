@@ -53,6 +53,13 @@ _DECORATIVE_KEYWORDS = (
 
 _DECORATIVE_GROUPS = ("infill", "decorative", "pattern")
 
+# Outdoor job types — reduced grind requirements (cleanup only, not furniture-grade)
+_OUTDOOR_JOB_TYPES = (
+    "cantilever_gate", "swing_gate", "ornamental_fence",
+    "straight_railing", "stair_railing", "balcony_railing",
+    "bollard", "sign_frame", "window_security_grate",
+)
+
 
 def _get_perimeter(profile):
     # type: (str) -> float
@@ -149,6 +156,7 @@ def calculate_labor_hours(job_type, cut_list, fields):
     ]
     has_coating = any(k in finish for k in coating_kw)
     needs_mill_scale = not has_coating and any(k in finish for k in bare_metal_kw)
+    is_outdoor = job_type in _OUTDOOR_JOB_TYPES
 
     reasoning_lines = []
 
@@ -216,18 +224,33 @@ def calculate_labor_hours(job_type, cut_list, fields):
     # ======================================================
     # STEP 3 — GRIND TIME
     # ======================================================
-    grind_min = type_a_joints * 6 + type_b_joints * 3  # 6 min structural, 3 min decorative
-    grind_min += 30  # wire brush / final clean
+    if is_outdoor:
+        # Outdoor: cleanup only — clean spatter, remove sharp edges, knock down high spots
+        # Do NOT grind welds smooth or flat
+        grind_min = type_a_joints * 2 + type_b_joints * 1 + 15  # cleanup only
+        grind_label = "outdoor cleanup"
+    else:
+        # Indoor/furniture: full grind — smooth joints, blend welds
+        grind_min = type_a_joints * 6 + type_b_joints * 3 + 30  # wire brush / final clean
+        grind_label = "indoor full grind"
     if needs_mill_scale:
         grind_min += 90  # 1.5 hrs for mill scale removal
     grind_clean = max(0.5, grind_min / 60.0)
 
-    reasoning_lines.append(
-        "STEP 3 — GRIND: %d TYPE A joints × 6 min + %d TYPE B welds × 3 min "
-        "+ 30 min clean%s = %.1f min (%.2f hr)."
-        % (type_a_joints, type_b_joints,
-           " + 90 min mill scale" if needs_mill_scale else "",
-           grind_min, grind_clean))
+    if is_outdoor:
+        reasoning_lines.append(
+            "STEP 3 — GRIND (%s): %d TYPE A joints × 2 min + %d TYPE B welds × 1 min "
+            "+ 15 min cleanup%s = %.1f min (%.2f hr)."
+            % (grind_label, type_a_joints, type_b_joints,
+               " + 90 min mill scale" if needs_mill_scale else "",
+               grind_min, grind_clean))
+    else:
+        reasoning_lines.append(
+            "STEP 3 — GRIND (%s): %d TYPE A joints × 6 min + %d TYPE B welds × 3 min "
+            "+ 30 min clean%s = %.1f min (%.2f hr)."
+            % (grind_label, type_a_joints, type_b_joints,
+               " + 90 min mill scale" if needs_mill_scale else "",
+               grind_min, grind_clean))
 
     # --- Grind split for decorative flat bar + bare metal ---
     has_decorative_flat_bar = type_b_count > 0 and any(
@@ -253,9 +276,15 @@ def calculate_labor_hours(job_type, cut_list, fields):
     cut_min = total_pieces * 4 + miter_cuts * 2
     cut_prep = max(1.0, cut_min / 60.0)
 
-    # FIT & TACK: structural frame pieces ONLY × 5 min
-    # (TYPE B fitting time is already in the 5 min/piece weld time)
-    fit_min = type_a_count * 5
+    # FIT & TACK: structural frame pieces × 5 min + picket positioning × 2.5 min
+    # Pickets require individual measurement, plumbing, clamping, and tack welding
+    picket_count = 0
+    for item in cut_list:
+        text = (str(item.get("description", "")) + " "
+                + str(item.get("piece_name", ""))).lower()
+        if "picket" in text or "baluster" in text:
+            picket_count += int(item.get("quantity", 1))
+    fit_min = type_a_count * 5 + picket_count * 2.5  # 2.5 min/picket to position/plumb/tack
     fit_tack = max(1.0, fit_min / 60.0)
 
     # LAYOUT & SETUP: 1.5 hrs + 0.25 hr per 10 decorative pieces beyond 20
@@ -277,10 +306,17 @@ def calculate_labor_hours(job_type, cut_list, fields):
         finish_prep = 1.0
 
     # COATING APPLICATION
+    # Estimate surface area from cut list for paint coverage
+    total_length_ft = sum(
+        item.get("length_inches", 0) * item.get("quantity", 1) / 12.0
+        for item in cut_list)
+    est_sqft = total_length_ft * 0.5  # rough: ~6" average exposed surface width
+
     if "clear" in finish:
         coating_application = 1.0
     elif "paint" in finish and "powder" not in finish:
-        coating_application = 1.5
+        # Prime + paint: 0.5 hr per 100 sqft + 1.5 hr setup/cleanup/dry
+        coating_application = max(2.0, est_sqft / 100.0 * 0.5 + 1.5)
     elif "powder" in finish or "galv" in finish:
         coating_application = 0.0
     elif "raw" in finish:
@@ -293,10 +329,10 @@ def calculate_labor_hours(job_type, cut_list, fields):
 
     reasoning_lines.append(
         "STEP 4 — CUT: %d pcs × 4 min + %d miter × 2 = %.1f min (%.2f hr). "
-        "FIT: %d TYPE A × 5 min = %.1f min (%.2f hr). "
+        "FIT: %d TYPE A × 5 min + %d pickets × 2.5 min = %.1f min (%.2f hr). "
         "LAYOUT: 1.5 + 0.25 × %d/10 = %.2f hr."
         % (total_pieces, miter_cuts, cut_min, cut_prep,
-           type_a_count, fit_min, fit_tack,
+           type_a_count, picket_count, fit_min, fit_tack,
            extra_decorative, layout_setup))
 
     # ======================================================

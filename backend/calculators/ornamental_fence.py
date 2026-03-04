@@ -49,16 +49,20 @@ class OrnamentalFenceCalculator(BaseCalculator):
         elif "5" in str(spacing_str):
             picket_spacing_in = 5.0
 
-        picket_profile = fields.get("picket_style", "")
-        if "round" in str(picket_profile).lower():
-            picket_key = "round_bar_0.625"
-            picket_mat = "flat_bar"
-        elif "flat" in str(picket_profile).lower():
-            picket_key = "flat_bar_1x0.25"
-            picket_mat = "flat_bar"
+        from .cantilever_gate import _resolve_picket_profile, PICKET_MATERIAL_PROFILES
+        picket_material = str(fields.get("picket_material", "")).lower()
+        if picket_material:
+            picket_key = _resolve_picket_profile(fields, "Pickets (vertical bars)")
         else:
-            picket_key = "sq_bar_0.75"
-            picket_mat = "square_tubing"
+            # Legacy fallback for picket_style field
+            picket_style = str(fields.get("picket_style", "")).lower()
+            if "round" in picket_style:
+                picket_key = "round_bar_0.625"
+            elif "flat" in picket_style:
+                picket_key = "flat_bar_1x0.25"
+            else:
+                picket_key = "sq_bar_0.75"
+        picket_mat = "flat_bar" if "flat_bar" in picket_key else "square_tubing"
 
         rail_profile = "sq_tube_1.5x1.5_11ga"
         post_profile = "sq_tube_2x2_11ga"
@@ -106,6 +110,34 @@ class OrnamentalFenceCalculator(BaseCalculator):
         ))
         total_weight += rail_weight
 
+        # 2b. Mid-rails (horizontal stiffeners for tall fence sections)
+        mid_rail_count = 0
+        if height_in > 72:
+            mid_rail_count = 2
+        elif height_in > 48:
+            mid_rail_count = 1
+
+        if mid_rail_count > 0:
+            mid_rail_total_in = panel_width_in * panel_count * mid_rail_count
+            mid_rail_total_ft = self.inches_to_feet(mid_rail_total_in)
+            mid_rail_weight = self.get_weight_lbs(rail_profile, mid_rail_total_ft)
+
+            items.append(self.make_material_item(
+                description="Mid-rails — 1-1/2\" sq tube 11ga × %d per panel × %d panels (%.1f ft total)" % (
+                    mid_rail_count, panel_count, mid_rail_total_ft),
+                material_type="square_tubing",
+                profile=rail_profile,
+                length_inches=mid_rail_total_in,
+                quantity=self.linear_feet_to_pieces(mid_rail_total_ft),
+                unit_price=round(mid_rail_total_ft * rail_price_ft / max(self.linear_feet_to_pieces(mid_rail_total_ft), 1), 2),
+                cut_type="square",
+                waste_factor=self.WASTE_TUBE,
+            ))
+            total_weight += mid_rail_weight
+            total_weld_inches += self.weld_inches_for_joints(panel_count * mid_rail_count * 2, 2.0)
+            assumptions.append(
+                "%d mid-rail(s) per panel added for %.0f\" fence height." % (mid_rail_count, height_in))
+
         # 3. Pickets
         pickets_per_panel = math.ceil(panel_width_in / picket_spacing_in) + 1
         total_pickets = pickets_per_panel * panel_count
@@ -128,8 +160,12 @@ class OrnamentalFenceCalculator(BaseCalculator):
         total_weight += picket_weight
 
         # Weld: 2 tack welds per picket (top + bottom) + rail-to-post welds
-        total_weld_inches = self.weld_inches_for_joints(total_pickets * 2, 1.5)
+        # Also add picket-to-mid-rail welds if mid-rails exist
+        total_weld_inches += self.weld_inches_for_joints(total_pickets * 2, 1.5)
         total_weld_inches += self.weld_inches_for_joints(panel_count * 4, 3.0)  # Rail-to-post
+        if mid_rail_count > 0:
+            total_weld_inches += self.weld_inches_for_joints(
+                total_pickets * mid_rail_count * 2, 1.5)  # Picket-to-mid-rail
 
         # Surface area (both sides)
         total_sq_ft = total_footage * height_ft * 2

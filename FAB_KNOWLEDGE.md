@@ -36,6 +36,12 @@
   - Heavy plate (≥1/2") where MIG would require multiple passes
   - Gate posts being welded to already-installed concrete anchors
 
+### Process Selection by Location
+- **Shop fabrication:** MIG (GMAW) — controlled environment, gas shielding reliable
+- **Field/site installation:** Stick (SMAW, E7018) — wind disrupts gas shielding for MIG/TIG
+- **Structural field welding:** FCAW (self-shielded E71T-11) — high deposition, wind-tolerant
+- **Never specify MIG for outdoor field installation** — even light breeze disrupts argon/CO₂ shielding
+
 ### Flux-Core (FCAW) — Not Standard at CreateStage, Know It for Bids
 - E71T-11 is self-shielded (no gas) — good for outdoor structural, dirty metal
 - E71T-1 is gas-shielded — better bead quality, less spatter than self-shielded
@@ -107,6 +113,11 @@
   - Paint (primer handles mill scale)
   - Galvanized (galvanizer does their own prep)
 
+### Mill Scale at Cut Ends — Universal Rule
+- After EVERY tube/bar cut, grind 1-2" of mill scale from each cut end using a flap disc before fit-up
+- Mill scale at weld joints causes porosity — this applies to ALL material regardless of finish
+- Time: 30 seconds per end. Factor into cut_prep labor.
+
 ### Mill Scale Removal Methods
 - **Vinegar bath (dilute acetic acid):** 20-30% white vinegar, submerge 12-24 hours. Zero cost for chemicals, high labor (handling, rinsing, neutralizing, drying). Best for small parts with complex geometry.
 
@@ -151,10 +162,19 @@ This is a CLEANING step, not a finishing step — surface finish comes from subs
 - **Factor transport:** Round trip to coater = half-day labor minimum
 - Colors: standard RAL colors off-the-shelf. Custom colors = premium, longer lead time.
 
+### Outdoor Grinding Rule
+- **Outdoor gates, fences, railings** with paint or powder coat finish: cleanup grind ONLY
+  - Clean spatter, remove sharp edges, knock down high spots
+  - Do NOT grind welds smooth or flat — waste of time, no visual benefit under opaque coating
+- **Indoor/furniture/decorative work** (tables, shelving, visible clear-coat): full smooth grind
+  - Blend welds, grind flush if specified, progressive grit for raw/brushed finish
+- **Labor impact:** Outdoor cleanup grind = ~2 min/joint. Indoor smooth grind = ~6 min/joint.
+
 ### Paint / Rattle Can
 - Degrease, scuff with 220-grit, prime with self-etching primer on bare steel
 - Top coat when prime is fully cured (check product for cure time — typically 1 hour)
 - Not suitable for structural or outdoor exposed work
+- **Outdoor steel:** Always PRIME then PAINT — two separate steps with dry time between. Never combine.
 
 ---
 

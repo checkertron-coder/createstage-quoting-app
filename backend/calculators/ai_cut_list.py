@@ -60,6 +60,11 @@ BANNED_TERM_REPLACEMENTS = {
     "drill a hole into the bottom": "weld a threaded bung into the bottom",
     "tap a thread into the bottom": "weld a threaded bung into the bottom",
     "drill press, hand drill, tap set, cutting fluid": "MIG welder, threaded bungs",
+    # Filing — always use flap disc or die grinder
+    "file the edges": "deburr with flap disc",
+    "use a file": "use a flap disc",
+    "hand file": "flap disc or die grinder",
+    "file smooth": "grind smooth with flap disc",
 }
 
 # Valid cut types
@@ -524,6 +529,24 @@ Return ONLY valid JSON — an array of objects:
                     "length = gate total length + 24\" approach."
                 )
 
+            # Post dimensions context
+            height_str = fields.get("height", fields.get("clear_height", ""))
+            post_concrete = fields.get("post_concrete", "Yes")
+            if height_str:
+                try:
+                    h_ft = float(str(height_str).split()[0])
+                    h_in = h_ft * 12
+                    above_grade_in = h_in + 2  # 2" clearance above gate
+                    embed_in = 42.0 if "No" not in str(post_concrete) else 0.0
+                    total_in = above_grade_in + embed_in
+                    blocks.append(
+                        "POST DIMENSIONS: Above grade %.0fin + %.0fin embed = %.0fin total (%.1f ft). "
+                        "Use EXACTLY these dimensions for posts in cut list."
+                        % (above_grade_in, embed_in, total_in, total_in / 12.0)
+                    )
+                except (ValueError, IndexError):
+                    pass
+
             # Adjacent fence context
             adjacent = str(fields.get("adjacent_fence", ""))
             if "Yes" in adjacent:
@@ -542,6 +565,15 @@ Return ONLY valid JSON — an array of objects:
                     "and fence posts in the cut list. Gate post is shared — do not duplicate."
                     % (side_1, side_2, spacing, match)
                 )
+
+        # --- Field welding context ---
+        installation = str(fields.get("installation", ""))
+        if "install" in installation.lower() and "no" not in installation.lower():
+            blocks.append(
+                "FIELD WELDING: Site welds use Stick (SMAW, E7018). "
+                "MIG/TIG for shop fabrication only. Wind disrupts gas shielding — "
+                "never specify MIG for outdoor field installation."
+            )
 
         # --- Generic compound context for any job type ---
         # Pass through any fields that indicate compound elements
@@ -749,6 +781,10 @@ RULES:
 9. For jobs requiring vinegar bath / mill scale removal on stock that needs finish grinding before cutting: Step 1 is ALWAYS "Submerge stock in vinegar bath." Steps 2-N are frame/structural work done WHILE the bath runs. The step AFTER all frame work is "Pull stock from vinegar bath, wash, grind, cut."
 10. WELD PROCESS SELECTION: Decorative flat bar work (1/8" or thinner, visible joints, furniture/ornamental pieces) MUST use TIG (GTAW), not MIG. TIG gives cleaner, more precise welds with less spatter and less heat input — critical for pre-finished decorative surfaces. MIG is for structural frame assembly (square tube joints, leg-to-frame connections). Spacer blocks can use either MIG (for speed) or TIG (for precision on small parts).
 11. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not estimate, round, or invent dimensions. When referring to a post, state its exact length from the cut list (e.g., "156 inches" not "15 feet"). When stating how many of a piece to cut, use the exact quantity from the cut list. If fence sections appear in the cut list, include fence fabrication and installation steps.
+12. MILL SCALE: After EVERY tube/bar cut, grind 1-2" of mill scale from each cut end using flap disc before fit-up. Mill scale causes weld porosity. 30 seconds per end. Applies to ALL material regardless of finish.
+13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018). Never specify MIG for outdoor field installation (wind disrupts gas shielding). Never use "file" for deburring — use "flap disc" or "die grinder."
+14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat. Save smooth grinding for indoor/furniture/decorative work.
+15. PAINT FOR OUTDOOR STEEL: Always prime THEN paint (two separate steps with dry time). Never combine into "prime and paint in one step."
 
 Return ONLY valid JSON — an array of step objects:
 [
