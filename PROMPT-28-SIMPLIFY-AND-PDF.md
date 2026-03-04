@@ -118,6 +118,107 @@ Step 10: "Follow with 80-grit flap disc pass over all flat surfaces"
 - Site install at $145/hr, shop at $125/hr ✅
 - Primer and paint as separate steps ✅
 
+## BUG TRACE — How Each Problem Happens in the Code
+
+Read this section first. Every bug above has a specific line of code causing it.
+
+### Bug 1: Duplicate Gate Posts (6 instead of 3)
+
+**Symptom**: Materials list has BOTH `pipe_4_sch40 × 3` (from Claude) AND `sq_tube_4x4_11ga × 3` (from post-processor).
+
+**Code path**:
+1. Claude generates cut list → picks `pipe_4_sch40` for gate posts (wrong profile, but valid structure)
+2. `_post_process_ai_result()` in `cantilever_gate.py` runs the gate post check at ~line 540:
+   ```python
+   has_gate_posts = any(
+       "post" in item.get("description", "").lower()
+       and "fence" not in item.get("description", "").lower()
+       and item.get("profile") == post_profile_key  # post_profile_key = "sq_tube_4x4_11ga"
+       for item in items
+   )
+   ```
+3. Claude's posts have `profile = "pipe_4_sch40"` which does NOT equal `"sq_tube_4x4_11ga"`
+4. `has_gate_posts = False` → post-processor adds 3 MORE posts in `sq_tube_4x4_11ga`
+5. **Result**: 6 posts, two different materials, double the cost
+
+**Root cause**: The existence check matches on BOTH description AND profile. It should match on description only, then correct the profile if wrong.
+
+### Bug 2: Duplicate Overhead Beam (2 instead of 1)
+
+**Symptom**: Materials list has BOTH `hss_4x4_0.25 - 23.1 ft` (from Claude) AND `Overhead support beam - HSS 6×4×1/4" hss_6x4_0.25` (from post-processor).
+
+**Code path**:
+1. Claude generates an overhead beam as `hss_4x4_0.25 - 23.1 ft` with a generic description
+2. `_post_process_ai_result()` searches for existing beams at ~line 632:
+   ```python
+   overhead_item_idxs = []
+   for idx, item in enumerate(items):
+       desc_lower = item.get("description", "").lower()
+       if "overhead" in desc_lower or "support beam" in desc_lower:
+           overhead_item_idxs.append(idx)
+   ```
+3. Claude's description is `"hss_4x4_0.25 - 23.1 ft"` — no "overhead" keyword, no "support beam" keyword
+4. `overhead_item_idxs = []` (empty) → post-processor thinks no beam exists → adds one as `hss_6x4_0.25`
+5. **Result**: 2 beams, two different profiles, $430 in beam material instead of ~$190
+
+**Root cause**: The existence check only matches on keywords in the description. It should also check for any `hss_` profile item, since that's almost certainly the overhead beam on a cantilever gate.
+
+### Bug 3: Conflicting Fence Picket Counts (three different numbers per side)
+
+**Symptom**: Side 1 shows 44 (Claude), 46 (post-processor description), 49 (post-processor qty with waste).
+
+**Code path**:
+1. Claude generates `Fence Side 1 - pickets, sq_bar_0.625, 116", qty 44`
+2. `_post_process_ai_result()` checks `has_fence_posts` at ~line 735:
+   ```python
+   has_fence_posts = any(
+       "fence" in item.get("description", "").lower()
+       and "post" in item.get("description", "").lower()
+       for item in items
+   )
+   ```
+3. Claude DID generate fence posts, so `has_fence_posts = True` → post-processor skips adding fence posts ✅
+4. BUT the post-processor ALSO checks for mid-rails separately (`has_fence_midrails`) and generates them independently
+5. Meanwhile, `_generate_fence_sections()` calculates its own picket count: `ceil(180" / 4") + 1 = 46`
+6. Then `apply_waste(46, 0.05)` = `ceil(46 * 1.05)` = 49 for the material qty
+7. **Result**: Claude's 44, calculator's 46, waste-adjusted 49 — all on the same quote
+
+**Root cause**: The post-processor generates fence items independently even when Claude already generated them. It should check whether Claude already handled fence pickets/rails/mid-rails for each side before generating its own.
+
+### Bug 4: Fab Sequence Says 27' Gate Panel (should be 18')
+
+**Symptom**: Steps 3, 5, and 7 reference "324 inches" and "27' total gate panel length."
+
+**Code path**:
+1. `quote_session.py` line 479 calls `generate_build_instructions()` with `material_list.get("items", [])` — this is the POST-PROCESSED items list
+2. But `_build_instructions_prompt()` at line 747 builds the prompt from these items + the raw `fields` dict
+3. The fields dict has `clear_width: "12'"` and the job description mentions "15' long" fence
+4. Claude sees "12' opening" and "15'" in the description and recalculates: 12 + 15 = 27' panel
+5. The calculator knows `gate_panel = opening × 1.5 = 18'` but this ENFORCED value is never passed to the fab sequence prompt
+6. **Result**: Fab sequence uses AI-hallucinated 27' instead of calculator-enforced 18'
+
+**Root cause**: The fab sequence prompt has no way to receive calculator-enforced dimensions. It gets raw fields and items, then the AI re-derives everything from the job description — and gets it wrong.
+
+### Bug 5: Progressive Gritting on Outdoor Painted Steel
+
+**Symptom**: Step 10 says "Follow with 80-grit flap disc pass over all flat surfaces to open the steel surface for primer adhesion."
+
+**Code path**:
+1. `_build_instructions_prompt()` Rule 14 says "DO NOT grind welds smooth or flat"
+2. But it doesn't explicitly ban progressive gritting (80-grit, 120-grit passes)
+3. Claude interprets "clean spatter, remove sharp edges" correctly but then adds an 80-grit pass because it thinks primer adhesion requires surface profiling
+4. **Reality**: For outdoor painted mild steel, you wipe down with surface prep solvent and prime. The mill scale and welded surface provide adequate profile. No progressive gritting needed.
+
+**Root cause**: Rule 14 bans smooth grinding but doesn't ban progressive gritting. Claude is being helpful and adding steps it thinks are needed. The rule needs to be explicit: 36-grit flap disc ONLY, for spatter and edges, then surface prep solvent wipe, then prime.
+
+### Bug 6: No Surface Prep Solvent in Consumables
+
+**Symptom**: Consumables list has primer, paint, welding wire, grinding discs, shielding gas — but no surface prep solvent.
+
+**Code path**: The consumable calculation system in `backend/knowledge/consumables.py` has no entry for surface prep solvent. It simply doesn't exist in the system.
+
+**Root cause**: Never been added. It's a real consumable Burton uses on every painted job.
+
 ## Constraint Architecture
 
 ### PART 1: Simplify `_post_process_ai_result()` in `backend/calculators/cantilever_gate.py`
