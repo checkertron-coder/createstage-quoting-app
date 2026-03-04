@@ -1,11 +1,11 @@
 """
-AI-powered quoting endpoint — powered by Gemini.
+AI-powered quoting endpoint — powered by Claude.
 
 User describes a job in plain English.
-Gemini interprets it, returns structured line items.
-The app calculates all the math using real Osario/Wexler pricing.
+Claude interprets it, returns structured line items.
+The app calculates all the math using real Osorio/Wexler pricing.
 
-Async pattern: POST returns job_id immediately, Gemini runs in background
+Async pattern: POST returns job_id immediately, Claude runs in background
 thread. Frontend polls GET /ai/job/{job_id} for results. This prevents
 Railway's 30s proxy timeout from returning 503 HTML.
 """
@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from typing import Optional
 from .. import models
 from ..database import get_db
-from ..ai_client import call_deep, get_model_name, is_configured
+from ..claude_client import call_deep, get_model_name, is_configured
 from ..quote_jobs import create_job, get_job, run_in_background, mark_db_saved
 
 router = APIRouter(prefix="/ai", tags=["ai-quoting"])
@@ -148,9 +148,9 @@ _CACHE_MAX = 50
 
 def _normalize_estimate(estimate):
     # type: (dict) -> None
-    """Fix common Gemini formatting issues in-place.
+    """Fix common AI formatting issues in-place.
 
-    waste_factor: Gemini sometimes returns 5 (meaning 5%) instead of 0.05.
+    waste_factor: AI sometimes returns 5 (meaning 5%) instead of 0.05.
     Every other pct field (material_markup_pct, profit_margin_pct, contingency_pct)
     is an integer like 15/20/0 and is divided by 100 in the calculation code.
     waste_factor is the only field used as a decimal — normalize it here.
@@ -164,7 +164,7 @@ class AIQuoteRequest(BaseModel):
     job_description: str
     customer_id: Optional[int] = None
     additional_context: Optional[str] = None
-    pre_computed_estimate: Optional[dict] = None  # Skip Gemini if provided
+    pre_computed_estimate: Optional[dict] = None  # Skip AI call if provided
 
 
 class AIQuoteResponse(BaseModel):
@@ -196,9 +196,9 @@ def _cache_set(key, value):
         _prompt_cache[key] = value
 
 
-def call_gemini(prompt):
+def call_claude(prompt):
     # type: (str) -> dict
-    """Call Gemini API and return parsed JSON estimate.
+    """Call Claude API and return parsed JSON estimate.
 
     Used by the request handler for cache hits (fast path).
     Raises HTTPException on failure — safe only in request context.
@@ -209,12 +209,12 @@ def call_gemini(prompt):
         return cached
 
     if not is_configured():
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY not configured")
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     full_prompt = MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
     text = call_deep(full_prompt)
     if text is None:
-        raise HTTPException(status_code=502, detail="Gemini call failed: no response")
+        raise HTTPException(status_code=502, detail="Claude call failed: no response")
 
     try:
         parsed = json.loads(text)
@@ -222,14 +222,14 @@ def call_gemini(prompt):
         _cache_set(cache_key, parsed)
         return parsed
     except Exception as e:
-        raise HTTPException(status_code=502, detail="Gemini call failed: %s" % str(e))
+        raise HTTPException(status_code=502, detail="Claude call failed: %s" % str(e))
 
 
-def call_gemini_background(prompt):
+def call_claude_background(prompt):
     # type: (str) -> dict
-    """Call Gemini API from a background thread.
+    """Call Claude API from a background thread.
 
-    Same as call_gemini() but raises plain exceptions instead of HTTPException,
+    Same as call_claude() but raises plain exceptions instead of HTTPException,
     since HTTPException only makes sense in a request context.
     """
     cache_key = prompt[:100]
@@ -238,12 +238,12 @@ def call_gemini_background(prompt):
         return cached
 
     if not is_configured():
-        raise RuntimeError("GEMINI_API_KEY not configured")
+        raise RuntimeError("ANTHROPIC_API_KEY not configured")
 
     full_prompt = MASTER_CONTEXT + "\n\n## JOB DESCRIPTION\n" + prompt
     text = call_deep(full_prompt)
     if text is None:
-        raise RuntimeError("Gemini call failed: no response")
+        raise RuntimeError("Claude call failed: no response")
 
     try:
         parsed = json.loads(text)
@@ -251,13 +251,13 @@ def call_gemini_background(prompt):
         _cache_set(cache_key, parsed)
         return parsed
     except Exception as e:
-        raise RuntimeError("Gemini call failed: %s" % str(e))
+        raise RuntimeError("Claude call failed: %s" % str(e))
 
 
 def _run_estimate(prompt):
     # type: (str) -> dict
-    """Background task: call Gemini and return formatted estimate result."""
-    estimate = call_gemini_background(prompt)
+    """Background task: call Claude and return formatted estimate result."""
+    estimate = call_claude_background(prompt)
     cost, total = estimate_total(estimate)
     return {
         "job_summary": estimate.get("job_summary", ""),
@@ -274,9 +274,9 @@ def _run_estimate(prompt):
 
 def _run_quote_estimate(prompt):
     # type: (str) -> dict
-    """Background task for /quote: call Gemini and return raw estimate only.
+    """Background task for /quote: call Claude and return raw estimate only.
     DB save happens on first poll, not in background thread."""
-    return call_gemini_background(prompt)
+    return call_claude_background(prompt)
 
 
 def estimate_total(estimate):
@@ -348,7 +348,7 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
     Describe a job in plain English — AI estimates it and saves a draft quote.
     Requires customer_id. Returns a saved quote ready to review and adjust.
 
-    With pre_computed_estimate: synchronous (no Gemini call, just DB save).
+    With pre_computed_estimate: synchronous (no AI call, just DB save).
     Without: returns job_id, poll GET /ai/job/{job_id}. DB save happens on
     first poll after completion.
     """
@@ -360,14 +360,14 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Customer not found")
 
     if request.pre_computed_estimate:
-        # Synchronous path — no Gemini call needed
+        # Synchronous path — no AI call needed
         estimate = request.pre_computed_estimate
         _normalize_estimate(estimate)
         result = _save_quote_to_db(estimate, request, db)
         result["status"] = "complete"
         return result
 
-    # Async path — Gemini needed
+    # Async path — Claude needed
     prompt = request.job_description
     if request.additional_context:
         prompt += "\n\nAdditional context: %s" % request.additional_context
@@ -450,9 +450,9 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
 
     Returns:
       - {"status": "pending", "job_id": "..."} — queued
-      - {"status": "running", "job_id": "..."} — Gemini in progress
+      - {"status": "running", "job_id": "..."} — Claude in progress
       - {"status": "complete", "result": {...}} — done
-      - {"status": "failed", "error": "..."} — Gemini error
+      - {"status": "failed", "error": "..."} — Claude error
       - {"status": "timeout", "error": "..."} — exceeded 180s
       - 404 — not found or expired
 
@@ -526,7 +526,7 @@ def get_job_status(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/test")
-def test_gemini():
-    """Quick test to verify Gemini API key is working."""
-    result = call_gemini("quote a simple steel frame")
+def test_claude():
+    """Quick test to verify Claude API key is working."""
+    result = call_claude("quote a simple steel frame")
     return {"status": "ok", "model": get_model_name("deep"), "result": result}

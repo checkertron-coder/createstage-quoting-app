@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from ..ai_client import call_fast, call_vision as _gemini_vision
+from ..claude_client import call_fast, call_vision as _claude_vision
 
 # Directory where question tree JSON files live
 DATA_DIR = Path(__file__).parent / "data"
@@ -57,7 +57,7 @@ class QuestionTreeEngine:
 
     def extract_from_description(self, job_type: str, description: str) -> dict:
         """
-        Use Gemini to parse a natural language description and extract
+        Use Claude to parse a natural language description and extract
         any fields that were already answered.
 
         Returns: {field_id: extracted_value} for fields found in description.
@@ -84,14 +84,14 @@ class QuestionTreeEngine:
             field_descriptions="\n".join(field_descriptions),
         )
 
-        # Call Gemini for extraction
-        extracted = _call_gemini_extract(prompt)
+        # Call Claude for extraction
+        extracted = _call_claude_extract(prompt)
         return extracted
 
     def extract_from_photo(self, job_type: str, photo_url_or_path: str,
                            description: str = "") -> dict:
         """
-        Send a photo to Gemini Vision to extract job-relevant information.
+        Send a photo to Claude Vision to extract job-relevant information.
 
         Returns: {
             "extracted_fields": dict,     # field_id: value pairs
@@ -137,7 +137,7 @@ class QuestionTreeEngine:
             field_descriptions="\n".join(field_descriptions),
         )
 
-        result = _call_gemini_vision(vision_prompt, image_b64, mime_type)
+        result = _call_claude_vision(vision_prompt, image_b64, mime_type)
         return result
 
     def get_next_questions(self, job_type: str, answered_fields: dict) -> list[dict]:
@@ -307,7 +307,7 @@ def _find_question(questions: list[dict], question_id: str) -> Optional[dict]:
 
 def _build_extraction_prompt(job_type: str, display_name: str,
                              description: str, field_descriptions: str) -> str:
-    """Build the Gemini prompt for field extraction from a description."""
+    """Build the Claude prompt for field extraction from a description."""
     return f"""You are a metal fabrication quoting assistant. A customer is requesting a quote for a {display_name} ({job_type}).
 
 The customer provided this description:
@@ -329,9 +329,9 @@ FIELDS:
 Return ONLY valid JSON, no explanation:"""
 
 
-def _call_gemini_extract(prompt: str) -> dict:
+def _call_claude_extract(prompt: str) -> dict:
     """
-    Call Gemini API to extract fields from description.
+    Call Claude API to extract fields from description.
     Returns parsed dict of extracted fields.
     Falls back to empty dict on any error.
     """
@@ -379,7 +379,7 @@ def _empty_photo_result() -> dict:
 
 
 def _build_vision_prompt(job_type: str, description: str, field_descriptions: str) -> str:
-    """Build the Gemini Vision prompt for photo analysis."""
+    """Build the Claude Vision prompt for photo analysis."""
     return f"""You are analyzing a photo for a metal fabrication quoting system.
 Job type: {job_type}
 Additional context from user: {description}
@@ -437,14 +437,14 @@ Only include fields you are confident about (>80% confidence).
 Do NOT guess measurements — only report what you can clearly see or reasonably estimate."""
 
 
-def _call_gemini_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
+def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     """
-    Call Gemini Vision API with image + prompt.
+    Call Claude Vision API with image + prompt.
     Returns parsed photo extraction result.
     Falls back to empty result on any error.
     """
     try:
-        text = _gemini_vision(prompt, image_b64, mime_type, timeout=60)
+        text = _claude_vision(prompt, image_b64, mime_type, timeout=60)
         if text is None:
             return _empty_photo_result()
         parsed = json.loads(text)
@@ -523,7 +523,7 @@ def _detect_by_keywords(description: str) -> Optional[dict]:
             "ambiguous": False,
         }
     elif best_type and best_score == 1:
-        # Single-word match — moderate confidence, let Gemini confirm if available
+        # Single-word match — moderate confidence, let Claude confirm if available
         return {
             "job_type": best_type,
             "confidence": 0.6,
@@ -539,8 +539,8 @@ def detect_job_type(description: str) -> dict:
     Strategy:
     1. Try keyword matching first (fast, no API call)
     2. If high-confidence keyword match, return immediately
-    3. Otherwise, fall through to Gemini with the full 25-type list
-    4. If Gemini unavailable, use keyword result or default to custom_fab
+    3. Otherwise, fall through to Claude with the full 25-type list
+    4. If Claude unavailable, use keyword result or default to custom_fab
 
     Returns IntakeResult-shaped dict.
     This is Stage 1 (Intake) of the pipeline.
@@ -554,8 +554,8 @@ def detect_job_type(description: str) -> dict:
     if keyword_result and keyword_result["confidence"] >= 0.9:
         return keyword_result
 
-    # Step 3: Try Gemini for better accuracy
-    from ..ai_client import is_configured
+    # Step 3: Try Claude for better accuracy
+    from ..claude_client import is_configured
     if not is_configured():
         if keyword_result:
             return keyword_result

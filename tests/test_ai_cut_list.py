@@ -106,7 +106,7 @@ def test_ai_cut_list_parse_response_sanitizes():
 
 
 def test_ai_cut_list_no_api_key_returns_none():
-    """Without GEMINI_API_KEY, generate_cut_list returns None."""
+    """Without ANTHROPIC_API_KEY, generate_cut_list returns None."""
     gen = AICutListGenerator()
     with patch.dict("os.environ", {}, clear=True):
         result = gen.generate_cut_list("furniture_table", {"height": "30"})
@@ -256,7 +256,7 @@ def test_custom_fab_always_tries_ai_with_description():
 
 
 def test_calculators_work_without_ai():
-    """All 6 AI-integrated calculators still produce valid output without Gemini."""
+    """All 6 AI-integrated calculators still produce valid output without AI."""
     calculators = [
         (FurnitureTableCalculator(), {"table_length": "60", "table_width": "30", "table_height": "30"}),
         (CustomFabCalculator(), {"approximate_size": "24 x 12 x 12"}),
@@ -544,8 +544,8 @@ def test_hardware_sourcer_preserves_existing_urls():
 # ============================================================
 
 def test_pricing_engine_uses_dynamic_model_name():
-    """Pricing engine assumption text uses dynamic model name from ai_client."""
-    from backend import ai_client
+    """Pricing engine assumption text uses dynamic model name from claude_client."""
+    from backend import claude_client
     engine = PricingEngine()
     session_data = {
         "job_type": "furniture_table",
@@ -558,14 +558,11 @@ def test_pricing_engine_uses_dynamic_model_name():
     }
     user = {"id": 1, "shop_name": "Test", "markup_default": 15}
 
-    ai_client.reset_provider()
-    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key",
-                                    "GEMINI_MODEL": "gemini-3.0-flash"}):
+    with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "test-key",
+                                    "CLAUDE_DEEP_MODEL": "claude-sonnet-4-6"}):
         result = engine.build_priced_quote(session_data, user)
-    ai_client.reset_provider()
     assumptions_text = " ".join(result["assumptions"])
-    assert "gemini-3.0-flash" in assumptions_text
-    assert "Gemini 2.0 Flash" not in assumptions_text
+    assert "Claude" in assumptions_text
 
 
 # ============================================================

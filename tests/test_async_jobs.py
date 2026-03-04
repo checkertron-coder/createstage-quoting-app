@@ -2,7 +2,7 @@
 Tests for async AI quote processing — job store + polling endpoints.
 
 Covers: job lifecycle, expiry, cleanup, POST/GET endpoints, background
-completion, timeout handling. All Gemini calls are mocked.
+completion, timeout handling. All AI calls are mocked.
 """
 
 import time
@@ -135,8 +135,8 @@ MOCK_ESTIMATE = {
 
 def test_estimate_returns_pending(client):
     """POST /api/ai/estimate returns pending + job_id (no cache hit)."""
-    with patch("backend.routers.ai_quote.call_gemini_background") as mock_gemini:
-        mock_gemini.return_value = MOCK_ESTIMATE
+    with patch("backend.routers.ai_quote.call_claude_background") as mock_ai:
+        mock_ai.return_value = MOCK_ESTIMATE
 
         res = client.post("/api/ai/estimate", json={
             "job_description": "Build a steel frame for a mezzanine"
@@ -246,8 +246,8 @@ def test_quote_without_precomputed_returns_pending(client):
     assert cust_res.status_code == 200
     customer_id = cust_res.json()["id"]
 
-    with patch("backend.routers.ai_quote.call_gemini_background") as mock_gemini:
-        mock_gemini.return_value = MOCK_ESTIMATE
+    with patch("backend.routers.ai_quote.call_claude_background") as mock_ai:
+        mock_ai.return_value = MOCK_ESTIMATE
 
         res = client.post("/api/ai/quote", json={
             "job_description": "Build a custom steel table",

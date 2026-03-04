@@ -1,12 +1,11 @@
 """
 AI-assisted cut list generator for custom/complex jobs.
 
-Uses Claude (preferred) or Gemini (fallback) to interpret freeform designs
-into detailed cut lists. Called by ALL 25 calculators when a user provides
-a design description. The AI thinks through design first, then generates
-precise cut lists.
+Uses Claude API to interpret freeform designs into detailed cut lists.
+Called by ALL 25 calculators when a user provides a design description.
+The AI thinks through design first, then generates precise cut lists.
 
-Fallback: if the AI fails or returns invalid JSON, the calling calculator
+Fallback: if Claude fails or returns invalid JSON, the calling calculator
 uses its own template-based output. Never crashes.
 """
 
@@ -15,7 +14,7 @@ import logging
 import re
 from typing import Optional, List, Dict
 
-from ..ai_client import call_fast, is_configured
+from ..claude_client import call_fast, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +251,7 @@ def _build_geometry_summary(cut_list):
 
 class AICutListGenerator:
     """
-    Generates detailed cut lists by sending structured job info to AI (Claude or Gemini).
+    Generates detailed cut lists by sending structured job info to Claude API.
 
     Usage:
         generator = AICutListGenerator()
@@ -916,7 +915,7 @@ Return ONLY valid JSON — an array of step objects:
         return prompt
 
     def _call_ai(self, prompt: str) -> str:
-        """Call AI provider (Claude or Gemini). Raises RuntimeError on failure."""
+        """Call Claude API. Raises RuntimeError on failure."""
         text = call_fast(prompt, timeout=180)
         if text is None:
             raise RuntimeError("AI provider returned no response")

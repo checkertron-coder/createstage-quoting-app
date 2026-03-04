@@ -9,15 +9,10 @@ class Settings(BaseSettings):
     COMPANY_PHONE: str = ""
     LABOR_RATE_DEFAULT: float = 125.00
     MARKUP_DEFAULT: float = 1.35
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
-    GEMINI_CUTLIST_MODEL: str = "gemini-2.5-flash"
-    GEMINI_FAST_MODEL: str = ""
-    GEMINI_DEEP_MODEL: str = ""
-
-    # Claude review loop (optional)
     ANTHROPIC_API_KEY: str = ""
-    CLAUDE_REVIEW_MODEL: str = "claude-sonnet-4-20250514"
+    CLAUDE_FAST_MODEL: str = "claude-sonnet-4-6"
+    CLAUDE_DEEP_MODEL: str = "claude-sonnet-4-6"
+    CLAUDE_REVIEW_MODEL: str = "claude-sonnet-4-6"
 
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time

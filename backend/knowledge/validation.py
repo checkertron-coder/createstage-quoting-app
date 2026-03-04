@@ -300,7 +300,7 @@ VALID_MATERIAL_TYPES = {
     "tube_steel", "flat_bar", "angle_iron", "plate", "sheet_metal",
     "round_bar", "square_bar", "pipe", "channel", "expanded_metal",
     "hardware", "other",
-    # AI-generated material types (ai_cut_list.py tells Gemini to use these)
+    # AI-generated material types (ai_cut_list.py tells Claude to use these)
     "square_tubing", "round_tubing", "dom_tubing",
     "mild_steel", "stainless_304", "aluminum_6061",
 }

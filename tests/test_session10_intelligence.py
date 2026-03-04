@@ -566,11 +566,11 @@ def test_base_build_from_ai_cuts_produces_valid_material_list():
 
 
 def test_try_ai_cut_list_returns_none_without_api_key():
-    """_try_ai_cut_list returns None when GEMINI_API_KEY is not set."""
+    """_try_ai_cut_list returns None when ANTHROPIC_API_KEY is not set."""
     calc = get_calculator("cantilever_gate")
     # Ensure no API key
     with patch.dict(os.environ, {}, clear=True):
-        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("ANTHROPIC_API_KEY", None)
         result = calc._try_ai_cut_list("cantilever_gate", {
             "description": "test gate",
         })
@@ -674,7 +674,7 @@ def test_labor_estimator_fallback_works():
 
     # Force fallback by not setting API key
     with patch.dict(os.environ, {}, clear=True):
-        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("ANTHROPIC_API_KEY", None)
         result = estimator.estimate(material_list, quote_params, user_rates)
 
     assert "processes" in result

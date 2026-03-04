@@ -4,18 +4,18 @@ Stage 4 — AI-powered labor estimation engine.
 Input: MaterialList (from Stage 3) + QuoteParams (from Stage 2) + user rates
 Output: LaborEstimate (per CLAUDE.md contract)
 
-Uses Gemini 2.0 Flash to estimate hours per process.
+Uses Claude API to estimate hours per process.
 AI receives structured data, returns structured JSON.
 Total hours are COMPUTED by summing process hours — never AI-provided.
 
-Graceful fallback: if Gemini is unavailable, uses rule-based estimation.
+Graceful fallback: if Claude is unavailable, uses rule-based estimation.
 The app NEVER fails because the AI is down.
 """
 
 import json
 import logging
 
-from .ai_client import call_deep
+from .claude_client import call_deep
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ class LaborEstimator:
 
     def _build_prompt(self, material_list: dict, quote_params: dict) -> str:
         """
-        Build the Gemini prompt. Provides structured context and demands
+        Build the Claude prompt. Provides structured context and demands
         structured JSON output with per-process hour breakdowns.
 
         Includes weld process reasoning — TIG vs MIG determination affects
@@ -399,16 +399,16 @@ Return ONLY valid JSON:
 
         return "\n".join(lines)
 
-    def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini API. Raises RuntimeError on failure."""
+    def _call_claude(self, prompt: str) -> str:
+        """Call Claude API. Raises RuntimeError on failure."""
         text = call_deep(prompt, timeout=90)
         if text is None:
-            raise RuntimeError("Gemini returned no response")
+            raise RuntimeError("Claude returned no response")
         return text
 
     def _parse_response(self, response_text: str, user_rates: dict, is_onsite: bool) -> dict:
         """
-        Parse Gemini JSON response into LaborEstimate.
+        Parse Claude JSON response into LaborEstimate.
         Validates all 11 processes are present.
         Computes total_hours by summing — never trusts AI total.
         Applies correct rate (inshop vs onsite) per process.
@@ -454,7 +454,7 @@ Return ONLY valid JSON:
 
     def _fallback_estimate(self, material_list: dict, quote_params: dict, user_rates: dict) -> dict:
         """
-        Rule-based fallback when Gemini is unavailable.
+        Rule-based fallback when Claude is unavailable.
         Based on material quantities and industry rules of thumb.
         Conservative (slightly high rather than low).
         """

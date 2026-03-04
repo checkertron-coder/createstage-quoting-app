@@ -19,7 +19,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_REVIEW_MODEL = os.environ.get("CLAUDE_REVIEW_MODEL", "claude-sonnet-4-20250514")
+CLAUDE_REVIEW_MODEL = os.environ.get("CLAUDE_REVIEW_MODEL", "claude-sonnet-4-6")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 

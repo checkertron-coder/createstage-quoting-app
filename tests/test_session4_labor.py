@@ -9,7 +9,7 @@ Tests:
 19-22. Prompt construction tests
 23-26. Pipeline integration tests
 
-All tests mock Gemini — no API key required.
+All tests mock AI — no API key required.
 """
 
 import json
@@ -64,8 +64,8 @@ def _sample_rates():
     return {"rate_inshop": 125.00, "rate_onsite": 145.00}
 
 
-def _mock_gemini_response():
-    """A realistic Gemini response for a cantilever gate."""
+def _mock_ai_response():
+    """A realistic AI labor response for a cantilever gate."""
     return json.dumps({
         "layout_setup": {"hours": 1.5, "notes": "Complex gate with motor prep, 3 post layout"},
         "cut_prep": {"hours": 2.0, "notes": "15 pieces, mixed miter and square cuts on 11ga tube"},
@@ -110,7 +110,7 @@ def test_estimator_total_is_sum_not_ai():
 def test_estimator_never_returns_single_total():
     """If AI response has a 'total' key, it is ignored — total is always computed."""
     # Inject a 'total' into the AI response
-    ai_response = json.loads(_mock_gemini_response())
+    ai_response = json.loads(_mock_ai_response())
     ai_response["total"] = 999.0  # This should be ignored
     response_text = json.dumps(ai_response)
 
@@ -177,7 +177,7 @@ def test_estimator_onsite_job_all_onsite_rate():
 # ============================================================
 
 def test_fallback_when_no_api_key():
-    """No GEMINI_API_KEY → fallback estimate returned, not an error."""
+    """No ANTHROPIC_API_KEY → fallback estimate returned, not an error."""
     ml, fields = _sample_material_list()
     estimator = LaborEstimator()
     # No API key is set in test env — should use fallback automatically
@@ -385,7 +385,7 @@ def test_validator_records_actual(db):
 # ============================================================
 
 def test_prompt_includes_piece_count():
-    """Gemini prompt contains material piece count."""
+    """AI prompt contains material piece count."""
     ml, fields = _sample_material_list()
     estimator = LaborEstimator()
     prompt = estimator._build_prompt(ml, _sample_quote_params(fields))
@@ -397,7 +397,7 @@ def test_prompt_includes_piece_count():
 
 
 def test_prompt_includes_weld_inches():
-    """Gemini prompt contains weld_linear_inches."""
+    """AI prompt contains weld_linear_inches."""
     ml, fields = _sample_material_list()
     estimator = LaborEstimator()
     prompt = estimator._build_prompt(ml, _sample_quote_params(fields))
@@ -407,7 +407,7 @@ def test_prompt_includes_weld_inches():
 
 
 def test_prompt_includes_finish_type():
-    """Gemini prompt mentions the finish type."""
+    """AI prompt mentions the finish type."""
     ml, fields = _sample_material_list()
     estimator = LaborEstimator()
     prompt = estimator._build_prompt(ml, _sample_quote_params(fields))

@@ -65,7 +65,7 @@ def start_session(
     """
     Start a new quote session.
 
-    1. If job_type not provided, uses Gemini to detect it from description
+    1. If job_type not provided, uses Claude to detect it from description
     2. Runs extract_from_description to pull fields from initial text
     3. Returns session_id, detected job_type, extracted fields, and next questions
     """

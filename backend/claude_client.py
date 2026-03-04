@@ -1,13 +1,11 @@
 """
-Centralized Claude (Anthropic) API client.
-
-Drop-in replacement for gemini_client.py. All AI generation calls can use
-this module instead. Provides the same interface: call_fast, call_deep,
-call_vision, is_configured, get_model_name.
+Centralized AI client for the CreateStage quoting app. All AI generation
+calls use this module. Provides: call_fast, call_deep, call_vision,
+is_configured, get_model_name.
 
 Model resolution:
-  FAST:  CLAUDE_FAST_MODEL -> "claude-sonnet-4-20250514"
-  DEEP:  CLAUDE_DEEP_MODEL -> "claude-sonnet-4-20250514"
+  FAST:  CLAUDE_FAST_MODEL -> "claude-sonnet-4-6"
+  DEEP:  CLAUDE_DEEP_MODEL -> "claude-sonnet-4-6"
 
 Set ANTHROPIC_API_KEY in environment to enable.
 """
@@ -20,8 +18,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_FAST = "claude-sonnet-4-20250514"
-_DEFAULT_DEEP = "claude-sonnet-4-20250514"
+_DEFAULT_FAST = "claude-sonnet-4-6"
+_DEFAULT_DEEP = "claude-sonnet-4-6"
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"

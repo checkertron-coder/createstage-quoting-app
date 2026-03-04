@@ -7,7 +7,7 @@ The parser reads it, finds metal fab line items (railings, gates, stairs,
 structural connections), and presents them as separate quotable jobs
 that feed into the existing pipeline.
 
-Uses Gemini 2.0 Flash for extraction with keyword-based fallback.
+Uses Claude API for extraction with keyword-based fallback.
 """
 
 import json
@@ -16,7 +16,7 @@ import math
 import re
 from typing import Optional
 
-from .ai_client import call_deep, is_configured
+from .claude_client import call_deep, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -141,9 +141,9 @@ class BidParser:
         # Approximate page count (avg ~3000 chars per page)
         total_pages_approx = max(1, math.ceil(len(text) / 3000))
 
-        # Try Gemini extraction first, fall back to keyword-based
-        items = self._extract_with_gemini(text)
-        extraction_method = "gemini"
+        # Try Claude extraction first, fall back to keyword-based
+        items = self._extract_with_claude(text)
+        extraction_method = "claude"
         if not items:
             items = self._extract_with_keywords(text)
             extraction_method = "keyword"
@@ -190,17 +190,16 @@ class BidParser:
             "warnings": warnings,
         }
 
-    def _extract_with_gemini(self, text: str) -> list:
+    def _extract_with_claude(self, text: str) -> list:
         """
-        Send document text to Gemini for scope extraction.
+        Send document text to Claude for scope extraction.
         Returns list of ExtractedItem dicts.
         """
         if not is_configured():
-            logger.warning("No GEMINI_API_KEY — using keyword-based fallback for bid parsing")
+            logger.warning("No ANTHROPIC_API_KEY — using keyword-based fallback for bid parsing")
             return []
 
-        # Truncate text if too long (Gemini context limit ~1M tokens)
-        # For safety, cap at ~200k chars (~50k tokens)
+        # Truncate text if too long — cap at ~200k chars (~50k tokens)
         max_chars = 200_000
         if len(text) > max_chars:
             text = text[:max_chars] + "\n\n[DOCUMENT TRUNCATED — remaining pages not analyzed]"
@@ -223,11 +222,11 @@ class BidParser:
 
             return [self._normalize_item(item) for item in raw_items if item]
         except Exception as e:
-            logger.warning("Gemini bid extraction failed: %s", e)
+            logger.warning("Claude bid extraction failed: %s", e)
             return []
 
     def _build_extraction_prompt(self, text: str) -> str:
-        """Build the Gemini prompt for bid document scope extraction."""
+        """Build the Claude prompt for bid document scope extraction."""
         return f"""You are analyzing a construction bid document for a metal fabricator.
 
 TASK: Extract ALL metal fabrication scope items from this document. These include:
@@ -273,10 +272,10 @@ DOCUMENT TEXT:
 Return ONLY valid JSON array:"""
 
     def _normalize_item(self, raw: dict) -> dict:
-        """Normalize a raw Gemini-extracted item to the ExtractedItem schema."""
+        """Normalize a raw AI-extracted item to the ExtractedItem schema."""
         return {
             "description": str(raw.get("description", "")).strip(),
-            "job_type": raw.get("job_type"),  # Usually None from Gemini; we map later
+            "job_type": raw.get("job_type"),  # Usually None from AI; we map later
             "location": raw.get("location"),
             "csi_division": raw.get("csi_division"),
             "dimensions": raw.get("dimensions"),
@@ -290,7 +289,7 @@ Return ONLY valid JSON array:"""
 
     def _extract_with_keywords(self, text: str) -> list:
         """
-        Fallback: regex/keyword-based extraction when Gemini is unavailable.
+        Fallback: regex/keyword-based extraction when Claude is unavailable.
         Splits text into sections, scores by keyword density, extracts dimensions.
         """
         items = []

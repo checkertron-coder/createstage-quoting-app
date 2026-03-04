@@ -1,11 +1,10 @@
 """
-Prompt 26 tests — Claude API swap, unified AI client, overhead beam dedup,
+Prompt 26 tests — Claude API swap, overhead beam dedup,
 post description format, import verification.
 
 Tests cover:
   - claude_client.py: is_configured, model resolution, no-key graceful fallback
-  - ai_client.py: routing (Claude preferred, Gemini fallback, none)
-  - Import verification: all modules use ai_client, not gemini_client
+  - Import verification: all modules use claude_client directly
   - Overhead beam dedup in cantilever_gate.py
   - Post description format ("3 × 4x4" not "4x4 × 3")
 """
@@ -49,7 +48,7 @@ class TestClaudeClientModelResolution:
         env.pop("CLAUDE_FAST_MODEL", None)
         with patch.dict(os.environ, env, clear=True):
             name = claude_client.get_model_name("fast")
-            assert name == "claude-sonnet-4-20250514"
+            assert name == "claude-sonnet-4-6"
 
     def test_default_deep_model(self):
         from backend import claude_client
@@ -57,7 +56,7 @@ class TestClaudeClientModelResolution:
         env.pop("CLAUDE_DEEP_MODEL", None)
         with patch.dict(os.environ, env, clear=True):
             name = claude_client.get_model_name("deep")
-            assert name == "claude-sonnet-4-20250514"
+            assert name == "claude-sonnet-4-6"
 
     def test_env_override_fast(self):
         from backend import claude_client
@@ -98,135 +97,70 @@ class TestClaudeClientGracefulFallback:
             assert result is None
 
 
-# ── ai_client.py ──────────────────────────────────────────────────
-
-
-class TestAIClientRouting:
-    """ai_client routes to Claude (preferred) or Gemini (fallback)."""
-
-    def test_prefers_claude_when_both_keys(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        with patch.dict(os.environ, {
-            "ANTHROPIC_API_KEY": "sk-test",
-            "GEMINI_API_KEY": "gk-test",
-        }):
-            assert ai_client.get_provider() == "claude"
-        ai_client.reset_provider()
-
-    def test_falls_back_to_gemini(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        env = os.environ.copy()
-        env.pop("ANTHROPIC_API_KEY", None)
-        env["GEMINI_API_KEY"] = "gk-test"
-        with patch.dict(os.environ, env, clear=True):
-            assert ai_client.get_provider() == "gemini"
-        ai_client.reset_provider()
-
-    def test_none_when_no_keys(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        env = os.environ.copy()
-        env.pop("ANTHROPIC_API_KEY", None)
-        env.pop("GEMINI_API_KEY", None)
-        with patch.dict(os.environ, env, clear=True):
-            assert ai_client.get_provider() == "none"
-            assert ai_client.is_configured() is False
-        ai_client.reset_provider()
-
-    def test_is_configured_with_claude(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test"}):
-            assert ai_client.is_configured() is True
-        ai_client.reset_provider()
-
-    def test_get_model_name_claude(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        env = os.environ.copy()
-        env.pop("CLAUDE_DEEP_MODEL", None)
-        env["ANTHROPIC_API_KEY"] = "sk-test"
-        with patch.dict(os.environ, env, clear=True):
-            name = ai_client.get_model_name("deep")
-            assert "claude" in name.lower()
-        ai_client.reset_provider()
-
-    def test_call_fast_returns_none_when_no_provider(self):
-        from backend import ai_client
-        ai_client.reset_provider()
-        env = os.environ.copy()
-        env.pop("ANTHROPIC_API_KEY", None)
-        env.pop("GEMINI_API_KEY", None)
-        with patch.dict(os.environ, env, clear=True):
-            result = ai_client.call_fast("test")
-            assert result is None
-        ai_client.reset_provider()
-
-    def test_reset_provider_clears_cache(self):
-        from backend import ai_client
-        ai_client._provider = "gemini"
-        assert ai_client.get_provider() == "gemini"
-        ai_client.reset_provider()
-        assert ai_client._provider is None
-
-
 # ── Import verification ──────────────────────────────────────────
 
 
 class TestImportVerification:
-    """All pipeline modules import from ai_client, not gemini_client directly."""
+    """All pipeline modules import from claude_client, not gemini_client."""
 
-    def _get_imports(self, filepath):
-        """Read a file and return all import lines."""
+    def _check_no_gemini_imports(self, filepath):
+        """Verify file has no gemini_client imports."""
         with open(filepath) as f:
-            return [
-                line.strip() for line in f
-                if ("import" in line and "gemini_client" in line)
-            ]
+            content = f.read()
+        lines = [
+            line.strip() for line in content.splitlines()
+            if ("import" in line and "gemini_client" in line and not line.strip().startswith("#"))
+        ]
+        return lines
 
-    def test_ai_cut_list_uses_ai_client(self):
-        imports = self._get_imports("backend/calculators/ai_cut_list.py")
-        for line in imports:
-            assert "from ..ai_client" in line or "# " in line, (
-                f"ai_cut_list.py still imports from gemini_client: {line}"
-            )
+    def test_ai_cut_list_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/calculators/ai_cut_list.py")
+        assert len(imports) == 0, (
+            "ai_cut_list.py still imports from gemini_client: %s" % imports
+        )
 
-    def test_engine_uses_ai_client(self):
-        imports = self._get_imports("backend/question_trees/engine.py")
-        for line in imports:
-            assert "from ..ai_client" in line or "# " in line, (
-                f"engine.py still imports from gemini_client: {line}"
-            )
+    def test_engine_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/question_trees/engine.py")
+        assert len(imports) == 0, (
+            "engine.py still imports from gemini_client: %s" % imports
+        )
 
-    def test_labor_estimator_uses_ai_client(self):
-        imports = self._get_imports("backend/labor_estimator.py")
-        for line in imports:
-            assert "from .ai_client" in line or "# " in line, (
-                f"labor_estimator.py still imports from gemini_client: {line}"
-            )
+    def test_labor_estimator_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/labor_estimator.py")
+        assert len(imports) == 0, (
+            "labor_estimator.py still imports from gemini_client: %s" % imports
+        )
 
-    def test_bid_parser_uses_ai_client(self):
-        imports = self._get_imports("backend/bid_parser.py")
-        for line in imports:
-            assert "from .ai_client" in line or "# " in line, (
-                f"bid_parser.py still imports from gemini_client: {line}"
-            )
+    def test_bid_parser_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/bid_parser.py")
+        assert len(imports) == 0, (
+            "bid_parser.py still imports from gemini_client: %s" % imports
+        )
 
-    def test_pricing_engine_uses_ai_client(self):
-        imports = self._get_imports("backend/pricing_engine.py")
-        for line in imports:
-            assert "from .ai_client" in line or "# " in line, (
-                f"pricing_engine.py still imports from gemini_client: {line}"
-            )
+    def test_pricing_engine_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/pricing_engine.py")
+        assert len(imports) == 0, (
+            "pricing_engine.py still imports from gemini_client: %s" % imports
+        )
 
-    def test_ai_quote_uses_ai_client(self):
-        imports = self._get_imports("backend/routers/ai_quote.py")
-        for line in imports:
-            assert "from ..ai_client" in line or "# " in line, (
-                f"ai_quote.py still imports from gemini_client: {line}"
-            )
+    def test_ai_quote_uses_claude_client(self):
+        imports = self._check_no_gemini_imports("backend/routers/ai_quote.py")
+        assert len(imports) == 0, (
+            "ai_quote.py still imports from gemini_client: %s" % imports
+        )
+
+
+# ── No deleted modules ──────────────────────────────────────────
+
+
+class TestDeletedModulesGone:
+    """gemini_client.py and ai_client.py must be deleted."""
+
+    def test_gemini_client_deleted(self):
+        assert not os.path.isfile("backend/gemini_client.py")
+
+    def test_ai_client_deleted(self):
+        assert not os.path.isfile("backend/ai_client.py")
 
 
 # ── Overhead beam dedup (cantilever_gate.py) ─────────────────────
@@ -357,22 +291,6 @@ class TestAICutListMethodRename:
         assert "self._call_gemini(" not in content
 
 
-# ── gemini_client.py still exists ────────────────────────────────
-
-
-class TestGeminiClientPreserved:
-    """gemini_client.py must NOT be deleted (Gemini fallback)."""
-
-    def test_gemini_client_exists(self):
-        assert os.path.isfile("backend/gemini_client.py")
-
-    def test_gemini_client_importable(self):
-        from backend import gemini_client
-        assert hasattr(gemini_client, "call_fast")
-        assert hasattr(gemini_client, "call_deep")
-        assert hasattr(gemini_client, "is_configured")
-
-
 # ── App starts clean ─────────────────────────────────────────────
 
 
@@ -383,15 +301,12 @@ class TestAppStartsClean:
         from backend.main import app
         assert app is not None
 
-    def test_ai_client_importable(self):
-        from backend.ai_client import call_fast, call_deep, call_vision
-        from backend.ai_client import is_configured, get_provider, get_model_name
-        from backend.ai_client import reset_provider
+    def test_claude_client_importable(self):
+        from backend.claude_client import call_fast, call_deep, call_vision
+        from backend.claude_client import is_configured, get_model_name
         # All functions exist
         assert callable(call_fast)
         assert callable(call_deep)
         assert callable(call_vision)
         assert callable(is_configured)
-        assert callable(get_provider)
         assert callable(get_model_name)
-        assert callable(reset_provider)

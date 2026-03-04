@@ -97,7 +97,7 @@ def test_extract_from_photo_returns_structure():
     assert "confidence" in result
 
 
-def test_extract_from_photo_graceful_without_gemini():
+def test_extract_from_photo_graceful_without_api_key():
     """Without API key, returns empty extraction (not error)."""
     engine = QuestionTreeEngine()
     # Even with a bad path, should return graceful result

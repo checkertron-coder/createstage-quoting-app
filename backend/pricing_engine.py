@@ -10,7 +10,7 @@ Output: PricedQuote (per CLAUDE.md contract)
 
 from datetime import datetime
 
-from .ai_client import get_model_name, get_provider
+from .claude_client import get_model_name
 from .hardware_sourcer import HardwareSourcer
 
 
@@ -213,7 +213,7 @@ class PricingEngine:
         else:
             assumptions.append(
                 "Labor hours estimated by AI (%s via %s) with domain guidance."
-                % (get_model_name("deep"), get_provider())
+                % (get_model_name("deep"), "Claude")
             )
 
         # Hardware pricing source

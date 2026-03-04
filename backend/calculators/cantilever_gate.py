@@ -57,7 +57,7 @@ PICKET_MATERIAL_PROFILES = {
 def _resolve_picket_profile(fields, infill_type):
     """Resolve picket profile from picket_material field, with fallback to INFILL_PROFILES.
 
-    Handles variations from Gemini text extraction:
+    Handles variations from AI text extraction:
     - Exact substring match: '5/8" square' in picket_material
     - Fraction regex: extracts '5/8' from '5/8 inch square bar' etc.
     - Decimal form: '0.625' maps to 5/8", '0.5' maps to 1/2", '0.75' maps to 3/4"
@@ -714,6 +714,38 @@ class CantileverGateCalculator(BaseCalculator):
                 "Minimum overhead clearance: %.0f\" (%.1f ft)."
                 % (correct_beam_desc, beam_length_ft,
                    min_clearance_in, self.inches_to_feet(min_clearance_in)))
+
+        # ========================================================
+        # NORMALIZE: Channel profile keys from AI output
+        # ========================================================
+        # Claude may output generic channel keys. Map them to the
+        # correct pre-punched channel profile based on picket size.
+        resolved_picket = _resolve_picket_profile(fields, infill_type)
+        _CHANNEL_KEY_MAP = {
+            "channel_1.5x0.125": {
+                "sq_bar_0.5": "punched_channel_1.5x0.5_fits_0.5",
+                "sq_bar_0.625": "punched_channel_1.5x0.5_fits_0.625",
+                "sq_bar_0.75": "punched_channel_1.5x0.5_fits_0.75",
+            },
+            "channel_1x0.125": {
+                "sq_bar_0.5": "punched_channel_1x0.5_fits_0.5",
+            },
+            "channel_2x0.125": {
+                "sq_bar_0.75": "punched_channel_2x1_fits_0.75",
+            },
+        }
+
+        for item in items:
+            profile = item.get("profile", "")
+            if profile in _CHANNEL_KEY_MAP:
+                mapping = _CHANNEL_KEY_MAP[profile]
+                correct_key = mapping.get(resolved_picket, list(mapping.values())[0])
+                item["profile"] = correct_key
+                # Update unit price to match correct profile
+                new_price = lookup.get_price_per_foot(correct_key)
+                if new_price > 0:
+                    length_ft = self.inches_to_feet(item.get("length_inches", 0))
+                    item["unit_price"] = round(length_ft * new_price, 2)
 
         # ========================================================
         # ENFORCE: Adjacent fence sections

@@ -1,8 +1,8 @@
 """
 In-memory job store for async AI quote processing.
 
-Railway's proxy returns 503 after ~30s, but Gemini can take 60-120s.
-This module lets endpoints return a job_id immediately and run Gemini
+Railway's proxy returns 503 after ~30s, but Claude can take 60-120s.
+This module lets endpoints return a job_id immediately and run Claude
 in a background thread. The frontend polls GET /api/ai/job/{job_id}.
 """
 
