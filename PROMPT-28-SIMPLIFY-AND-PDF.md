@@ -491,5 +491,4 @@ cd backend && python -c "from calculators.cantilever_gate import CantileverGateC
 cd backend && python -c "from calculators.ai_cut_list import AICutListGenerator; print('ai_cut_list OK')"
 ```
 
-### Manual test:
-Generate a new quote with the same inputs as CS-2026-0036 and review the full output for any duplicate items, conflicting dimensions, or missing consumables.
+
