@@ -209,7 +209,7 @@ The AI path and calculator path should not be mutually exclusive. The AI generat
 
 ### Pre-Punched Channel vs Standard Tube
 The question tree should make the tradeoff clear:
-- Pre-punched = faster assembly, cleaner result, but limited to 1/2" and 3/4" picket sizes
+- Pre-punched = faster assembly, cleaner result, available for 1/2", 5/8", and 3/4" picket sizes
 - Standard tube = works with any picket size, but slower and requires more skilled labor
 - The labor estimator should apply a multiplier: pre-punched channel reduces fit-and-tack time by ~40% for picket installation
 
@@ -369,9 +369,8 @@ def _post_process_ai_result(self, result, fields, is_top_hung):
                 use_punched = True
                 channel_profile = "punched_channel_1.5x0.5_fits_0.75"
             elif "5/8" in picket_material:
-                # 5/8" pre-punched not confirmed as stock item
-                assumptions.append("⚠️ 5/8\" pickets: pre-punched channel may require custom shop punching or sourcing from specialty supplier. Verify availability before ordering.")
-                use_punched = False
+                use_punched = True
+                channel_profile = "punched_channel_1.5x0.5_fits_0.625"
         
         # Check if AI already generated mid-rails for fence sections
         has_fence_mid_rails = any("mid" in item.get("description", "").lower() and 
@@ -474,6 +473,12 @@ In `backend/calculators/material_lookup.py`, add these to `_SEEDED_PRICES`:
     "weight_per_ft": 1.12,
     "stock_length_ft": 20,
 },
+"punched_channel_1.5x0.5_fits_0.625": {
+    "price_per_ft": 4.50,
+    "weight_per_ft": 1.12,
+    "stock_length_ft": 20,
+    "description": "1-1/2\" × 1/2\" × 1/8\" punched channel, 11/16\" sq holes for 5/8\" pickets"
+},
 "punched_channel_2x1_fits_0.75": {
     "price_per_ft": 7.50,
     "weight_per_ft": 1.78,
@@ -496,7 +501,7 @@ In `backend/question_trees/data/cantilever_gate.json`, add after `picket_spacing
         "Not sure — recommend based on picket size"
     ],
     "required": false,
-    "hint": "Pre-punched channel has holes at your picket spacing — pickets slide through and get tack welded. Much faster assembly. Stock channels available for 1/2\" and 3/4\" pickets.",
+    "hint": "Pre-punched channel has holes at your picket spacing — pickets slide through and get tack welded. Much faster assembly. Available for 1/2\", 5/8\", and 3/4\" pickets.",
     "depends_on": "infill_type"
 }
 ```
@@ -564,8 +569,8 @@ Run a gate + fence job with 3/4" pickets and "Pre-punched channel" mid-rail sele
 
 Run with 5/8" pickets and "Pre-punched channel" selected.
 
-- [ ] Assumption warns about custom punching / specialty supplier needed
-- [ ] Falls back to standard tube mid-rail (or flags for user decision)
+- [ ] Mid-rail material shows as pre-punched channel with `punched_channel_1.5x0.5_fits_0.625` profile
+- [ ] Pricing uses the 5/8" channel rate ($4.50/ft)
 
 ### Test 4: Gate Only — No Regression
 
@@ -607,7 +612,7 @@ grep -c "_post_process_ai_result" backend/calculators/cantilever_gate.py
 python3 -c "
 from backend.calculators.material_lookup import MaterialLookup
 lookup = MaterialLookup()
-for p in ['punched_channel_1.5x0.5_fits_0.5', 'punched_channel_1.5x0.5_fits_0.75']:
+for p in ['punched_channel_1.5x0.5_fits_0.5', 'punched_channel_1.5x0.5_fits_0.625', 'punched_channel_1.5x0.5_fits_0.75']:
     price = lookup.get_price_per_foot(p)
     print(f'{p}: \${price}/ft' if price else f'{p}: MISSING')"
 
