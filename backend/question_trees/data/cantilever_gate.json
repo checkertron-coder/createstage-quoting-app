@@ -5,7 +5,8 @@
     "category": "gate",
     "required_fields": [
         "clear_width", "height", "frame_material", "frame_gauge",
-        "infill_type", "post_count", "finish", "installation"
+        "infill_type", "picket_material", "picket_spacing",
+        "post_count", "finish", "installation"
     ],
     "questions": [
         {
@@ -67,7 +68,7 @@
             "hint": null,
             "depends_on": null,
             "branches": {
-                "Pickets (vertical bars)": ["picket_material", "picket_top", "picket_spacing", "mid_rail_type"],
+                "Pickets (vertical bars)": ["picket_material", "picket_top", "picket_spacing"],
                 "Flat bar vertical": ["flat_bar_spacing", "flat_bar_size"],
                 "Expanded metal": ["expanded_metal_gauge"],
                 "Custom design": ["design_reference"]
@@ -105,12 +106,12 @@
         },
         {
             "id": "mid_rail_type",
-            "text": "How should mid-rails / cross braces be built?",
+            "text": "What type of mid-rails for the fence sections?",
             "type": "choice",
-            "options": ["Pre-punched channel (pickets slide through — fastest)", "Standard tube rail (pickets welded to flat rail)", "Not sure — recommend based on picket size"],
+            "options": ["Pre-punched channel (pickets slide through — faster assembly)", "Standard tube (weld each picket to rail)"],
             "required": false,
-            "hint": "Pre-punched channel has holes at your picket spacing — pickets slide through and get tack welded. Much faster assembly. Available for 1/2\", 5/8\", and 3/4\" pickets.",
-            "depends_on": "infill_type",
+            "hint": "Pre-punched U-channel is industry standard for fence mid-rails. Pickets slide through pre-drilled holes for self-spacing. Dramatically faster assembly.",
+            "depends_on": "adjacent_fence",
             "branches": null
         },
         {
@@ -318,8 +319,8 @@
             "hint": "Many gate installations include connecting fence sections. We can quote the complete job.",
             "depends_on": null,
             "branches": {
-                "Yes — fence on both sides": ["fence_side_1_length", "fence_side_2_length", "fence_post_count", "fence_infill_match"],
-                "Yes — fence on one side only": ["fence_side_1_length", "fence_post_count", "fence_infill_match"]
+                "Yes — fence on both sides": ["fence_side_1_length", "fence_side_2_length", "fence_post_count", "fence_infill_match", "mid_rail_type"],
+                "Yes — fence on one side only": ["fence_side_1_length", "fence_post_count", "fence_infill_match", "mid_rail_type"]
             }
         },
         {

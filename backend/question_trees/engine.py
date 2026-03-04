@@ -189,15 +189,75 @@ class QuestionTreeEngine:
         return next_qs
 
     def is_complete(self, job_type: str, answered_fields: dict) -> bool:
-        """Are all required fields answered?"""
-        required = self.get_required_fields(job_type)
-        return all(field in answered_fields for field in required)
+        """Are all required fields answered?
+
+        Branch-dependent fields that are NOT activated by the user's answers
+        are treated as satisfied — e.g. picket_material is only required
+        when infill_type = "Pickets (vertical bars)", not when "Expanded metal".
+        """
+        tree = self.load_tree(job_type)
+        questions = tree.get("questions", [])
+        required = tree.get("required_fields", [])
+
+        # Build set of branch-activated question IDs
+        branch_activated = set()
+        for q in questions:
+            if q.get("branches"):
+                answered_value = answered_fields.get(q["id"])
+                if answered_value and answered_value in q["branches"]:
+                    for activated_id in q["branches"][answered_value]:
+                        branch_activated.add(activated_id)
+
+        for field in required:
+            if field in answered_fields:
+                continue
+            # Check if this field is branch-dependent and NOT activated
+            q = _find_question(questions, field)
+            if q and q.get("depends_on"):
+                parent = _find_question(questions, q["depends_on"])
+                if parent and parent.get("branches"):
+                    # This field requires a specific parent answer to activate
+                    if field not in branch_activated:
+                        continue  # Not activated = not required for this path
+            return False  # Required, not answered, not branch-blocked
+        return True
 
     def get_completion_status(self, job_type: str, answered_fields: dict) -> dict:
-        """Return detailed completion status."""
-        required = self.get_required_fields(job_type)
-        answered_required = [f for f in required if f in answered_fields]
-        missing_required = [f for f in required if f not in answered_fields]
+        """Return detailed completion status.
+
+        Branch-dependent fields that are NOT activated by the user's answers
+        are excluded from the 'missing' count.
+        """
+        tree = self.load_tree(job_type)
+        questions = tree.get("questions", [])
+        required = tree.get("required_fields", [])
+
+        # Build set of branch-activated question IDs
+        branch_activated = set()
+        for q in questions:
+            if q.get("branches"):
+                answered_value = answered_fields.get(q["id"])
+                if answered_value and answered_value in q["branches"]:
+                    for activated_id in q["branches"][answered_value]:
+                        branch_activated.add(activated_id)
+
+        answered_required = []
+        missing_required = []
+        for field in required:
+            if field in answered_fields:
+                answered_required.append(field)
+            else:
+                # Check if branch-dependent and NOT activated
+                q = _find_question(questions, field)
+                if q and q.get("depends_on"):
+                    parent = _find_question(questions, q["depends_on"])
+                    if parent and parent.get("branches"):
+                        if field not in branch_activated:
+                            # Not activated = treated as satisfied
+                            answered_required.append(field)
+                            continue
+                missing_required.append(field)
+
         total_answered = len(answered_fields)
 
         return {

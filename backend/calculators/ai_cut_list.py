@@ -529,6 +529,53 @@ Return ONLY valid JSON — an array of objects:
                     "length = gate total length + 24\" approach."
                 )
 
+            # Gate length constraint
+            clear_width_str = fields.get("clear_width", "")
+            if clear_width_str:
+                try:
+                    cw_ft = float(str(clear_width_str).split()[0])
+                    gate_total_ft = cw_ft * 1.5
+                    tail_ft = gate_total_ft - cw_ft
+                    blocks.append(
+                        "GATE PANEL LENGTH (HARD CONSTRAINT — DO NOT CHANGE):\n"
+                        "  Total gate panel = %.1f ft (%.0f\")\n"
+                        "  Gate face (opening) = %.1f ft (%.0f\")\n"
+                        "  Counterbalance tail = %.1f ft (%.0f\")\n"
+                        "  Formula: opening × 1.5. The 'available space' field is the MAXIMUM, "
+                        "not the required tail length. Never make the tail longer than 50%% of the opening."
+                        % (gate_total_ft, gate_total_ft * 12,
+                           cw_ft, cw_ft * 12,
+                           tail_ft, tail_ft * 12)
+                    )
+                except (ValueError, IndexError):
+                    pass
+
+            # Picket material constraint
+            infill_type = fields.get("infill_type", "")
+            if "Picket" in str(infill_type):
+                from .cantilever_gate import _resolve_picket_profile
+                profile = _resolve_picket_profile(fields, infill_type)
+                spacing = fields.get("picket_spacing", "4\" on-center")
+                blocks.append(
+                    "PICKET MATERIAL (HARD CONSTRAINT — DO NOT CHANGE):\n"
+                    "  Profile: %s\n"
+                    "  Spacing: %s\n"
+                    "  Use EXACTLY this profile for all pickets. Do NOT substitute "
+                    "square tube, round tube, or any other material for pickets."
+                    % (profile, spacing)
+                )
+
+            # Overhead beam constraint
+            bottom_guide_check = str(fields.get("bottom_guide", ""))
+            if "No bottom guide" in bottom_guide_check or "top-hung" in bottom_guide_check.lower():
+                blocks.append(
+                    "OVERHEAD BEAM (HARD CONSTRAINT):\n"
+                    "  Quantity: 1 (ONE beam spanning between the two rear carriage posts)\n"
+                    "  Profile: hss_4x4_0.25 for gates under 800 lbs, hss_6x4_0.25 for heavier\n"
+                    "  Length: gate panel length + 24\" (12\" overhang each side)\n"
+                    "  Do NOT use qty 2. It is ONE continuous beam."
+                )
+
             # Post dimensions context — calculator-verified values
             height_str = fields.get("height", fields.get("clear_height", ""))
             post_concrete = fields.get("post_concrete", "Yes")
@@ -632,9 +679,12 @@ Return ONLY valid JSON — an array of objects:
         installation = str(fields.get("installation", ""))
         if "install" in installation.lower() and "no" not in installation.lower():
             blocks.append(
-                "FIELD WELDING: Site welds use Stick (SMAW, E7018). "
-                "MIG/TIG for shop fabrication only. Wind disrupts gas shielding — "
-                "never specify MIG for outdoor field installation."
+                "FIELD WELDING (HARD CONSTRAINT):\n"
+                "  ALL site/field welds = Stick (SMAW, E7018) or self-shielded flux core (FCAW-S).\n"
+                "  NEVER specify MIG (GMAW) or TIG (GTAW) for outdoor field work.\n"
+                "  Wind disperses shielding gas — cannot maintain gas coverage outdoors.\n"
+                "  MIG/TIG is for SHOP FABRICATION ONLY.\n"
+                "  In the fab sequence, any step done on-site must specify stick or flux core."
             )
 
         # --- Generic compound context for any job type ---
@@ -844,7 +894,7 @@ RULES:
 10. WELD PROCESS SELECTION: Decorative flat bar work (1/8" or thinner, visible joints, furniture/ornamental pieces) MUST use TIG (GTAW), not MIG. TIG gives cleaner, more precise welds with less spatter and less heat input — critical for pre-finished decorative surfaces. MIG is for structural frame assembly (square tube joints, leg-to-frame connections). Spacer blocks can use either MIG (for speed) or TIG (for precision on small parts).
 11. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not estimate, round, or invent dimensions. When referring to a post, state its exact length from the cut list (e.g., "156 inches" not "15 feet"). When stating how many of a piece to cut, use the exact quantity from the cut list. If fence sections appear in the cut list, include fence fabrication and installation steps.
 12. MILL SCALE: After EVERY tube/bar cut, grind 1-2" of mill scale from each cut end using flap disc before fit-up. Mill scale causes weld porosity. 30 seconds per end. Applies to ALL material regardless of finish.
-13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018). Never specify MIG for outdoor field installation (wind disrupts gas shielding). Never use "file" for deburring — use "flap disc" or "die grinder."
+13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018) or self-shielded flux core (FCAW-S). NEVER specify MIG (GMAW) or TIG (GTAW) for outdoor field installation — wind disperses shielding gas. Dual-shield flux core is strongest/fastest for structural field work but not needed for fence/gate. Never use "file" for deburring — use "flap disc" or "die grinder."
 14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat. Save smooth grinding for indoor/furniture/decorative work.
 15. PAINT FOR OUTDOOR STEEL: Always prime THEN paint (two separate steps with dry time). Never combine into "prime and paint in one step."
 

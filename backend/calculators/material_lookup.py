@@ -27,68 +27,77 @@ try:
 except (FileNotFoundError, json.JSONDecodeError):
     pass  # No seeded prices — use defaults
 
-# FALLBACK PRICES — used when no seeded price exists for a profile
-# Source: market averages as of Feb 2026
+# FALLBACK PRICES — Real Chicago-area pricing
+# Source: Osorio Metals Supply + D. Wexler & Sons quotes (2024-2025)
+# Buffer: +10% over Osorio baseline for market fluctuation
+# Last updated: March 2026
 PRICE_PER_FOOT = {
-    # Square tube
-    "sq_tube_2x2_11ga": 3.50,
-    "sq_tube_2x2_14ga": 2.75,
-    "sq_tube_2x2_16ga": 2.25,
-    "sq_tube_1.5x1.5_11ga": 2.75,
-    "sq_tube_1.5x1.5_14ga": 2.25,
-    "sq_tube_1.5x1.5_16ga": 1.85,
-    "sq_tube_1x1_11ga": 1.75,
-    "sq_tube_1x1_14ga": 1.50,
-    "sq_tube_1x1_16ga": 1.25,
-    "sq_tube_2.5x2.5_11ga": 4.50,
-    "sq_tube_3x3_11ga": 5.50,
-    "sq_tube_4x4_11ga": 7.50,
+    # Square tube — Osorio + 10%
+    "sq_tube_1x1_11ga": 1.27,      # Osorio $1.15/ft (Jan 2025)
+    "sq_tube_1x1_14ga": 0.95,      # Estimated from 11ga ratio
+    "sq_tube_1x1_16ga": 0.80,      # Estimated
+    "sq_tube_1.25x1.25_11ga": 1.51, # Osorio $1.37/ft (Jan 2025)
+    "sq_tube_1.5x1.5_11ga": 1.74,  # Osorio $1.58/ft (Oct 2024)
+    "sq_tube_1.5x1.5_14ga": 1.22,  # Osorio $1.11/ft (Jan 2025)
+    "sq_tube_1.5x1.5_16ga": 1.00,  # Estimated
+    "sq_tube_1.75x1.75_11ga": 2.64, # Osorio $2.40/ft (Jan 2025)
+    "sq_tube_2x2_11ga": 2.75,      # Osorio $2.49-2.88/ft (2024) +10%
+    "sq_tube_2x2_14ga": 1.67,      # Osorio $1.52/ft (receipt)
+    "sq_tube_2x2_16ga": 1.40,      # Estimated from 14ga ratio
+    "sq_tube_2.5x2.5_11ga": 3.86,  # Osorio $3.51/ft (Nov 2023) +10%
+    "sq_tube_3x3_11ga": 5.61,      # Osorio $5.10/ft (Feb 2025) +10%
+    "sq_tube_3x3_7ga": 8.25,       # Osorio $7.50/ft (Feb 2025, 1/4" wall) +10%
+    "sq_tube_4x4_11ga": 4.95,      # Extrapolated: ~5.41 lb/ft × $0.83/lb (Osorio avg)
+    "sq_tube_6x6_7ga": 14.96,      # Osorio $13.60/ft (Jun 2024) +10%
     # Rectangular tube
-    "rect_tube_2x4_11ga": 5.50,
-    "rect_tube_2x3_11ga": 4.50,
-    "rect_tube_2x1_11ga": 2.50,
+    "rect_tube_2x4_11ga": 3.76,    # Wexler $3.42/ft (Jun 2024) +10%
+    "rect_tube_2x3_11ga": 3.10,    # Estimated between 2x2 and 2x4
+    "rect_tube_2x1_11ga": 2.00,    # Estimated
     # Round tube
-    "round_tube_1.5_11ga": 4.65,   # DOM
-    "round_tube_1.5_14ga": 3.50,
-    "round_tube_1.25_14ga": 3.00,
-    "round_tube_2_11ga": 5.50,
-    # Square bar / pickets
-    "sq_bar_0.75": 1.50,
-    "sq_bar_0.625": 1.10,
-    "sq_bar_0.5": 0.85,
-    "sq_bar_1.0": 2.25,
+    "round_tube_1.5_11ga": 5.07,   # Wexler $4.61/ft DOM (Jan 2025) +10%
+    "round_tube_1.5_14ga": 3.85,   # Estimated
+    "round_tube_1.25_14ga": 3.30,  # Estimated
+    "round_tube_2_11ga": 6.05,     # Estimated
+    # Square bar / pickets — extrapolated from tube $/lb ratios
+    "sq_bar_0.5": 0.75,            # 0.85 lb/ft × $0.90/lb
+    "sq_bar_0.625": 1.10,          # 1.33 lb/ft × $0.90/lb
+    "sq_bar_0.75": 1.55,           # 1.91 lb/ft × $0.90/lb
+    "sq_bar_1.0": 2.75,            # 3.40 lb/ft × $0.90/lb
     # Round bar
-    "round_bar_0.5": 0.85,
-    "round_bar_0.625": 1.10,
-    "round_bar_0.75": 1.50,
-    # Flat bar
-    "flat_bar_1x0.125": 1.10,  # 1" x 1/8" flat bar — $/ft
-    "flat_bar_1x0.25": 1.75,
-    "flat_bar_1.5x0.25": 2.50,
-    "flat_bar_1x0.1875": 1.40,
-    "flat_bar_0.75x0.25": 1.35,
-    "flat_bar_2x0.25": 3.40,
-    # Angle iron
-    "angle_1.5x1.5x0.125": 1.60,
-    "angle_2x2x0.1875": 2.80,
-    "angle_2x2x0.25": 3.50,
+    "round_bar_0.5": 0.70,         # 0.67 lb/ft × $0.95/lb
+    "round_bar_0.625": 1.00,       # 1.04 lb/ft × $0.95/lb
+    "round_bar_0.75": 1.40,        # 1.50 lb/ft × $0.95/lb
+    # Flat bar — Osorio + 10%
+    "flat_bar_1x0.125": 0.90,      # Estimated
+    "flat_bar_1x0.25": 1.41,       # Osorio $1.28/ft (Jan 2025) +10%
+    "flat_bar_1.5x0.25": 1.66,     # Osorio $1.51/ft (Jan 2025) +10%
+    "flat_bar_1x0.1875": 1.10,     # Estimated
+    "flat_bar_0.75x0.25": 1.10,    # Estimated
+    "flat_bar_2x0.25": 2.80,       # Estimated
+    "flat_bar_3x0.25": 4.57,       # Osorio $4.15/ft (Nov 2023) +10%
+    # Angle iron — Osorio + 10%
+    "angle_1.5x1.5x0.125": 1.06,   # Osorio $0.96/ft (receipt) +10%
+    "angle_2x2x0.125": 1.42,       # Osorio $1.29/ft (receipt) +10%
+    "angle_2x2x0.1875": 2.02,      # Osorio $1.84/ft (Jan 2025) +10%
+    "angle_2x2x0.25": 2.50,        # Estimated from 3/16" ratio
+    "angle_3x3x0.1875": 2.61,      # Osorio $2.37/ft (Feb 2025) +10%
     # Channel
-    "channel_6x8.2": 8.20,
-    "channel_4x5.4": 5.40,
+    "channel_6x8.2": 8.20,         # No supplier data — keep estimate
+    "channel_4x5.4": 5.40,         # No supplier data — keep estimate
+    # Pre-punched channel (fence mid-rails)
+    "punched_channel_1x0.5_fits_0.5": 3.85,       # Estimated + 10%
+    "punched_channel_1.5x0.5_fits_0.5": 4.95,     # Estimated + 10%
+    "punched_channel_1.5x0.5_fits_0.625": 4.95,   # Estimated + 10%
+    "punched_channel_1.5x0.5_fits_0.75": 4.95,    # Estimated + 10%
+    "punched_channel_2x1_fits_0.75": 8.25,         # Estimated + 10%
     # Pipe (posts)
-    "pipe_4_sch40": 6.00,
-    "pipe_6_sch40": 12.00,
-    "pipe_3.5_sch40": 5.00,
-    "pipe_3_sch40": 4.00,
-    # HSS (structural tube — thicker wall for posts/columns)
-    "hss_4x4_0.25": 9.50,
-    "hss_6x4_0.25": 12.00,
-    # Pre-punched U-channel for ornamental fence mid-rails
-    "punched_channel_1x0.5_fits_0.5": 3.50,       # 1"×1/2"×1/8", 9/16" sq holes for 1/2" pickets
-    "punched_channel_1.5x0.5_fits_0.5": 4.50,     # 1-1/2"×1/2"×1/8", 9/16" sq holes for 1/2" pickets
-    "punched_channel_1.5x0.5_fits_0.625": 4.50,   # 1-1/2"×1/2"×1/8", 11/16" sq holes for 5/8" pickets
-    "punched_channel_1.5x0.5_fits_0.75": 4.50,    # 1-1/2"×1/2"×1/8", 13/16" sq holes for 3/4" pickets
-    "punched_channel_2x1_fits_0.75": 7.50,         # 2"×1"×1/8", 13/16" sq holes for 3/4" pickets
+    "pipe_4_sch40": 6.60,          # No Osorio data — estimated + 10%
+    "pipe_6_sch40": 13.20,         # No Osorio data — estimated + 10%
+    "pipe_3.5_sch40": 5.50,
+    "pipe_3_sch40": 4.40,
+    # HSS (structural tube)
+    "hss_4x4_0.25": 8.25,          # Extrapolated from 3×3×1/4 ($7.50) + size premium
+    "hss_6x4_0.25": 12.00,         # No supplier data — keep estimate
 }
 
 # Prices per square foot
