@@ -443,30 +443,60 @@ class HardwareSourcer:
                 "category": "consumable",
             })
 
-        # Finish consumables
+        # Finish consumables — use gallons for large jobs, spray cans for small
         finish = str(finish_type).lower()
         if "clear" in finish:
-            cc = CONSUMABLES["clearcoat_spray"]
-            cans = math.ceil(total_sq_ft / cc["coverage_sq_ft"])
-            if cans > 0:
+            if total_sq_ft > 100:
+                # Gallon-based clearcoat for large jobs
+                gal_count = min(math.ceil(total_sq_ft / 350.0), 10)
                 items.append({
-                    "description": f"{cc['description']} x{cans}",
-                    "quantity": cans,
-                    "unit_price": cc["price_per_can"],
-                    "line_total": round(cans * cc["price_per_can"], 2),
+                    "description": "Clear coat — %d gallon(s)" % gal_count,
+                    "quantity": gal_count,
+                    "unit_price": 55.00,
+                    "line_total": round(gal_count * 55.00, 2),
                     "category": "consumable",
                 })
+            else:
+                cc = CONSUMABLES["clearcoat_spray"]
+                cans = min(math.ceil(total_sq_ft / cc["coverage_sq_ft"]), 12)
+                if cans > 0:
+                    items.append({
+                        "description": f"{cc['description']} x{cans}",
+                        "quantity": cans,
+                        "unit_price": cc["price_per_can"],
+                        "line_total": round(cans * cc["price_per_can"], 2),
+                        "category": "consumable",
+                    })
         elif "paint" in finish and "powder" not in finish:
-            pr = CONSUMABLES["primer_spray"]
-            primer_cans = math.ceil(total_sq_ft / pr["coverage_sq_ft"])
-            if primer_cans > 0:
+            if total_sq_ft > 100:
+                # Gallon-based primer + paint for large jobs
+                primer_gal = min(math.ceil(total_sq_ft / 350.0), 10)
                 items.append({
-                    "description": f"{pr['description']} x{primer_cans}",
-                    "quantity": primer_cans,
-                    "unit_price": pr["price_per_can"],
-                    "line_total": round(primer_cans * pr["price_per_can"], 2),
+                    "description": "Primer — %d gallon(s)" % primer_gal,
+                    "quantity": primer_gal,
+                    "unit_price": 35.00,
+                    "line_total": round(primer_gal * 35.00, 2),
                     "category": "consumable",
                 })
+                paint_gal = min(math.ceil(total_sq_ft / 350.0), 10)
+                items.append({
+                    "description": "Paint — %d gallon(s)" % paint_gal,
+                    "quantity": paint_gal,
+                    "unit_price": 45.00,
+                    "line_total": round(paint_gal * 45.00, 2),
+                    "category": "consumable",
+                })
+            else:
+                pr = CONSUMABLES["primer_spray"]
+                primer_cans = min(math.ceil(total_sq_ft / pr["coverage_sq_ft"]), 12)
+                if primer_cans > 0:
+                    items.append({
+                        "description": f"{pr['description']} x{primer_cans}",
+                        "quantity": primer_cans,
+                        "unit_price": pr["price_per_can"],
+                        "line_total": round(primer_cans * pr["price_per_can"], 2),
+                        "category": "consumable",
+                    })
 
         return items
 

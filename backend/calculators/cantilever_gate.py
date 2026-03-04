@@ -10,6 +10,7 @@ sits in a guide that keeps the gate aligned.
 """
 
 import math
+import re
 
 from .base import BaseCalculator
 from .material_lookup import MaterialLookup
@@ -54,12 +55,60 @@ PICKET_MATERIAL_PROFILES = {
 
 
 def _resolve_picket_profile(fields, infill_type):
-    """Resolve picket profile from picket_material field, with fallback to INFILL_PROFILES."""
-    picket_material = str(fields.get("picket_material", "")).lower()
+    """Resolve picket profile from picket_material field, with fallback to INFILL_PROFILES.
+
+    Handles variations from Gemini text extraction:
+    - Exact substring match: '5/8" square' in picket_material
+    - Fraction regex: extracts '5/8' from '5/8 inch square bar' etc.
+    - Decimal form: '0.625' maps to 5/8", '0.5' maps to 1/2", '0.75' maps to 3/4"
+    """
+    picket_material = str(fields.get("picket_material", "")).lower().strip()
     if picket_material:
+        # 1. Exact substring match (existing logic)
         for label, profile in PICKET_MATERIAL_PROFILES.items():
             if label.lower() in picket_material:
                 return profile
+
+        # 2. Fraction regex fallback: extract fractions like 5/8, 3/4, 1/2
+        fraction_match = re.search(r'(\d+)/(\d+)', picket_material)
+        if fraction_match:
+            frac_str = fraction_match.group(0)  # e.g. "5/8"
+            is_round = "round" in picket_material
+            for label, profile in PICKET_MATERIAL_PROFILES.items():
+                if frac_str in label:
+                    if is_round and "round" in label:
+                        return profile
+                    elif not is_round and "square" in label:
+                        return profile
+            # If shape didn't match exactly, return first fraction match
+            for label, profile in PICKET_MATERIAL_PROFILES.items():
+                if frac_str in label:
+                    return profile
+
+        # 3. Decimal fallback: 0.625 → 5/8, 0.5 → 1/2, 0.75 → 3/4, 1.0 → 1"
+        _DECIMAL_TO_FRACTION = {
+            "0.5": '1/2"',
+            "0.625": '5/8"',
+            "0.75": '3/4"',
+            "1.0": '1"',
+        }
+        decimal_match = re.search(r'(\d+\.\d+)', picket_material)
+        if decimal_match:
+            dec_str = decimal_match.group(1)
+            frac_label = _DECIMAL_TO_FRACTION.get(dec_str, "")
+            if frac_label:
+                is_round = "round" in picket_material
+                for label, profile in PICKET_MATERIAL_PROFILES.items():
+                    if frac_label in label:
+                        if is_round and "round" in label:
+                            return profile
+                        elif not is_round and "square" in label:
+                            return profile
+                # Fallback: return first match ignoring shape
+                for label, profile in PICKET_MATERIAL_PROFILES.items():
+                    if frac_label in label:
+                        return profile
+
     # Fallback to old infill_type mapping
     return INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
 
@@ -398,10 +447,12 @@ class CantileverGateCalculator(BaseCalculator):
         # 9. Adjacent fence sections (compound job)
         adjacent_fence = fields.get("adjacent_fence", "No")
         if "Yes" in str(adjacent_fence):
+            resolved_picket = _resolve_picket_profile(fields, infill_type)
             fence_result = self._generate_fence_sections(
                 fields, height_in, infill_type, infill_spacing_in,
                 frame_key, frame_size, frame_gauge, frame_price_ft,
                 post_profile_key, post_price_ft, post_concrete_depth_in,
+                gate_picket_profile=resolved_picket,
             )
             items.extend(fence_result["items"])
             hardware.extend(fence_result["hardware"])
@@ -558,34 +609,73 @@ class CantileverGateCalculator(BaseCalculator):
 
         # ========================================================
         # ENFORCE: Overhead support beam (top-hung only)
+        # Validates profile matches weight class, not just existence
         # ========================================================
         if is_top_hung:
-            has_overhead = any(
-                "overhead" in item.get("description", "").lower()
-                or "support beam" in item.get("description", "").lower()
-                for item in items
-            )
-            if not has_overhead:
-                estimated_gate_weight = total_weight
-                if estimated_gate_weight < 800:
-                    beam_profile = "hss_4x4_0.25"
-                    beam_desc = "HSS 4×4×1/4\""
-                else:
-                    beam_profile = "hss_6x4_0.25"
-                    beam_desc = "HSS 6×4×1/4\""
-                # ONE beam spanning between carriage posts
-                beam_length_in = total_gate_length_in + 24  # +12" overhang each side
-                beam_length_ft = self.inches_to_feet(beam_length_in)
-                beam_price_ft = lookup.get_price_per_foot(beam_profile)
-                beam_weight = self.get_weight_lbs(beam_profile, beam_length_ft)
-                if beam_weight == 0.0:
-                    beam_weight = beam_length_ft * 12.0
+            # Determine correct beam profile based on gate weight
+            estimated_gate_weight = total_weight
+            if estimated_gate_weight < 800:
+                correct_beam_profile = "hss_4x4_0.25"
+                correct_beam_desc = "HSS 4×4×1/4\""
+            else:
+                correct_beam_profile = "hss_6x4_0.25"
+                correct_beam_desc = "HSS 6×4×1/4\""
 
+            beam_length_in = total_gate_length_in + 24  # +12" overhang each side
+            beam_length_ft = self.inches_to_feet(beam_length_in)
+            beam_price_ft = lookup.get_price_per_foot(correct_beam_profile)
+            beam_weight = self.get_weight_lbs(correct_beam_profile, beam_length_ft)
+            if beam_weight == 0.0:
+                beam_weight = beam_length_ft * 12.0
+
+            # Find existing overhead beam in AI items
+            existing_beam_idx = None
+            for idx, item in enumerate(items):
+                desc_lower = item.get("description", "").lower()
+                if "overhead" in desc_lower or "support beam" in desc_lower:
+                    existing_beam_idx = idx
+                    break
+
+            if existing_beam_idx is not None:
+                # Beam exists — validate profile matches weight class
+                existing_profile = items[existing_beam_idx].get("profile", "")
+                if existing_profile != correct_beam_profile:
+                    # Wrong profile for weight class — replace with correct one
+                    items[existing_beam_idx] = self.make_material_item(
+                        description="Overhead support beam — %s (%.1f ft, qty 1)"
+                                    % (correct_beam_desc, beam_length_ft),
+                        material_type="hss_structural_tube",
+                        profile=correct_beam_profile,
+                        length_inches=beam_length_in,
+                        quantity=1,
+                        unit_price=round(beam_length_ft * beam_price_ft, 2),
+                        cut_type="square",
+                        waste_factor=self.WASTE_TUBE,
+                    )
+                    # Update cut list entry too
+                    for cut in cut_list:
+                        if "overhead" in str(cut.get("piece_name", "")).lower() \
+                                or "overhead" in str(cut.get("description", "")).lower():
+                            cut["profile"] = correct_beam_profile
+                            cut["length_inches"] = beam_length_in
+                            cut["notes"] = (
+                                "Profile overridden: %s → %s for %.0f lb gate. "
+                                "Beam spans %.0f\" gate length + 24\" overhang = %.0f\"."
+                                % (existing_profile, correct_beam_profile,
+                                   estimated_gate_weight, total_gate_length_in, beam_length_in)
+                            )
+                            break
+                    assumptions.append(
+                        "Overhead beam profile overridden: %s → %s "
+                        "(gate weight %.0f lbs, threshold 800 lbs)."
+                        % (existing_profile, correct_beam_profile, estimated_gate_weight))
+            else:
+                # No beam found — add one
                 items.append(self.make_material_item(
                     description="Overhead support beam — %s (%.1f ft, qty 1)"
-                                % (beam_desc, beam_length_ft),
+                                % (correct_beam_desc, beam_length_ft),
                     material_type="hss_structural_tube",
-                    profile=beam_profile,
+                    profile=correct_beam_profile,
                     length_inches=beam_length_in,
                     quantity=1,  # ONE beam
                     unit_price=round(beam_length_ft * beam_price_ft, 2),
@@ -594,11 +684,11 @@ class CantileverGateCalculator(BaseCalculator):
                 ))
                 cut_list.append({
                     "description": "Overhead %s beam for top-hung cantilever gate"
-                                   % beam_desc,
+                                   % correct_beam_desc,
                     "piece_name": "overhead_beam",
                     "group": "structure",
                     "material_type": "mild_steel",
-                    "profile": beam_profile,
+                    "profile": correct_beam_profile,
                     "length_inches": beam_length_in,
                     "quantity": 1,
                     "cut_type": "square",
@@ -610,12 +700,12 @@ class CantileverGateCalculator(BaseCalculator):
                              % (total_gate_length_in, beam_length_in),
                 })
                 total_weight += beam_weight
-                min_clearance_in = height_in + 6
-                assumptions.append(
-                    "Top-hung system: 1 × %s overhead beam spans %.1f ft. "
-                    "Minimum overhead clearance: %.0f\" (%.1f ft)."
-                    % (beam_desc, beam_length_ft,
-                       min_clearance_in, self.inches_to_feet(min_clearance_in)))
+            min_clearance_in = height_in + 6
+            assumptions.append(
+                "Top-hung system: 1 × %s overhead beam spans %.1f ft. "
+                "Minimum overhead clearance: %.0f\" (%.1f ft)."
+                % (correct_beam_desc, beam_length_ft,
+                   min_clearance_in, self.inches_to_feet(min_clearance_in)))
 
         # ========================================================
         # ENFORCE: Adjacent fence sections
@@ -629,10 +719,12 @@ class CantileverGateCalculator(BaseCalculator):
                 for item in items
             )
             if not has_fence_posts:
+                resolved_picket = _resolve_picket_profile(fields, infill_type)
                 fence_result = self._generate_fence_sections(
                     fields, height_in, infill_type, infill_spacing_in,
                     frame_key, frame_size, frame_gauge, frame_price_ft,
                     post_profile_key, post_price_ft, post_concrete_depth_in,
+                    gate_picket_profile=resolved_picket,
                 )
                 items.extend(fence_result["items"])
                 total_weight += fence_result["weight"]
@@ -847,7 +939,8 @@ class CantileverGateCalculator(BaseCalculator):
 
     def _generate_fence_sections(self, fields, height_in, infill_type, infill_spacing_in,
                                     frame_key, frame_size, frame_gauge, frame_price_ft,
-                                    post_profile_key, post_price_ft, post_concrete_depth_in):
+                                    post_profile_key, post_price_ft, post_concrete_depth_in,
+                                    gate_picket_profile=None):
         """Generate material items for adjacent fence sections."""
         items = []
         hardware = []
@@ -1016,7 +1109,11 @@ class CantileverGateCalculator(BaseCalculator):
                 weld_inches += self.perimeter_inches(length_in, height_in) * 0.5
             elif use_pickets:
                 # Vertical picket/bar infill
-                picket_profile = _resolve_picket_profile(fields, infill_type)
+                # Use gate picket profile if fence should match gate and profile was resolved
+                if gate_picket_profile and "match" in str(fence_match).lower():
+                    picket_profile = gate_picket_profile
+                else:
+                    picket_profile = _resolve_picket_profile(fields, infill_type)
                 picket_price_ft = lookup.get_price_per_foot(picket_profile)
                 picket_count = math.ceil(length_in / infill_spacing_in) + 1
                 picket_length_in = height_in - 2

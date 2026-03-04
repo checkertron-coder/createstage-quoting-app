@@ -56,6 +56,9 @@ STOCK_WEIGHTS = {
     "channel_3x4.1": 4.100,
     "channel_4x5.4": 5.400,
     "channel_6x8.2": 8.200,
+    # HSS Structural Tube — lb/ft (AISC Steel Manual)
+    "hss_4x4_0.25": 12.21,
+    "hss_6x4_0.25": 15.62,
     # DOM Round Tube (mechanical) — lb/ft
     "dom_round_1od_0.125wall": 1.028,
     "dom_round_1.5od_11ga": 1.769,

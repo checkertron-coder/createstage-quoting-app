@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     GEMINI_FAST_MODEL: str = ""
     GEMINI_DEEP_MODEL: str = ""
 
+    # Claude review loop (optional)
+    ANTHROPIC_API_KEY: str = ""
+    CLAUDE_REVIEW_MODEL: str = "claude-sonnet-4-20250514"
+
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time
     JWT_ALGORITHM: str = "HS256"

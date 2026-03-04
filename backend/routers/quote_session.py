@@ -10,6 +10,8 @@ POST /api/session/{id}/price     — Run Stage 5 pricing engine, create Quote re
 """
 
 import logging
+import os
+import threading
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -20,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..auth import get_current_user
+from ..claude_reviewer import review_quote
 from ..database import get_db
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
 from ..calculators.registry import get_calculator, has_calculator
@@ -693,18 +696,95 @@ def price_quote(
         flag_modified(session, "params_json")
         db.commit()
 
-        return {
+        # Auto-review: trigger Claude review non-blocking if API key is set
+        review_result = None
+        if os.environ.get("ANTHROPIC_API_KEY"):
+            try:
+                review_fields = {k: v for k, v in current_params.items()
+                                 if not k.startswith("_")}
+                review_result = review_quote(priced_quote, review_fields)
+                # Store review in session (best-effort, non-blocking)
+                current_params["_review"] = review_result
+                session.params_json = current_params
+                flag_modified(session, "params_json")
+                db.commit()
+            except Exception:
+                logger.debug("Auto-review failed — non-critical, continuing")
+
+        response = {
             "session_id": session_id,
             "quote_id": quote.id,
             "quote_number": quote_number,
             "priced_quote": priced_quote,
         }
+        if review_result and review_result.get("reviewed"):
+            response["review"] = review_result
+        return response
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=500,
             detail=f"Quote creation failed: {str(e)}. Session is intact — retry /price.",
         )
+
+
+@router.post("/{session_id}/review")
+def review_session(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Run Claude review on a priced session.
+
+    Requires: session has been priced (stage == "output").
+    Calls Claude API to review the quote for issues, warnings, and suggestions.
+    Stores review in session params_json["_review"].
+    """
+    session = db.query(models.QuoteSession).filter(
+        models.QuoteSession.id == session_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    if session.stage != "output":
+        raise HTTPException(
+            status_code=400,
+            detail="Session stage is '%s', not 'output'. Run /price first." % session.stage,
+        )
+
+    current_params = dict(session.params_json or {})
+
+    # Get the quote data — look for the Quote record linked to this session
+    quote = db.query(models.Quote).filter(
+        models.Quote.session_id == session_id,
+    ).first()
+    if not quote or not quote.outputs_json:
+        raise HTTPException(
+            status_code=400,
+            detail="No priced quote found for this session.",
+        )
+
+    quote_data = dict(quote.outputs_json)
+    fields = {k: v for k, v in current_params.items() if not k.startswith("_")}
+
+    # Run review
+    review_result = review_quote(quote_data, fields)
+
+    # Store review in session
+    from sqlalchemy.orm.attributes import flag_modified
+    current_params["_review"] = review_result
+    session.params_json = current_params
+    session.updated_at = datetime.utcnow()
+    flag_modified(session, "params_json")
+    db.commit()
+
+    return {
+        "session_id": session_id,
+        "review": review_result,
+    }
 
 
 def _serialize_questions(questions: list[dict]) -> list[dict]:
