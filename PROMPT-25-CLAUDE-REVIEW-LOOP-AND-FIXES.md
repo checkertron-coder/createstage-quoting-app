@@ -214,43 +214,15 @@ For the CS-2026-0033 job (~1418 sq ft finish area):
 - At 350 sqft/gal: 4 gallons primer + 4 gallons paint = ~$320
 - NOT 71 spray cans at $8.50 each = $603
 
-### Part 4: Fix Default Labor Rates
-**File: `backend/routers/quote_session.py`**
+### Part 4: Labor Rates — No Code Change Needed
+**The rates come from the user profile.** Burton's profile already has
+`rate_inshop` and `rate_onsite` set. If the quote shows $125/hr for shop
+work, that's what's in the profile — update it in the app's Profile page,
+not in code.
 
-Change the default rates:
-
-Find (around line 435):
-```python
-user_rates = {
-    "rate_inshop": current_user.rate_inshop or 125.00,
-    "rate_onsite": current_user.rate_onsite or 145.00,
-}
-```
-
-Replace with:
-```python
-user_rates = {
-    "rate_inshop": current_user.rate_inshop or 145.00,
-    "rate_onsite": current_user.rate_onsite or 145.00,
-}
-```
-
-Also update the default seed rates in `process_rates.py`:
-- Layout: $75 → $145 (it's Burton's time, same rate)
-- Cutting: $85 → $145
-- Welding: $125 → $145
-- Grinding: $75 → $145
-- Assembly: $100 → $145
-- Paint: $75 → $145
-
-The only rates that should differ:
-- TIG Welding: $150 (premium process)
-- Design/CAD: $150 (premium process)
-- Field Install: $145 (same as shop — Burton doesn't charge more for field)
-- CNC Plasma: $145
-- CNC Router: $145
-
-Everything is $145/hr unless it's a premium skill (TIG, CAD).
+The default fallback ($125 inshop, $145 onsite) in `quote_session.py`
+only fires when `current_user.rate_inshop` is NULL. Leave these defaults
+as-is — they're reasonable for new users who haven't set up their profile.
 
 ### Part 5: Add HSS Profiles to Material Catalog
 **File: `backend/calculators/material_lookup.py`**
