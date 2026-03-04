@@ -492,10 +492,4 @@ cd backend && python -c "from calculators.ai_cut_list import AICutListGenerator;
 ```
 
 ### Manual test:
-Generate a new quote (CS-2026-0037) with the same inputs as CS-2026-0036. Verify:
-- Only 3 gate posts (not 6), all as `sq_tube_4x4_11ga`
-- Only 1 overhead beam
-- Fab sequence says 216" (18') gate panel, NOT 324" (27')
-- One consistent picket count per fence side
-- Surface prep solvent in consumables
-- No progressive gritting in surface prep step
+Generate a new quote with the same inputs as CS-2026-0036 and review the full output for any duplicate items, conflicting dimensions, or missing consumables.
