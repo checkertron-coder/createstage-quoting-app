@@ -544,7 +544,8 @@ def test_hardware_sourcer_preserves_existing_urls():
 # ============================================================
 
 def test_pricing_engine_uses_dynamic_model_name():
-    """Pricing engine assumption text uses GEMINI_MODEL env var, not hardcoded."""
+    """Pricing engine assumption text uses dynamic model name from ai_client."""
+    from backend import ai_client
     engine = PricingEngine()
     session_data = {
         "job_type": "furniture_table",
@@ -557,8 +558,11 @@ def test_pricing_engine_uses_dynamic_model_name():
     }
     user = {"id": 1, "shop_name": "Test", "markup_default": 15}
 
-    with patch.dict("os.environ", {"GEMINI_MODEL": "gemini-3.0-flash"}):
+    ai_client.reset_provider()
+    with patch.dict("os.environ", {"GEMINI_API_KEY": "test-key",
+                                    "GEMINI_MODEL": "gemini-3.0-flash"}):
         result = engine.build_priced_quote(session_data, user)
+    ai_client.reset_provider()
     assumptions_text = " ".join(result["assumptions"])
     assert "gemini-3.0-flash" in assumptions_text
     assert "Gemini 2.0 Flash" not in assumptions_text

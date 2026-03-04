@@ -482,12 +482,12 @@ class CantileverGateCalculator(BaseCalculator):
     def _post_process_ai_result(self, ai_result, fields, assumptions):
         """
         Validate and supplement AI-generated material list with calculator-
-        enforced items. Gemini handles the detailed cut list arrangement,
+        enforced items. The AI handles the detailed cut list arrangement,
         but the calculator enforces quantities, dimensions, and profiles
         for critical structural items.
 
         Items added here appear in the MATERIALS section (what you buy from
-        the supplier) alongside Gemini's consolidated profiles. They also
+        the supplier) alongside the AI's consolidated profiles. They also
         appear in the cut list with calculator-verified dimensions.
         """
         items = list(ai_result.get("items", []))
@@ -547,8 +547,8 @@ class CantileverGateCalculator(BaseCalculator):
             post_weight = self.get_weight_lbs(post_profile_key, post_total_ft)
 
             items.append(self.make_material_item(
-                description="Gate posts — %s × %d (%.1f ft each, %.0f\" embed for Chicago frost line)"
-                            % (post_size, post_count,
+                description="Gate posts — %d × %s (%.1f ft each, %.0f\" embed for Chicago frost line)"
+                            % (post_count, post_size,
                                self.inches_to_feet(post_total_length_in), post_concrete_depth_in),
                 material_type="square_tubing",
                 profile=post_profile_key,
@@ -628,20 +628,31 @@ class CantileverGateCalculator(BaseCalculator):
             if beam_weight == 0.0:
                 beam_weight = beam_length_ft * 12.0
 
-            # Find existing overhead beam in AI items
-            existing_beam_idx = None
+            # Find ALL existing overhead beams in items (dedup if multiple)
+            overhead_item_idxs = []
             for idx, item in enumerate(items):
                 desc_lower = item.get("description", "").lower()
                 if "overhead" in desc_lower or "support beam" in desc_lower:
-                    existing_beam_idx = idx
-                    break
+                    overhead_item_idxs.append(idx)
 
-            if existing_beam_idx is not None:
-                # Beam exists — validate profile matches weight class
-                existing_profile = items[existing_beam_idx].get("profile", "")
+            # Find ALL overhead beam entries in cut_list (dedup)
+            overhead_cut_idxs = []
+            for idx, cut in enumerate(cut_list):
+                desc_lower = (str(cut.get("description", "")) + " "
+                              + str(cut.get("piece_name", "")) + " "
+                              + str(cut.get("notes", ""))).lower()
+                if "overhead" in desc_lower or "support beam" in desc_lower:
+                    overhead_cut_idxs.append(idx)
+
+            if overhead_item_idxs:
+                # Keep only the FIRST, remove duplicates
+                for idx in sorted(overhead_item_idxs[1:], reverse=True):
+                    items.pop(idx)
+                # Fix profile on the remaining one
+                first = items[overhead_item_idxs[0]]
+                existing_profile = first.get("profile", "")
                 if existing_profile != correct_beam_profile:
-                    # Wrong profile for weight class — replace with correct one
-                    items[existing_beam_idx] = self.make_material_item(
+                    items[overhead_item_idxs[0]] = self.make_material_item(
                         description="Overhead support beam — %s (%.1f ft, qty 1)"
                                     % (correct_beam_desc, beam_length_ft),
                         material_type="hss_structural_tube",
@@ -652,25 +663,20 @@ class CantileverGateCalculator(BaseCalculator):
                         cut_type="square",
                         waste_factor=self.WASTE_TUBE,
                     )
-                    # Update cut list entry too
-                    for cut in cut_list:
-                        if "overhead" in str(cut.get("piece_name", "")).lower() \
-                                or "overhead" in str(cut.get("description", "")).lower():
-                            cut["profile"] = correct_beam_profile
-                            cut["length_inches"] = beam_length_in
-                            cut["notes"] = (
-                                "Profile overridden: %s → %s for %.0f lb gate. "
-                                "Beam spans %.0f\" gate length + 24\" overhang = %.0f\"."
-                                % (existing_profile, correct_beam_profile,
-                                   estimated_gate_weight, total_gate_length_in, beam_length_in)
-                            )
-                            break
                     assumptions.append(
                         "Overhead beam profile overridden: %s → %s "
                         "(gate weight %.0f lbs, threshold 800 lbs)."
                         % (existing_profile, correct_beam_profile, estimated_gate_weight))
+
+                # Dedup cut_list entries — keep first, fix profile, remove rest
+                if overhead_cut_idxs:
+                    for idx in sorted(overhead_cut_idxs[1:], reverse=True):
+                        cut_list.pop(idx)
+                    cut_list[overhead_cut_idxs[0]]["profile"] = correct_beam_profile
+                    cut_list[overhead_cut_idxs[0]]["quantity"] = 1
+                    cut_list[overhead_cut_idxs[0]]["length_inches"] = beam_length_in
             else:
-                # No beam found — add one
+                # No beam found in items — add one
                 items.append(self.make_material_item(
                     description="Overhead support beam — %s (%.1f ft, qty 1)"
                                 % (correct_beam_desc, beam_length_ft),
@@ -682,23 +688,25 @@ class CantileverGateCalculator(BaseCalculator):
                     cut_type="square",
                     waste_factor=self.WASTE_TUBE,
                 ))
-                cut_list.append({
-                    "description": "Overhead %s beam for top-hung cantilever gate"
-                                   % correct_beam_desc,
-                    "piece_name": "overhead_beam",
-                    "group": "structure",
-                    "material_type": "mild_steel",
-                    "profile": correct_beam_profile,
-                    "length_inches": beam_length_in,
-                    "quantity": 1,
-                    "cut_type": "square",
-                    "cut_angle": 90.0,
-                    "weld_process": "mig",
-                    "weld_type": "fillet",
-                    "notes": "Beam spans %.0f\" gate length + 24\" overhang = %.0f\". "
-                             "Supports roller carriages and gate travel."
-                             % (total_gate_length_in, beam_length_in),
-                })
+                # Only add to cut_list if none exist there either
+                if not overhead_cut_idxs:
+                    cut_list.append({
+                        "description": "Overhead %s beam for top-hung cantilever gate"
+                                       % correct_beam_desc,
+                        "piece_name": "overhead_beam",
+                        "group": "structure",
+                        "material_type": "mild_steel",
+                        "profile": correct_beam_profile,
+                        "length_inches": beam_length_in,
+                        "quantity": 1,
+                        "cut_type": "square",
+                        "cut_angle": 90.0,
+                        "weld_process": "mig",
+                        "weld_type": "fillet",
+                        "notes": "Beam spans %.0f\" gate length + 24\" overhang = %.0f\". "
+                                 "Supports roller carriages and gate travel."
+                                 % (total_gate_length_in, beam_length_in),
+                    })
                 total_weight += beam_weight
             min_clearance_in = height_in + 6
             assumptions.append(

@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from typing import Optional
 from .. import models
 from ..database import get_db
-from ..gemini_client import call_deep, get_model_name, is_configured
+from ..ai_client import call_deep, get_model_name, is_configured
 from ..quote_jobs import create_job, get_job, run_in_background, mark_db_saved
 
 router = APIRouter(prefix="/ai", tags=["ai-quoting"])

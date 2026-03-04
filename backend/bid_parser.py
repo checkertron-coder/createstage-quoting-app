@@ -16,7 +16,7 @@ import math
 import re
 from typing import Optional
 
-from .gemini_client import call_deep, is_configured
+from .ai_client import call_deep, is_configured
 
 logger = logging.getLogger(__name__)
 

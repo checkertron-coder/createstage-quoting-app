@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from ..gemini_client import call_fast, call_vision as _gemini_vision
+from ..ai_client import call_fast, call_vision as _gemini_vision
 
 # Directory where question tree JSON files live
 DATA_DIR = Path(__file__).parent / "data"
@@ -555,7 +555,7 @@ def detect_job_type(description: str) -> dict:
         return keyword_result
 
     # Step 3: Try Gemini for better accuracy
-    from ..gemini_client import is_configured
+    from ..ai_client import is_configured
     if not is_configured():
         if keyword_result:
             return keyword_result

@@ -15,7 +15,7 @@ The app NEVER fails because the AI is down.
 import json
 import logging
 
-from .gemini_client import call_deep
+from .ai_client import call_deep
 
 logger = logging.getLogger(__name__)
 

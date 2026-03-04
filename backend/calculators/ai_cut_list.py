@@ -1,11 +1,12 @@
 """
 AI-assisted cut list generator for custom/complex jobs.
 
-Uses Gemini to interpret freeform designs into detailed cut lists.
-Called by ALL 25 calculators when a user provides a design description.
-The AI thinks through design first, then generates precise cut lists.
+Uses Claude (preferred) or Gemini (fallback) to interpret freeform designs
+into detailed cut lists. Called by ALL 25 calculators when a user provides
+a design description. The AI thinks through design first, then generates
+precise cut lists.
 
-Fallback: if Gemini fails or returns invalid JSON, the calling calculator
+Fallback: if the AI fails or returns invalid JSON, the calling calculator
 uses its own template-based output. Never crashes.
 """
 
@@ -14,7 +15,7 @@ import logging
 import re
 from typing import Optional, List, Dict
 
-from ..gemini_client import call_fast, is_configured
+from ..ai_client import call_fast, is_configured
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +252,7 @@ def _build_geometry_summary(cut_list):
 
 class AICutListGenerator:
     """
-    Generates detailed cut lists by sending structured job info to Gemini.
+    Generates detailed cut lists by sending structured job info to AI (Claude or Gemini).
 
     Usage:
         generator = AICutListGenerator()
@@ -276,12 +277,12 @@ class AICutListGenerator:
             quantity, cut_type, cut_angle, weld_process, weld_type, group, notes.
         """
         if not is_configured():
-            logger.info("No GEMINI_API_KEY — skipping AI cut list")
+            logger.info("No AI provider configured — skipping AI cut list")
             return None
 
         try:
             prompt = self._build_prompt(job_type, fields)
-            response_text = self._call_gemini(prompt)
+            response_text = self._call_ai(prompt)
             cuts = self._parse_response(response_text)
             if cuts and len(cuts) > 0:
                 return cuts
@@ -306,12 +307,12 @@ class AICutListGenerator:
             weld_process, safety_notes}], or None on failure.
         """
         if not is_configured():
-            logger.info("No GEMINI_API_KEY — skipping build instructions")
+            logger.info("No AI provider configured — skipping build instructions")
             return None
 
         try:
             prompt = self._build_instructions_prompt(job_type, fields, cut_list)
-            response_text = self._call_gemini(prompt)
+            response_text = self._call_ai(prompt)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
                 # 1. Strip banned terms from customer-facing text FIRST
@@ -348,7 +349,7 @@ class AICutListGenerator:
 
     def _build_prompt(self, job_type: str, fields: dict) -> str:
         """
-        Build the Gemini prompt for cut list generation.
+        Build the AI prompt for cut list generation.
 
         The prompt instructs the AI to:
         1. Think through the design (structure, geometry, patterns)
@@ -501,7 +502,7 @@ Return ONLY valid JSON — an array of objects:
         """
         Build structured context blocks from fields for compound/complex jobs.
 
-        Provides explicit guidance to Gemini about compound elements like
+        Provides explicit guidance to the AI about compound elements like
         adjacent fence sections, bottom guide types, mounting styles, etc.
         so cuts are generated for the ENTIRE job, not just the primary element.
         """
@@ -745,7 +746,7 @@ Return ONLY valid JSON — an array of objects:
 
     def _build_instructions_prompt(self, job_type: str, fields: dict,
                                     cut_list: List[Dict]) -> str:
-        """Build the Gemini prompt for fabrication sequence."""
+        """Build the AI prompt for fabrication sequence."""
         # Summarize fields (skip internal keys)
         field_lines = []
         for key, val in fields.items():
@@ -914,15 +915,15 @@ Return ONLY valid JSON — an array of step objects:
 
         return prompt
 
-    def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini API. Raises RuntimeError on failure."""
+    def _call_ai(self, prompt: str) -> str:
+        """Call AI provider (Claude or Gemini). Raises RuntimeError on failure."""
         text = call_fast(prompt, timeout=180)
         if text is None:
-            raise RuntimeError("Gemini returned no response")
+            raise RuntimeError("AI provider returned no response")
         return text
 
     def _parse_response(self, response_text: str) -> Optional[List[Dict]]:
-        """Parse Gemini response into cut list items with expanded schema."""
+        """Parse AI response into cut list items with expanded schema."""
         try:
             # Try direct JSON parse
             data = json.loads(response_text)
@@ -1001,7 +1002,7 @@ Return ONLY valid JSON — an array of step objects:
         return validated if validated else None
 
     def _parse_instructions_response(self, response_text: str) -> Optional[List[Dict]]:
-        """Parse Gemini response into build instruction steps."""
+        """Parse AI response into build instruction steps."""
         try:
             data = json.loads(response_text)
         except json.JSONDecodeError:
