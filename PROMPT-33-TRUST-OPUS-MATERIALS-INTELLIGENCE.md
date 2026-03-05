@@ -90,6 +90,12 @@ A quote generated from the test description below must satisfy ALL of these:
 - [ ] Zero "sonnet" references in entire codebase
 - [ ] Assumptions say "claude-opus-4-6"
 
+### Materials List Download
+- [ ] "Materials List" download button appears alongside Shop Copy and Client Copy
+- [ ] Materials list contains only: material descriptions, total footage, stock lengths, number of sticks/sheets needed
+- [ ] NO estimated prices, NO labor, NO markup, NO job details
+- [ ] Clean enough to email directly to a steel distributor for a real quote
+
 ### Existing Features (Do Not Break)
 - [ ] Client proposal unchanged — clean, professional, no shop details
 - [ ] Fab sequence present in shop copy with full step-by-step detail
@@ -230,7 +236,46 @@ This means a small gate+fence (like our test case) might be 2-3 hours of grind. 
 
 **Do NOT hardcode a maximum.** Let the math scale naturally based on the actual joint count with corrected per-joint times.
 
-### 4G: Output Cleanup
+### 4G: Downloadable Materials List for Distributor
+
+Add a third download button alongside "Shop Copy" and "Client Copy": **"📦 Materials List"**
+
+This generates a clean, one-page PDF (or CSV — even better, offer both) that the fabricator sends directly to their steel distributor for a real quote. It contains ONLY:
+
+- Material description (human-readable, e.g., "2" × 2" sq tube 11ga")
+- Total footage or quantity needed
+- Stock length (e.g., "20' sticks")
+- Number of sticks needed (total footage ÷ stock length, rounded up)
+
+**What it does NOT include:**
+- No estimated prices (the distributor provides their own)
+- No labor, no markup, no job description
+- No cut list details (the distributor doesn't need to know what you're building)
+- No company branding beyond a simple header with shop name and date
+
+**Example output:**
+```
+MATERIALS ORDER — CreateStage Fabrication
+Date: March 5, 2026
+Quote Ref: CS-2026-0042
+
+Material                              Need      Stock    Sticks
+─────────────────────────────────────────────────────────
+2" × 2" sq tube 11ga                 345 ft    20' ea    18
+5/8" square bar                       500 ft    20' ea    25
+4" × 4" sq tube 11ga                 96 ft     20' ea    5
+Pre-punched channel (5/8" picket)     36 ft     20' ea    2
+HSS 4" × 4" × 1/4"                   20 ft     20' ea    1
+1/4" plate                            1 half sheet (24" × 48")
+3/8" plate                            1 quarter sheet (24" × 24")
+Flat bar 2" × 1/4"                    18 ft     20' ea    1
+```
+
+This is the kind of feature that makes a fabricator say "holy shit this app just saved me 30 minutes." They download it, email it to their distributor, get a real quote back, and now they have actual material costs instead of estimates.
+
+**Implementation:** Add a `mode=materials` option to the existing PDF endpoint (same pattern as `mode=shop` and `mode=client`). Or generate a CSV alongside the PDF — CSV is even easier for distributors who want to paste into their own systems. Offer both buttons if feasible: "📦 Materials PDF" and "📦 Materials CSV".
+
+### 4H: Output Cleanup
 
 **Concrete in cut list:** Skip items where `material_type == "concrete"` or `profile.startswith("concrete")` when rendering the cut list sections in the PDF. Concrete stays in the materials summary and assumptions — just not the cut list.
 
@@ -300,6 +345,13 @@ ls backend/field_extractor.py
 **Labor (shop PDF):**
 - Grind & Clean hours reflect outdoor painted cleanup theory — picket cleanup per channel run, not per picket — and scale proportionally with project size
 - Plate cutting labor present if plate pieces are being cut from sheet stock
+
+**Materials list download:**
+- "Materials List" button appears alongside Shop Copy and Client Copy
+- Downloads a clean distributor-ready document (PDF and/or CSV)
+- Contains only: material descriptions, total footage, stock lengths, sticks/sheets needed
+- No prices, no labor, no markup, no job details
+- Clean enough to email directly to a steel distributor
 
 **Client proposal:**
 - Unchanged from CS-2026-0042 — clean, professional, no shop internals visible
