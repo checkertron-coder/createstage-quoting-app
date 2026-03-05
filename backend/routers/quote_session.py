@@ -476,10 +476,29 @@ def estimate_labor(
         try:
             from ..calculators.ai_cut_list import AICutListGenerator
             ai_gen = AICutListGenerator()
+
+            # Build enforced dimensions for the build instructions prompt
+            build_fields = {k: v for k, v in current_params.items()
+                            if not k.startswith("_")}
+            enforced_dims = None
+            if session.job_type == "cantilever_gate":
+                enforced_dims = {}
+                cw = build_fields.get("clear_width", "")
+                if cw:
+                    try:
+                        cw_val = float(str(cw).split()[0])
+                        enforced_dims["opening_width"] = "%s ft" % cw
+                        enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
+                        enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
+                        enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
+                    except (ValueError, IndexError):
+                        pass
+
             build_instructions = ai_gen.generate_build_instructions(
                 session.job_type,
-                {k: v for k, v in current_params.items() if not k.startswith("_")},
+                build_fields,
                 material_list.get("items", []),
+                enforced_dimensions=enforced_dims,
             )
         except Exception:
             pass  # Build instructions are optional — don't block the pipeline

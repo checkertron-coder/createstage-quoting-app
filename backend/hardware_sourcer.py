@@ -498,6 +498,27 @@ class HardwareSourcer:
                         "category": "consumable",
                     })
 
+        # Surface prep solvent — needed for any coated finish
+        if any(k in finish for k in ("clear", "paint", "powder")):
+            if total_sq_ft <= 50:
+                solvent_qty = 1
+                solvent_price = 8.50
+                solvent_desc = "Surface prep solvent — denatured alcohol (1 qt)"
+            else:
+                solvent_gal = max(1, math.ceil(total_sq_ft / 200))
+                solvent_gal = min(solvent_gal, 5)
+                solvent_qty = solvent_gal
+                solvent_price = 15.00
+                solvent_desc = "Surface prep solvent — denatured alcohol (%d gal)" % solvent_gal
+
+            items.append({
+                "description": solvent_desc,
+                "quantity": solvent_qty,
+                "unit_price": solvent_price,
+                "line_total": round(solvent_qty * solvent_price, 2),
+                "category": "consumable",
+            })
+
         return items
 
     def get_pricing_options(self, item_key: str) -> list:

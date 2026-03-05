@@ -136,15 +136,15 @@ class TestAIPathPostProcessing:
         has_mid_rails = any("mid-rail" in d and "fence" in d for d in descs)
         assert has_mid_rails, "Post-processing should add fence mid-rails for height > 48\""
 
-    def test_post_process_validates_post_lengths(self):
-        """Post-processing flags short AI-generated posts."""
+    def test_post_process_trusts_ai_post_lengths(self):
+        """Post-processing trusts AI-generated post lengths (no override)."""
         calc = CantileverGateCalculator()
         fields = {
             "clear_width": "12",
-            "height": "10",  # 120" above grade + 2 + 42 = 164"
+            "height": "10",
             "post_concrete": "Yes",
         }
-        # AI generates short posts (only 129")
+        # AI generates posts — post-processor trusts them as-is
         ai_cuts = _make_ai_cut_list([
             ("Gate post", "sq_tube_4x4_11ga", 129, 3),
         ])
@@ -154,10 +154,11 @@ class TestAIPathPostProcessing:
 
         result = calc._post_process_ai_result(result, fields, ["Test assumption"])
 
-        assumptions = result.get("assumptions", [])
-        has_warning = any("post length" in a.lower() and "short" in a.lower()
-                         for a in assumptions)
-        assert has_warning, "Should warn about short AI-generated posts"
+        # AI included posts, so no extras should be added
+        post_items = [i for i in result["items"]
+                      if "gate post" in i["description"].lower()]
+        assert len(post_items) == 1
+        assert post_items[0]["quantity"] == 3
 
     def test_post_process_no_duplicates_when_ai_covers(self):
         """Post-processing doesn't duplicate items AI already generated."""

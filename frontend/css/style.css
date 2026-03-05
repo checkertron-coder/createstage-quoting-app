@@ -641,6 +641,27 @@ body {
 .delta-savings { color: var(--success); font-weight: 600; }
 .delta-increase { color: var(--error); font-weight: 600; }
 
+/* --- Bid Upload --- */
+.bid-upload-area {
+    border: 2px dashed var(--border);
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    transition: border-color 0.15s, background 0.15s;
+}
+.bid-upload-area:hover { border-color: var(--accent); }
+.bid-upload-area.dragover { border-color: var(--accent); background: #eff6ff; }
+.bid-results-list { margin-top: 1rem; }
+.bid-item {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+}
+.bid-item label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.bid-hint { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
     .app-nav { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }

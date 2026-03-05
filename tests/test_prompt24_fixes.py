@@ -124,8 +124,8 @@ class TestConditionalRequiredFields:
 class TestPostProcessEnforcesGeometry:
     """Part 2: _post_process_ai_result enforces gate dimensions."""
 
-    def test_enforces_gate_length_assumption(self):
-        """Gate panel length assumption = opening × 1.5."""
+    def test_trusts_ai_gate_frame_length(self):
+        """Post-processor trusts AI gate frame dimensions (enforced via prompt)."""
         calc = CantileverGateCalculator()
         fields = {
             "clear_width": "12",
@@ -139,9 +139,12 @@ class TestPostProcessEnforcesGeometry:
             "cantilever_gate", ai_cuts, fields, assumptions, hardware=[])
         result = calc._post_process_ai_result(result, fields, assumptions)
 
-        # Check that the gate panel length assumption exists
-        has_length = any("1.5 ratio" in a or "× 1.5" in a for a in assumptions)
-        assert has_length, "Should include gate panel × 1.5 ratio in assumptions"
+        # AI included frame — post-processor trusts it, doesn't override
+        frame_items = [i for i in result["items"]
+                       if "sq_tube_2x2" in i.get("profile", "")]
+        assert len(frame_items) == 1
+        # Length includes waste factor from _build_from_ai_cuts, but is not re-sized
+        assert frame_items[0]["length_inches"] >= 222
 
     def test_enforces_gate_posts(self):
         """When AI omits gate posts, post-processing adds them."""
@@ -256,15 +259,15 @@ class TestPostProcessEnforcesGeometry:
         has_fence = any("fence" in d for d in descs)
         assert has_fence, "Should add fence section materials"
 
-    def test_post_length_validation(self):
-        """Short AI-generated posts get flagged in assumptions."""
+    def test_trusts_ai_post_lengths(self):
+        """Post-processor trusts AI post lengths (dimensions enforced via prompt)."""
         calc = CantileverGateCalculator()
         fields = {
             "clear_width": "12",
-            "height": "10",  # 120" + 2" + 42" = 164"
+            "height": "10",
             "post_concrete": "Yes",
         }
-        # AI generates short posts (only 120")
+        # AI generates posts — post-processor trusts them
         ai_cuts = _make_ai_cut_list([
             ("Gate post", "sq_tube_4x4_11ga", 120, 3),
         ])
@@ -273,9 +276,11 @@ class TestPostProcessEnforcesGeometry:
             "cantilever_gate", ai_cuts, fields, assumptions, hardware=[])
         result = calc._post_process_ai_result(result, fields, assumptions)
 
-        has_warning = any("short" in a.lower() or "warning" in a.lower()
-                         for a in assumptions)
-        assert has_warning, "Should warn about short AI-generated posts"
+        # AI included posts, post-processor should not add more
+        post_items = [i for i in result["items"]
+                      if "gate post" in i["description"].lower()]
+        assert len(post_items) == 1
+        assert post_items[0]["quantity"] == 3
 
 
 class TestHardConstraintsInPrompt:

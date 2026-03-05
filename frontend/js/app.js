@@ -25,7 +25,7 @@ const App = {
 
     showView(view) {
         this.currentView = view;
-        const views = ['auth', 'profile', 'quote', 'history'];
+        const views = ['auth', 'profile', 'quote', 'history', 'bid'];
         views.forEach(v => {
             const el = document.getElementById(`view-${v}`);
             if (el) el.style.display = v === view ? 'block' : 'none';
@@ -45,6 +45,11 @@ const App = {
         // Load history data when showing history view
         if (view === 'history') {
             QuoteHistory.render();
+        }
+
+        // Init bid upload when showing bid view
+        if (view === 'bid') {
+            BidUpload.initBidUpload();
         }
 
         // Reset quote view to describe step

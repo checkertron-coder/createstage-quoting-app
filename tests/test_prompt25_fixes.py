@@ -158,18 +158,18 @@ class TestFencePicketGateMatch:
 class TestOverheadBeamValidation:
     """Test overhead beam profile is validated against gate weight."""
 
-    def test_wrong_profile_overridden(self):
-        """If AI puts hss_6x4_0.25 on a light gate, it should be overridden to hss_4x4_0.25."""
+    def test_trusts_ai_beam_profile(self):
+        """Post-processor trusts AI's beam profile (constraints enforced via prompt)."""
         from backend.calculators.cantilever_gate import CantileverGateCalculator
 
         calc = CantileverGateCalculator()
-        # Simulate AI result with wrong beam profile for a light gate
+        # AI provides overhead beam — post-processor trusts the profile
         ai_result = {
             "items": [
                 {
                     "description": "Overhead support beam — HSS 6×4×1/4\"",
                     "material_type": "hss_structural_tube",
-                    "profile": "hss_6x4_0.25",  # Wrong: gate < 800 lbs
+                    "profile": "hss_6x4_0.25",
                     "length_inches": 204.0,
                     "quantity": 1,
                     "unit_price": 100.0,
@@ -187,7 +187,7 @@ class TestOverheadBeamValidation:
                     "quantity": 1,
                 }
             ],
-            "total_weight_lbs": 300.0,  # Light gate
+            "total_weight_lbs": 300.0,
             "total_sq_ft": 100.0,
             "weld_linear_inches": 200.0,
             "assumptions": [],
@@ -202,11 +202,12 @@ class TestOverheadBeamValidation:
             "infill_type": "Pickets (vertical bars)",
         }
         result = calc._post_process_ai_result(ai_result, fields, [])
-        # Find the overhead beam item
+        # AI included overhead beam — trust it, don't add another
         beam_items = [i for i in result["items"]
                       if "overhead" in i["description"].lower()]
         assert len(beam_items) == 1
-        assert beam_items[0]["profile"] == "hss_4x4_0.25"
+        # Profile is trusted as-is (constraints handled in AI prompt)
+        assert beam_items[0]["profile"] == "hss_6x4_0.25"
 
     def test_correct_profile_kept(self):
         """If AI puts the right profile, it should be kept."""

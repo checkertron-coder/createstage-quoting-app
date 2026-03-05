@@ -113,6 +113,21 @@ def _resolve_picket_profile(fields, infill_type):
     return INFILL_PROFILES.get(infill_type, "sq_bar_0.75")
 
 
+def _is_post_item(item):
+    """Detect if an item is a gate/fence post by description keywords."""
+    desc = item.get("description", "").lower()
+    post_keywords = ["gate post", "hinge post", "latch post", "strike post",
+                     "terminal post", "corner post", "end post", "line post"]
+    return any(kw in desc for kw in post_keywords)
+
+
+def _is_overhead_item(item):
+    """Detect overhead beam by description keywords."""
+    desc = item.get("description", "").lower()
+    return any(kw in desc for kw in ["overhead", "support beam", "header beam",
+                                      "track beam", "spanning beam"])
+
+
 class CantileverGateCalculator(BaseCalculator):
 
     TAIL_RATIO = 0.55  # Counterbalance tail = 55% of clear width (middle of 50-60%)
@@ -140,6 +155,10 @@ class CantileverGateCalculator(BaseCalculator):
         # --- Build hardware list BEFORE AI check (shared by both paths) ---
         hardware = self._build_hardware(
             has_motor, motor_brand, latch_type, roller_type, is_top_hung, fields)
+
+        # Inject post profile key so AI knows the exact profile to use
+        post_size = fields.get("post_size", "4\" x 4\" square tube")
+        fields["_post_profile_key"] = self._lookup_post(post_size)
 
         # Try AI cut list for custom/complex designs
         if self._has_description(fields):
@@ -481,14 +500,15 @@ class CantileverGateCalculator(BaseCalculator):
 
     def _post_process_ai_result(self, ai_result, fields, assumptions):
         """
-        Validate and supplement AI-generated material list with calculator-
-        enforced items. The AI handles the detailed cut list arrangement,
-        but the calculator enforces quantities, dimensions, and profiles
-        for critical structural items.
+        Lightweight safety net for AI-generated material lists.
 
-        Items added here appear in the MATERIALS section (what you buy from
-        the supplier) alongside the AI's consolidated profiles. They also
-        appear in the cut list with calculator-verified dimensions.
+        Philosophy: TRUST the AI output. The prompt has all the constraints
+        (profile keys, dimensions, quantities). This method only:
+        1. Adds items the AI completely omitted (concrete, overhead beam)
+        2. Adds fence sections if AI missed them entirely
+        3. Records assumptions for the quote document
+
+        It does NOT re-count, re-profile, or re-size AI items.
         """
         items = list(ai_result.get("items", []))
         cut_list = list(ai_result.get("cut_list", []))
@@ -498,17 +518,17 @@ class CantileverGateCalculator(BaseCalculator):
         height_ft = self.parse_feet(fields.get("height"), default=6.0)
         clear_width_in = self.feet_to_inches(clear_width_ft)
         height_in = self.feet_to_inches(height_ft)
-        total_gate_length_in = clear_width_in * 1.5  # ENFORCED: opening × 1.5
+        total_gate_length_in = clear_width_in * 1.5
 
         post_size = fields.get("post_size", "4\" x 4\" square tube")
         post_count = self._parse_post_count(fields.get("post_count", "3 posts (standard)"))
         post_profile_key = self._lookup_post(post_size)
         post_price_ft = lookup.get_price_per_foot(post_profile_key)
-        post_concrete_depth_in = 42.0  # Chicago frost line
+        post_concrete_depth_in = 42.0
         if "No" in str(fields.get("post_concrete", "Yes")):
             post_concrete_depth_in = 0.0
 
-        above_grade_in = height_in + 2  # 2" clearance
+        above_grade_in = height_in + 2
         post_total_length_in = above_grade_in + post_concrete_depth_in
 
         bottom_guide_type = fields.get("bottom_guide", "Surface mount guide roller")
@@ -533,71 +553,47 @@ class CantileverGateCalculator(BaseCalculator):
         total_weld_inches = ai_result.get("weld_linear_inches", 0.0)
 
         # ========================================================
-        # ENFORCE: Gate post count and length
+        # SAFETY NET: Add posts only if AI completely omitted them
         # ========================================================
         has_gate_posts = any(
-            "post" in item.get("description", "").lower()
+            _is_post_item(item)
             and "fence" not in item.get("description", "").lower()
-            and item.get("profile") == post_profile_key
             for item in items
         )
-
         if not has_gate_posts:
             post_total_ft = self.inches_to_feet(post_total_length_in) * post_count
             post_weight = self.get_weight_lbs(post_profile_key, post_total_ft)
-
             items.append(self.make_material_item(
-                description="Gate posts — %d × %s (%.1f ft each, %.0f\" embed for Chicago frost line)"
+                description="Gate posts — %d × %s (%.1f ft each, %.0f\" embed)"
                             % (post_count, post_size,
-                               self.inches_to_feet(post_total_length_in), post_concrete_depth_in),
+                               self.inches_to_feet(post_total_length_in),
+                               post_concrete_depth_in),
                 material_type="square_tubing",
                 profile=post_profile_key,
                 length_inches=post_total_length_in,
                 quantity=post_count,
-                unit_price=round(self.inches_to_feet(post_total_length_in) * post_price_ft, 2),
+                unit_price=round(self.inches_to_feet(post_total_length_in)
+                                 * post_price_ft, 2),
                 cut_type="square",
                 waste_factor=0.0,
             ))
-            cut_list.append({
-                "description": "Structural posts for the cantilever gate",
-                "piece_name": "gate_post",
-                "group": "posts",
-                "material_type": "mild_steel",
-                "profile": post_profile_key,
-                "length_inches": post_total_length_in,
-                "quantity": post_count,
-                "cut_type": "square",
-                "cut_angle": 90.0,
-                "weld_process": "mig",
-                "weld_type": "fillet",
-                "notes": "Given post length: %.0f\" (%.0f\" above grade + %.0f\" embed). "
-                         "Chicago frost line requires 42\" minimum embed."
-                         % (post_total_length_in, above_grade_in, post_concrete_depth_in),
-            })
             total_weight += post_weight
-            assumptions.append(
-                "Gate posts: %d × %s at %.1f ft each (%.0f\" embed for Chicago frost line)."
-                % (post_count, post_size,
-                   self.inches_to_feet(post_total_length_in), post_concrete_depth_in))
 
         # ========================================================
-        # ENFORCE: Post concrete
+        # SAFETY NET: Add concrete only if AI completely omitted it
         # ========================================================
         has_concrete = any(
             "concrete" in item.get("description", "").lower()
-            and "fence" not in item.get("description", "").lower()
             for item in items
         )
         if not has_concrete and post_concrete_depth_in > 0:
             hole_diameter_in = 12.0
             cu_in_per_hole = math.pi * (hole_diameter_in / 2) ** 2 * post_concrete_depth_in
-            total_cu_in = cu_in_per_hole * post_count
-            total_cu_yd = total_cu_in / 46656.0
+            total_cu_yd = (cu_in_per_hole * post_count) / 46656.0
             concrete_price = lookup.get_unit_price("concrete_per_cuyd")
-
             items.append(self.make_material_item(
-                description="Gate post concrete — %d holes × %.0f\" dia × %.0f\" deep"
-                            % (post_count, hole_diameter_in, post_concrete_depth_in),
+                description="Post concrete — %d holes × 12\" dia × %.0f\" deep"
+                            % (post_count, post_concrete_depth_in),
                 material_type="concrete",
                 profile="concrete_footing",
                 length_inches=post_concrete_depth_in,
@@ -608,157 +604,47 @@ class CantileverGateCalculator(BaseCalculator):
             ))
 
         # ========================================================
-        # ENFORCE: Overhead support beam (top-hung only)
-        # Validates profile matches weight class, not just existence
+        # SAFETY NET: Add overhead beam only if AI completely omitted it
         # ========================================================
         if is_top_hung:
-            # Determine correct beam profile based on gate weight
-            estimated_gate_weight = total_weight
-            if estimated_gate_weight < 800:
-                correct_beam_profile = "hss_4x4_0.25"
-                correct_beam_desc = "HSS 4×4×1/4\""
-            else:
-                correct_beam_profile = "hss_6x4_0.25"
-                correct_beam_desc = "HSS 6×4×1/4\""
-
-            beam_length_in = total_gate_length_in + 24  # +12" overhang each side
-            beam_length_ft = self.inches_to_feet(beam_length_in)
-            beam_price_ft = lookup.get_price_per_foot(correct_beam_profile)
-            beam_weight = self.get_weight_lbs(correct_beam_profile, beam_length_ft)
-            if beam_weight == 0.0:
-                beam_weight = beam_length_ft * 12.0
-
-            # Find ALL existing overhead beams in items (dedup if multiple)
-            overhead_item_idxs = []
-            for idx, item in enumerate(items):
-                desc_lower = item.get("description", "").lower()
-                if "overhead" in desc_lower or "support beam" in desc_lower:
-                    overhead_item_idxs.append(idx)
-
-            # Find ALL overhead beam entries in cut_list (dedup)
-            overhead_cut_idxs = []
-            for idx, cut in enumerate(cut_list):
-                desc_lower = (str(cut.get("description", "")) + " "
-                              + str(cut.get("piece_name", "")) + " "
-                              + str(cut.get("notes", ""))).lower()
-                if "overhead" in desc_lower or "support beam" in desc_lower:
-                    overhead_cut_idxs.append(idx)
-
-            if overhead_item_idxs:
-                # Keep only the FIRST, remove duplicates
-                for idx in sorted(overhead_item_idxs[1:], reverse=True):
-                    items.pop(idx)
-                # Fix profile on the remaining one
-                first = items[overhead_item_idxs[0]]
-                existing_profile = first.get("profile", "")
-                if existing_profile != correct_beam_profile:
-                    items[overhead_item_idxs[0]] = self.make_material_item(
-                        description="Overhead support beam — %s (%.1f ft, qty 1)"
-                                    % (correct_beam_desc, beam_length_ft),
-                        material_type="hss_structural_tube",
-                        profile=correct_beam_profile,
-                        length_inches=beam_length_in,
-                        quantity=1,
-                        unit_price=round(beam_length_ft * beam_price_ft, 2),
-                        cut_type="square",
-                        waste_factor=self.WASTE_TUBE,
-                    )
-                    assumptions.append(
-                        "Overhead beam profile overridden: %s → %s "
-                        "(gate weight %.0f lbs, threshold 800 lbs)."
-                        % (existing_profile, correct_beam_profile, estimated_gate_weight))
-
-                # Dedup cut_list entries — keep first, fix profile, remove rest
-                if overhead_cut_idxs:
-                    for idx in sorted(overhead_cut_idxs[1:], reverse=True):
-                        cut_list.pop(idx)
-                    cut_list[overhead_cut_idxs[0]]["profile"] = correct_beam_profile
-                    cut_list[overhead_cut_idxs[0]]["quantity"] = 1
-                    cut_list[overhead_cut_idxs[0]]["length_inches"] = beam_length_in
-            else:
-                # No beam found in items — add one
+            has_overhead = any(_is_overhead_item(item) for item in items)
+            if not has_overhead:
+                estimated_gate_weight = total_weight
+                if estimated_gate_weight < 800:
+                    beam_profile = "hss_4x4_0.25"
+                    beam_desc = "HSS 4x4x1/4\""
+                else:
+                    beam_profile = "hss_6x4_0.25"
+                    beam_desc = "HSS 6x4x1/4\""
+                beam_length_in = total_gate_length_in + 24
+                beam_length_ft = self.inches_to_feet(beam_length_in)
+                beam_price_ft = lookup.get_price_per_foot(beam_profile)
+                beam_weight = self.get_weight_lbs(beam_profile, beam_length_ft)
+                if beam_weight == 0.0:
+                    beam_weight = beam_length_ft * 12.0
                 items.append(self.make_material_item(
-                    description="Overhead support beam — %s (%.1f ft, qty 1)"
-                                % (correct_beam_desc, beam_length_ft),
+                    description="Overhead support beam — %s (%.1f ft)"
+                                % (beam_desc, beam_length_ft),
                     material_type="hss_structural_tube",
-                    profile=correct_beam_profile,
+                    profile=beam_profile,
                     length_inches=beam_length_in,
-                    quantity=1,  # ONE beam
+                    quantity=1,
                     unit_price=round(beam_length_ft * beam_price_ft, 2),
                     cut_type="square",
                     waste_factor=self.WASTE_TUBE,
                 ))
-                # Only add to cut_list if none exist there either
-                if not overhead_cut_idxs:
-                    cut_list.append({
-                        "description": "Overhead %s beam for top-hung cantilever gate"
-                                       % correct_beam_desc,
-                        "piece_name": "overhead_beam",
-                        "group": "structure",
-                        "material_type": "mild_steel",
-                        "profile": correct_beam_profile,
-                        "length_inches": beam_length_in,
-                        "quantity": 1,
-                        "cut_type": "square",
-                        "cut_angle": 90.0,
-                        "weld_process": "mig",
-                        "weld_type": "fillet",
-                        "notes": "Beam spans %.0f\" gate length + 24\" overhang = %.0f\". "
-                                 "Supports roller carriages and gate travel."
-                                 % (total_gate_length_in, beam_length_in),
-                    })
                 total_weight += beam_weight
-            min_clearance_in = height_in + 6
-            assumptions.append(
-                "Top-hung system: 1 × %s overhead beam spans %.1f ft. "
-                "Minimum overhead clearance: %.0f\" (%.1f ft)."
-                % (correct_beam_desc, beam_length_ft,
-                   min_clearance_in, self.inches_to_feet(min_clearance_in)))
 
         # ========================================================
-        # NORMALIZE: Channel profile keys from AI output
-        # ========================================================
-        # Claude may output generic channel keys. Map them to the
-        # correct pre-punched channel profile based on picket size.
-        resolved_picket = _resolve_picket_profile(fields, infill_type)
-        _CHANNEL_KEY_MAP = {
-            "channel_1.5x0.125": {
-                "sq_bar_0.5": "punched_channel_1.5x0.5_fits_0.5",
-                "sq_bar_0.625": "punched_channel_1.5x0.5_fits_0.625",
-                "sq_bar_0.75": "punched_channel_1.5x0.5_fits_0.75",
-            },
-            "channel_1x0.125": {
-                "sq_bar_0.5": "punched_channel_1x0.5_fits_0.5",
-            },
-            "channel_2x0.125": {
-                "sq_bar_0.75": "punched_channel_2x1_fits_0.75",
-            },
-        }
-
-        for item in items:
-            profile = item.get("profile", "")
-            if profile in _CHANNEL_KEY_MAP:
-                mapping = _CHANNEL_KEY_MAP[profile]
-                correct_key = mapping.get(resolved_picket, list(mapping.values())[0])
-                item["profile"] = correct_key
-                # Update unit price to match correct profile
-                new_price = lookup.get_price_per_foot(correct_key)
-                if new_price > 0:
-                    length_ft = self.inches_to_feet(item.get("length_inches", 0))
-                    item["unit_price"] = round(length_ft * new_price, 2)
-
-        # ========================================================
-        # ENFORCE: Adjacent fence sections
+        # SAFETY NET: Add fence sections only if AI completely omitted them
         # ========================================================
         adjacent_fence = fields.get("adjacent_fence", "No")
         if "Yes" in str(adjacent_fence):
-            # Check if AI already included fence posts
-            has_fence_posts = any(
+            has_any_fence = any(
                 "fence" in item.get("description", "").lower()
-                and "post" in item.get("description", "").lower()
                 for item in items
             )
-            if not has_fence_posts:
+            if not has_any_fence:
                 resolved_picket = _resolve_picket_profile(fields, infill_type)
                 fence_result = self._generate_fence_sections(
                     fields, height_in, infill_type, infill_spacing_in,
@@ -772,94 +658,21 @@ class CantileverGateCalculator(BaseCalculator):
                 total_weld_inches += fence_result["weld_inches"]
                 assumptions.extend(fence_result["assumptions"])
 
-            # Check if fence mid-rails are present
-            has_fence_midrails = any(
-                "mid-rail" in item.get("description", "").lower()
-                and "fence" in item.get("description", "").lower()
-                for item in items
-            )
-            if not has_fence_midrails and height_in > 48:
-                fence_mid_rail_count = 2 if height_in > 72 else 1
-                side_1_ft = self.parse_feet(fields.get("fence_side_1_length"), default=0.0)
-                side_2_ft = self.parse_feet(fields.get("fence_side_2_length"), default=0.0)
-
-                # Use pre-punched channel if available, otherwise frame tube
-                mid_rail_profile = frame_key
-                mid_rail_price = frame_price_ft
-                mid_rail_label = "tube × %d" % fence_mid_rail_count
-
-                mid_rail_type = fields.get("mid_rail_type", "")
-                if "punched" in str(mid_rail_type).lower():
-                    picket_profile = _resolve_picket_profile(fields, infill_type)
-                    if "0.5" in picket_profile and "0.625" not in picket_profile:
-                        mid_rail_profile = "punched_channel_1.5x0.5_fits_0.5"
-                    elif "0.625" in picket_profile:
-                        mid_rail_profile = "punched_channel_1.5x0.5_fits_0.625"
-                    elif "0.75" in picket_profile:
-                        mid_rail_profile = "punched_channel_1.5x0.5_fits_0.75"
-                    mid_rail_price = lookup.get_price_per_foot(mid_rail_profile)
-                    mid_rail_label = "pre-punched channel × %d" % fence_mid_rail_count
-
-                for side_name, length_ft in [("Section 1", side_1_ft), ("Section 2", side_2_ft)]:
-                    if length_ft <= 0:
-                        continue
-                    if side_name == "Section 2" and "both" not in str(adjacent_fence).lower():
-                        continue
-                    length_in = self.feet_to_inches(length_ft)
-
-                    items.append(self.make_material_item(
-                        description="Fence %s mid-rails — %s" % (side_name, mid_rail_label),
-                        material_type="square_tubing",
-                        profile=mid_rail_profile,
-                        length_inches=length_in,
-                        quantity=fence_mid_rail_count,
-                        unit_price=round(length_ft * mid_rail_price, 2),
-                        cut_type="square",
-                        waste_factor=self.WASTE_TUBE,
-                    ))
-
-                assumptions.append(
-                    "Fence mid-rails: %d per section (%s)."
-                    % (fence_mid_rail_count,
-                       "pre-punched channel" if "punched" in str(mid_rail_type).lower()
-                       else "standard tube"))
-
         # ========================================================
-        # ENFORCE: Gate panel length assumption
+        # Record assumptions (informational — no corrections)
         # ========================================================
-        enforced_gate_length_in = clear_width_in * 1.5
         assumptions.append(
-            "Cantilever gate panel: %.1f ft total (%.0f ft opening × 1.5 ratio). "
-            "Counterbalance tail: %.1f ft."
-            % (self.inches_to_feet(enforced_gate_length_in),
-               clear_width_ft,
-               self.inches_to_feet(enforced_gate_length_in - clear_width_in)))
-
-        # ========================================================
-        # ENFORCE: Post length validation
-        # ========================================================
-        min_post_length_in = height_in + 2 + 42  # above grade + clearance + frost line
+            "Cantilever gate panel: %.1f ft total (%.0f ft opening x 1.5). "
+            "Tail: %.1f ft."
+            % (self.inches_to_feet(total_gate_length_in), clear_width_ft,
+               self.inches_to_feet(total_gate_length_in - clear_width_in)))
         assumptions.append(
-            "Posts: %s at %.1f ft each (%.0f\" = %.0f\" + 2\" clearance + 42\" embed "
-            "for Chicago frost line)."
-            % (post_size, self.inches_to_feet(min_post_length_in),
-               min_post_length_in, height_in))
+            "Posts: %s, %.1f ft each (%.0f\" above grade + 2\" clearance "
+            "+ %.0f\" embed)."
+            % (post_size, self.inches_to_feet(post_total_length_in),
+               height_in, post_concrete_depth_in))
 
-        # Check AI-generated post lengths
-        for cut in cut_list:
-            desc = (str(cut.get("description", "")) + " "
-                    + str(cut.get("piece_name", ""))).lower()
-            if "post" in desc:
-                cut_length = cut.get("length_inches", 0)
-                if 0 < cut_length < post_total_length_in - 2:
-                    assumptions.append(
-                        "WARNING: AI post length (%.0f\") may be short. "
-                        "Minimum required: %.0f\" (%.1f ft)."
-                        % (cut_length, post_total_length_in,
-                           self.inches_to_feet(post_total_length_in)))
-                    break  # Only flag once
-
-        # Rebuild the result with enforced items
+        # Rebuild the result
         ai_result["items"] = items
         ai_result["cut_list"] = cut_list
         ai_result["total_weight_lbs"] = round(total_weight, 1)

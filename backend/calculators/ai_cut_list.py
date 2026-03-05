@@ -292,7 +292,8 @@ class AICutListGenerator:
             return None
 
     def generate_build_instructions(self, job_type: str, fields: dict,
-                                     cut_list: List[Dict]) -> Optional[List[Dict]]:
+                                     cut_list: List[Dict],
+                                     enforced_dimensions: Optional[Dict] = None) -> Optional[List[Dict]]:
         """
         Generate fabrication sequence / build instructions.
 
@@ -300,6 +301,8 @@ class AICutListGenerator:
             job_type: The job type string
             fields: Answered fields from Stage 2
             cut_list: The material items list (from calculator output)
+            enforced_dimensions: Optional dict of dimension name → value that
+                must appear verbatim in the build instructions prompt.
 
         Returns:
             List of step dicts [{step, title, description, tools, duration_minutes,
@@ -310,7 +313,9 @@ class AICutListGenerator:
             return None
 
         try:
-            prompt = self._build_instructions_prompt(job_type, fields, cut_list)
+            prompt = self._build_instructions_prompt(
+                job_type, fields, cut_list,
+                enforced_dimensions=enforced_dimensions)
             response_text = self._call_ai(prompt)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
@@ -593,11 +598,23 @@ Return ONLY valid JSON — an array of objects:
                     elif "4" in post_count_str:
                         gate_post_count = 4
 
+                    # Include post profile key if injected by calculator
+                    post_profile_hint = ""
+                    injected_profile = fields.get("_post_profile_key", "")
+                    if injected_profile:
+                        post_profile_hint = (
+                            "  Post profile key (use this exact value): %s\n"
+                            % injected_profile
+                        )
+
                     post_block = (
                         "POST DIMENSIONS (calculator-verified — use EXACTLY):\n"
+                        "%s"
                         "  Above grade: %.0fin + %.0fin embed = %.0fin total (%.1f ft)\n"
                         "  Gate posts: %d\n"
-                        % (above_grade_in, embed_in, total_in, total_in / 12.0, gate_post_count)
+                        % (post_profile_hint,
+                           above_grade_in, embed_in, total_in, total_in / 12.0,
+                           gate_post_count)
                     )
 
                     # Calculate fence posts if applicable
@@ -744,7 +761,8 @@ Return ONLY valid JSON — an array of objects:
         )
 
     def _build_instructions_prompt(self, job_type: str, fields: dict,
-                                    cut_list: List[Dict]) -> str:
+                                    cut_list: List[Dict],
+                                    enforced_dimensions: Optional[Dict] = None) -> str:
         """Build the AI prompt for fabrication sequence."""
         # Summarize fields (skip internal keys)
         field_lines = []
@@ -855,6 +873,15 @@ Do NOT include vinegar bath, acid wash, or mill scale removal steps.
         if geometry_summary:
             geometry_block = "\n%s\n" % geometry_summary
 
+        # Enforced dimensions block — values that MUST be used verbatim
+        enforced_dims_block = ""
+        if enforced_dimensions:
+            dims_lines = ["\n## ENFORCED DIMENSIONS (use these exact values)"]
+            for dim_name, dim_val in enforced_dimensions.items():
+                dims_lines.append("- %s: %s" % (dim_name, dim_val))
+            dims_lines.append("Do NOT calculate or modify these values. Use them exactly as given.\n")
+            enforced_dims_block = "\n".join(dims_lines)
+
         # Reasoning-based process order instruction
         reasoning_instruction = """
 PROCESS ORDER — REASON THROUGH IT:
@@ -877,7 +904,7 @@ PROJECT DETAILS:
 
 CUT LIST:
 %s
-%s%s%s%s
+%s%s%s%s%s
 TASK: Generate a practical fabrication sequence — the exact steps a fabricator follows
 to build this project from raw material to finished product.
 
@@ -895,7 +922,7 @@ RULES:
 11. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not estimate, round, or invent dimensions. When referring to a post, state its exact length from the cut list (e.g., "156 inches" not "15 feet"). When stating how many of a piece to cut, use the exact quantity from the cut list. If fence sections appear in the cut list, include fence fabrication and installation steps.
 12. MILL SCALE: After EVERY tube/bar cut, grind 1-2" of mill scale from each cut end using flap disc before fit-up. Mill scale causes weld porosity. 30 seconds per end. Applies to ALL material regardless of finish.
 13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018) or self-shielded flux core (FCAW-S). NEVER specify MIG (GMAW) or TIG (GTAW) for outdoor field installation — wind disperses shielding gas. Dual-shield flux core is strongest/fastest for structural field work but not needed for fence/gate. Never use "file" for deburring — use "flap disc" or "die grinder."
-14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat. Save smooth grinding for indoor/furniture/decorative work.
+14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat — grind only for fit-up interference. For painted/powder-coated outdoor work: ONE pass with flap disc to knock down spatter. Progressive gritting (80->120->220) is ONLY for stainless steel or show-quality indoor pieces. Outdoor gates, fences, railings = single pass cleanup, NOT progressive polish.
 15. PAINT FOR OUTDOOR STEEL: Always prime THEN paint (two separate steps with dry time). Never combine into "prime and paint in one step."
 
 Return ONLY valid JSON — an array of step objects:
@@ -910,7 +937,8 @@ Return ONLY valid JSON — an array of step objects:
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
 ]""" % (job_type, knowledge_block, fields_text, cuts_text,
-        geometry_block, weld_note, finish_context, reasoning_instruction)
+        geometry_block, enforced_dims_block, weld_note, finish_context,
+        reasoning_instruction)
 
         return prompt
 
