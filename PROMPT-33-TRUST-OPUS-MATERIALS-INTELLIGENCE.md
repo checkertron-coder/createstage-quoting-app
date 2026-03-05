@@ -83,7 +83,7 @@ A quote generated from the test description below must satisfy ALL of these:
 - [ ] No naked numbers without units
 
 ### Labor
-- [ ] Grind & Clean ≤ 4 hours for outdoor painted gate+fence
+- [ ] Grind & Clean hours reflect outdoor painted cleanup (not indoor furniture-grade grinding) and scale proportionally to project size — for THIS test case, expect roughly 2-4 hours, not 8+
 - [ ] Plate cutting labor reflected when applicable
 
 ### AI & Model
@@ -204,15 +204,31 @@ UNITS RULE: Every dimension in your output MUST include its unit.
 
 This applies to: cut list lengths, detailed cut list notes, material descriptions, fab sequence steps, plate dimensions, everything.
 
-### 4F: Grind Hours Fix
+### 4F: Grind Hours — Teach the Theory, Not a Number
 
-In `backend/calculators/labor_calculator.py`, the grind time calculation counts every picket as 2 individual grind joints (lines ~186-190). With 141 pickets across gate + both fence sides, that's 282 TYPE B joints.
+In `backend/calculators/labor_calculator.py`, the grind time calculation counts every picket as 2 individual grind joints (lines ~186-190). With 141 pickets across gate + both fence sides, that's 282 TYPE B joints. This is the root cause of the inflated hours.
 
-Pickets welded into pre-punched channel don't need per-picket cleanup. The channel holds the pickets in position — you weld through the pre-punched holes, then do one cleanup pass down each channel run. That's per-channel-run work, not per-picket work.
+**The theory Opus and the labor calculator need to understand:**
 
-Fix: When a TYPE B item is a picket (description contains "picket" or profile contains "sq_bar"), count 1 grind joint per ~10 pickets instead of 2 per picket. This represents the channel-run cleanup pass.
+There are two fundamentally different kinds of grind/cleanup work:
 
-Expected result: 141 pickets → ~14 TYPE B joints instead of 282. Combined with structural TYPE A joints, total grind time should land at 2-3 hours for outdoor painted work.
+**Indoor / bare metal / stainless / furniture-grade:**
+Grind welds smooth. Blend joints. Progressive gritting (60 → 80 → 120). Every weld gets individual attention. This is slow, precision work — 3-6 minutes per joint depending on visibility and finish requirements. A furniture piece with 20 visible joints might take 2-3 hours of grinding alone.
+
+**Outdoor / painted steel:**
+You are NOT grinding welds smooth. You are cleaning up — knocking off spatter, removing sharp edges, hitting high spots with a 36-grit flap disc. That's it. One quick pass per weld, maybe 30 seconds to 1 minute per structural joint. The paint covers everything.
+
+**Pickets in pre-punched channel are even faster:**
+The channel holds pickets in position. You weld through the pre-punched holes. Cleanup is a pass down the channel run — not per-picket work. A channel run of 40-55 pickets takes maybe 10-15 minutes to clean, not 80-110 minutes.
+
+**The fix should reflect this scaling:**
+- Pickets in pre-punched channel: count grind work per channel run, not per picket
+- Outdoor structural joints: fast cleanup pass, not full grind
+- Indoor/furniture joints: full grind time per joint
+
+This means a small gate+fence (like our test case) might be 2-3 hours of grind. A project 10× the size would scale proportionally — maybe 15-20 hours. The per-joint time is low for outdoor painted work, but it's still per-joint — it just doesn't artificially inflate because of picket counting.
+
+**Do NOT hardcode a maximum.** Let the math scale naturally based on the actual joint count with corrected per-joint times.
 
 ### 4G: Output Cleanup
 
@@ -282,7 +298,7 @@ ls backend/field_extractor.py
 - Every dimension has its unit (inches or feet)
 
 **Labor (shop PDF):**
-- Grind & Clean ≤ 4.0 hours
+- Grind & Clean hours are proportional to project size and reflect outdoor painted cleanup, not furniture-grade grinding (for this test case, roughly 2-4 hours — NOT 8+)
 - Plate cutting labor present if plate pieces are being cut from sheet stock
 
 **Client proposal:**
