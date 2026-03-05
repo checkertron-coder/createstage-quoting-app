@@ -722,6 +722,14 @@ class CantileverGateCalculator(BaseCalculator):
                                 "(estimated gate weight %.0f lbs)."
                                 % (old_profile, correct_profile, estimated_gate_weight))
 
+                # Sync beam profile correction to cut_list entries
+                for cl_entry in cut_list:
+                    if _is_overhead_item(cl_entry) or cl_entry.get("profile", "").startswith("hss_"):
+                        if cl_entry.get("quantity", 1) > 1:
+                            cl_entry["quantity"] = 1
+                        if cl_entry.get("profile", "") != correct_profile:
+                            cl_entry["profile"] = correct_profile
+
         # ========================================================
         # SAFETY NET: Add fence sections only if AI completely omitted them
         # ========================================================

@@ -8,10 +8,11 @@ Provisional account flow:
 - Quotes created with provisional user_id stay attached
 """
 
+import base64
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -280,3 +281,46 @@ def update_profile(
     db.commit()
     db.refresh(current_user)
     return _user_to_response(current_user)
+
+
+ALLOWED_LOGO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_LOGO_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+@router.post("/profile/logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Upload a shop logo. Stored as base64 data URI in user.logo_url.
+
+    Validates: JPG/PNG/WEBP, max 2MB.
+    Railway has ephemeral filesystem so we store as data URI.
+    """
+    if file.content_type not in ALLOWED_LOGO_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Allowed: JPG, PNG, WEBP.",
+        )
+
+    contents = await file.read()
+    if len(contents) > MAX_LOGO_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="File too large. Maximum 2MB.",
+        )
+
+    # Encode as data URI
+    b64 = base64.b64encode(contents).decode("ascii")
+    data_uri = "data:%s;base64,%s" % (file.content_type, b64)
+
+    current_user.logo_url = data_uri
+    current_user.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "message": "Logo uploaded successfully",
+        "logo_url": data_uri[:50] + "...",  # Truncated for response
+    }

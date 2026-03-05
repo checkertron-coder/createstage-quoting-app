@@ -247,6 +247,27 @@ const API = {
         return data;
     },
 
+    async updateCustomer(sessionId, customerData) {
+        const resp = await this._fetch(`/session/${sessionId}/customer`, {
+            method: 'PATCH',
+            body: JSON.stringify(customerData),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Customer update failed');
+        return data;
+    },
+
+    async uploadLogo(formData) {
+        const resp = await fetch(`${this.base}/auth/profile/logo`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${this._accessToken}` },
+            body: formData,
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Logo upload failed');
+        return data;
+    },
+
     getPdfUrl(quoteId, mode) {
         let url = `${this.base}/quotes/${quoteId}/pdf?token=${this._accessToken}`;
         if (mode) url += `&mode=${mode}`;

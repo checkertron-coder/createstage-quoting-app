@@ -508,6 +508,32 @@ const QuoteFlow = {
                     </div>
                 </div>
 
+                <div class="customer-section">
+                    <h3 class="section-title">Customer Information</h3>
+                    <div class="form-grid">
+                        <label class="form-label">
+                            Name
+                            <input type="text" id="customer-name" placeholder="Client name" value="${(pq._customer && pq._customer.name) || ''}">
+                        </label>
+                        <label class="form-label">
+                            Phone
+                            <input type="text" id="customer-phone" placeholder="(555) 123-4567" value="${(pq._customer && pq._customer.phone) || ''}">
+                        </label>
+                        <label class="form-label">
+                            Email
+                            <input type="email" id="customer-email" placeholder="client@example.com" value="${(pq._customer && pq._customer.email) || ''}">
+                        </label>
+                        <label class="form-label">
+                            Address
+                            <input type="text" id="customer-address" placeholder="123 Main St, City, ST 12345" value="${(pq._customer && pq._customer.address) || ''}">
+                        </label>
+                    </div>
+                    <div class="customer-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.saveCustomer()">Save Customer Info</button>
+                        <span id="customer-save-status" class="save-status"></span>
+                    </div>
+                </div>
+
                 ${this._renderValidationWarnings(pq)}
 
                 ${pq.job_description ? `
@@ -877,8 +903,46 @@ const QuoteFlow = {
         }
     },
 
+    async saveCustomer() {
+        if (!this.sessionId) return;
+        const data = {
+            name: (document.getElementById('customer-name') || {}).value || '',
+            phone: (document.getElementById('customer-phone') || {}).value || '',
+            email: (document.getElementById('customer-email') || {}).value || '',
+            address: (document.getElementById('customer-address') || {}).value || '',
+        };
+        const statusEl = document.getElementById('customer-save-status');
+        try {
+            await API.updateCustomer(this.sessionId, data);
+            if (this.pricedQuote) {
+                this.pricedQuote._customer = data;
+                this.pricedQuote.client_name = data.name;
+            }
+            if (statusEl) {
+                statusEl.textContent = 'Saved';
+                statusEl.className = 'save-status save-ok';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.textContent = 'Failed to save';
+                statusEl.className = 'save-status save-err';
+            }
+        }
+    },
+
     downloadPdf(mode) {
         if (!this.quoteId) return;
+        // For client PDF, require customer name
+        if (mode === 'client') {
+            const nameInput = document.getElementById('customer-name');
+            if (nameInput && !nameInput.value.trim()) {
+                nameInput.focus();
+                nameInput.style.borderColor = 'var(--error)';
+                setTimeout(() => { nameInput.style.borderColor = ''; }, 3000);
+                return;
+            }
+        }
         // Open PDF in new tab with auth token as query param
         const url = API.getPdfUrl(this.quoteId, mode || null);
         window.open(url, '_blank');

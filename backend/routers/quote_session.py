@@ -54,6 +54,13 @@ class AnswerRequest(BaseModel):
     photo_url: Optional[str] = None
 
 
+class CustomerInfoRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+
+
 # --- Endpoints ---
 
 @router.post("/start")
@@ -810,6 +817,62 @@ def review_session(
     return {
         "session_id": session_id,
         "review": review_result,
+    }
+
+
+@router.patch("/{session_id}/customer")
+def update_customer_info(
+    session_id: str,
+    request: CustomerInfoRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Update customer information for a quote session.
+
+    Stores in session.params_json["_customer"].
+    Also updates quote.outputs_json["_customer"] and client_name if Quote exists.
+    """
+    session = db.query(models.QuoteSession).filter(
+        models.QuoteSession.id == session_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    from sqlalchemy.orm.attributes import flag_modified
+
+    customer_data = {
+        "name": request.name or "",
+        "phone": request.phone or "",
+        "email": request.email or "",
+        "address": request.address or "",
+    }
+
+    # Store in session params
+    current_params = dict(session.params_json or {})
+    current_params["_customer"] = customer_data
+    session.params_json = current_params
+    session.updated_at = datetime.utcnow()
+    flag_modified(session, "params_json")
+
+    # Also update Quote record if it exists
+    quote = db.query(models.Quote).filter(
+        models.Quote.session_id == session_id,
+    ).first()
+    if quote and quote.outputs_json:
+        outputs = dict(quote.outputs_json)
+        outputs["_customer"] = customer_data
+        outputs["client_name"] = customer_data.get("name", "")
+        quote.outputs_json = outputs
+        flag_modified(quote, "outputs_json")
+
+    db.commit()
+
+    return {
+        "session_id": session_id,
+        "customer": customer_data,
     }
 
 

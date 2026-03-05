@@ -19,10 +19,14 @@ All 10 sections always present:
 White-labeled: uses shop name/logo from user profile, no CreateStage branding.
 """
 
+import base64
+import logging
 from datetime import datetime
 from io import BytesIO
 
 from fpdf import FPDF
+
+logger = logging.getLogger(__name__)
 
 
 # --- Job type display names ---
@@ -214,6 +218,57 @@ def _safe(text: str) -> str:
     )
 
 
+def generate_client_scope(job_type, fields, job_description=""):
+    """
+    Generate a customer-friendly scope of work description using AI.
+
+    Returns 2-3 paragraphs suitable for a client-facing proposal.
+    Falls back to job description if AI is unavailable.
+    """
+    try:
+        from .claude_client import call_fast
+    except ImportError:
+        return job_description or ""
+
+    jt_display = JOB_TYPE_NAMES.get(job_type, job_type.replace("_", " ").title())
+    summary = generate_job_summary(job_type, fields)
+
+    prompt = (
+        "You are writing the Scope of Work section for a client-facing metal "
+        "fabrication proposal. Write 2-3 short paragraphs in professional but "
+        "approachable language. Describe what the client is getting, not how "
+        "the shop will build it. Do NOT mention specific steel profiles, gauges, "
+        "weld processes, or shop labor hours. Focus on the finished product, "
+        "its features, and the value to the client.\n\n"
+        "Job type: %s\n"
+        "Summary: %s\n" % (jt_display, summary)
+    )
+    if job_description:
+        prompt += "Original description: %s\n" % job_description[:500]
+
+    # Add key specs
+    spec_keys = ["clear_width", "height", "linear_footage", "finish",
+                 "infill_type", "has_motor", "installation"]
+    specs = []
+    for k in spec_keys:
+        v = fields.get(k, "")
+        if v:
+            specs.append("%s: %s" % (k.replace("_", " "), v))
+    if specs:
+        prompt += "Specs: %s\n" % ", ".join(specs)
+
+    prompt += "\nWrite the scope now. No heading, no bullet points — just paragraphs."
+
+    try:
+        result = call_fast(prompt, json_mode=False)
+        if result and len(result.strip()) > 20:
+            return result.strip()
+    except Exception:
+        logger.debug("AI scope generation failed — using fallback")
+
+    return job_description or summary
+
+
 class QuotePDF(FPDF):
     """Custom PDF class for professional quote documents."""
 
@@ -298,6 +353,10 @@ def generate_quote_pdf(
     pw = pdf.w - pdf.l_margin - pdf.r_margin  # printable width
 
     # ── SECTION 1: Header ──
+    # Render logo in top-right corner if available
+    logo_url = user_profile.get("logo_url", "")
+    _render_logo(pdf, logo_url, max_w=40, max_h=20)
+
     pdf.set_font("Helvetica", "B", 20)
     pdf.cell(0, 10, shop_name, new_x="LMARGIN", new_y="NEXT")
 
@@ -324,11 +383,26 @@ def generate_quote_pdf(
     pdf.cell(0, 5, f"Date: {date_str}", new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
 
-    # Client name
-    client = priced_quote.get("client_name")
-    if client:
+    # Client / customer info
+    customer = priced_quote.get("_customer", {})
+    client_name = customer.get("name", "") or priced_quote.get("client_name", "")
+    if client_name:
         pdf.ln(2)
-        pdf.cell(0, 5, f"Prepared for: {client}", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 5, "Prepared for: %s" % client_name, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 9)
+        addr = customer.get("address", "")
+        if addr:
+            pdf.cell(0, 5, addr, new_x="LMARGIN", new_y="NEXT")
+        contact_parts = []
+        cphone = customer.get("phone", "")
+        cemail = customer.get("email", "")
+        if cphone:
+            contact_parts.append(cphone)
+        if cemail:
+            contact_parts.append(cemail)
+        if contact_parts:
+            pdf.cell(0, 5, " | ".join(contact_parts), new_x="LMARGIN", new_y="NEXT")
 
     # Job summary
     pdf.ln(4)
@@ -640,7 +714,7 @@ def generate_quote_pdf(
     pdf.set_text_color(100, 100, 100)
     pdf.set_x(pdf.l_margin)
     pdf.cell(pw, 4, "This quote is valid for 7 days from the date above.", new_x="LMARGIN", new_y="NEXT")
-    pdf.multi_cell(pw, 4, "Payment terms: 50% of labor + 100% of materials & consumables due at signing. Remaining 50% of labor due upon completion.")
+    pdf.multi_cell(pw, 4, "Payment terms: 50% deposit due at signing. Remaining 50% due upon completion.")
     pdf.set_text_color(0, 0, 0)
 
     return pdf.output()
@@ -650,6 +724,7 @@ def generate_client_pdf(
     priced_quote: dict,
     user_profile: dict,
     inputs: dict = None,
+    client_scope: str = None,
 ) -> bytes:
     """
     Generate a client-facing PDF quote document.
@@ -667,6 +742,7 @@ def generate_client_pdf(
         priced_quote: PricedQuote dict (from outputs_json)
         user_profile: User profile dict (shop_name, etc.)
         inputs: QuoteParams dict (from inputs_json) — for job summary
+        client_scope: AI-generated scope text (optional)
 
     Returns:
         PDF bytes
@@ -685,6 +761,10 @@ def generate_client_pdf(
     pw = pdf.w - pdf.l_margin - pdf.r_margin  # printable width
 
     # ── SECTION 1: Cover Header ──
+    # Render logo in top-right corner if available
+    logo_url = user_profile.get("logo_url", "")
+    _render_logo(pdf, logo_url, max_w=40, max_h=20)
+
     pdf.set_font("Helvetica", "B", 22)
     pdf.cell(0, 12, shop_name, new_x="LMARGIN", new_y="NEXT")
 
@@ -711,11 +791,26 @@ def generate_client_pdf(
     pdf.cell(0, 5, "Date: %s" % date_str, new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
 
-    # Client name
-    client = priced_quote.get("client_name")
-    if client:
+    # Client / customer info
+    customer = priced_quote.get("_customer", {})
+    client_name = customer.get("name", "") or priced_quote.get("client_name", "")
+    if client_name:
         pdf.ln(2)
-        pdf.cell(0, 5, "Prepared for: %s" % client, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(0, 5, "Prepared for: %s" % client_name, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 9)
+        addr = customer.get("address", "")
+        if addr:
+            pdf.cell(0, 5, addr, new_x="LMARGIN", new_y="NEXT")
+        contact_parts = []
+        cphone = customer.get("phone", "")
+        cemail = customer.get("email", "")
+        if cphone:
+            contact_parts.append(cphone)
+        if cemail:
+            contact_parts.append(cemail)
+        if contact_parts:
+            pdf.cell(0, 5, " | ".join(contact_parts), new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(8)
 
@@ -729,21 +824,24 @@ def generate_client_pdf(
     pdf.set_font("Helvetica", "B", 11)
     pdf.cell(0, 7, jt_display, new_x="LMARGIN", new_y="NEXT")
 
-    # Job summary
-    summary = generate_job_summary(job_type, fields)
-    pdf.set_font("Helvetica", "", 10)
-    pdf.multi_cell(0, 5, _safe(summary))
+    # Scope text — use AI-generated scope if available, else job summary
+    if client_scope:
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 5, _safe(client_scope))
+    else:
+        summary = generate_job_summary(job_type, fields)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 5, _safe(summary))
 
-    # Job description (user's original text)
-    job_desc = priced_quote.get("job_description", "") or fields.get("description", "")
-    if job_desc:
-        pdf.ln(2)
-        pdf.set_font("Helvetica", "I", 9)
-        pdf.set_text_color(60, 60, 60)
-        # Truncate long descriptions for client view
-        desc_text = job_desc[:500] + ("..." if len(job_desc) > 500 else "")
-        pdf.multi_cell(0, 4.5, _safe(desc_text))
-        pdf.set_text_color(0, 0, 0)
+        # Job description (user's original text)
+        job_desc = priced_quote.get("job_description", "") or fields.get("description", "")
+        if job_desc:
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "I", 9)
+            pdf.set_text_color(60, 60, 60)
+            desc_text = job_desc[:500] + ("..." if len(job_desc) > 500 else "")
+            pdf.multi_cell(0, 4.5, _safe(desc_text))
+            pdf.set_text_color(0, 0, 0)
 
     # Key specs summary
     _render_key_specs(pdf, job_type, fields)
@@ -751,17 +849,25 @@ def generate_client_pdf(
     pdf.ln(6)
 
     # ── SECTION 3: Price Summary ──
+    # Distribute markup into category totals so client never sees "Markup" line
     pdf.section_header("PRICE SUMMARY")
     pdf.set_font("Helvetica", "", 10)
 
+    markup_pct = priced_quote.get("selected_markup_pct", 0)
+    multiplier = 1 + markup_pct / 100.0
+
+    mat_hw_sub = round(
+        (priced_quote.get("material_subtotal", 0)
+         + priced_quote.get("hardware_subtotal", 0)
+         + priced_quote.get("consumable_subtotal", 0)) * multiplier, 2
+    )
+    labor_sub = round(priced_quote.get("labor_subtotal", 0) * multiplier, 2)
+    fin_sub = round(priced_quote.get("finishing_subtotal", 0) * multiplier, 2)
+
     totals = [
-        ("Materials & Hardware", round(
-            priced_quote.get("material_subtotal", 0)
-            + priced_quote.get("hardware_subtotal", 0)
-            + priced_quote.get("consumable_subtotal", 0), 2
-        )),
-        ("Labor", priced_quote.get("labor_subtotal", 0)),
-        ("Finishing", priced_quote.get("finishing_subtotal", 0)),
+        ("Materials & Hardware", mat_hw_sub),
+        ("Labor", labor_sub),
+        ("Finishing", fin_sub),
     ]
     for label, amount in totals:
         if amount > 0:
@@ -769,26 +875,7 @@ def generate_client_pdf(
             pdf.cell(60, 7, _fmt(amount), align="R")
             pdf.ln()
 
-    # Subtotal
-    subtotal = priced_quote.get("subtotal", 0)
-    pdf.set_draw_color(200, 200, 200)
-    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-    pdf.ln(1)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(130, 7, "  Subtotal")
-    pdf.cell(60, 7, _fmt(subtotal), align="R")
-    pdf.ln()
-
-    # Markup
-    markup_pct = priced_quote.get("selected_markup_pct", 0)
-    if markup_pct > 0:
-        markup_amount = round(subtotal * markup_pct / 100.0, 2)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(130, 7, "  Markup (%d%%)" % markup_pct)
-        pdf.cell(60, 7, _fmt(markup_amount), align="R")
-        pdf.ln()
-
-    # Grand total
+    # Grand total (already includes markup)
     total = priced_quote.get("total", 0)
     pdf.ln(2)
     pdf.set_fill_color(45, 55, 72)
@@ -829,7 +916,7 @@ def generate_client_pdf(
 
     terms = [
         "This proposal is valid for 7 days from the date above.",
-        "Payment: 50%% of labor + 100%% of materials due at signing. Remaining 50%% of labor due upon completion.",
+        "50% deposit due at signing. Remaining 50% due upon completion.",
         "Timeline will be confirmed upon acceptance of this proposal.",
         "Any changes to the scope of work may result in additional charges.",
         "All work performed to industry standard practices.",
@@ -849,6 +936,35 @@ def generate_client_pdf(
     pdf.ln()
 
     return pdf.output()
+
+
+def _render_logo(pdf, logo_url, max_w=40, max_h=20):
+    """
+    Render a logo image in the top-right corner of the page.
+
+    Decodes a data URI (base64) into BytesIO and renders with pdf.image().
+    Gracefully does nothing if the logo can't be decoded.
+    """
+    if not logo_url or not logo_url.startswith("data:"):
+        return
+    try:
+        # Parse data URI: data:image/png;base64,XXXXX
+        header, b64_data = logo_url.split(",", 1)
+        # Determine image type
+        mime = header.split(":")[1].split(";")[0]
+        ext_map = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
+        img_type = ext_map.get(mime, "PNG")
+
+        raw = base64.b64decode(b64_data)
+        img_io = BytesIO(raw)
+
+        # Save current position
+        x_start = pdf.w - pdf.r_margin - max_w
+        y_start = pdf.t_margin
+
+        pdf.image(img_io, x=x_start, y=y_start, w=max_w, h=0, type=img_type)
+    except Exception:
+        pass  # Logo rendering failure should never block PDF generation
 
 
 def _render_key_specs(pdf, job_type, fields):
@@ -914,44 +1030,50 @@ def _render_key_specs(pdf, job_type, fields):
 
 
 def _build_included_list(priced_quote, fields):
-    """Build a human-readable list of what's included in the quote."""
+    """Build a customer-friendly list of what's included in the quote."""
     included = []
+    job_type = priced_quote.get("job_type", "")
 
-    # Materials count
+    # Materials — customer-friendly language
     materials = priced_quote.get("materials", [])
     if materials:
-        included.append("All materials and steel as specified (%d items)" % len(materials))
+        included.append("All structural steel and materials")
 
-    # Hardware
+    # Hardware — job-type-specific items
     hardware = priced_quote.get("hardware", [])
     if hardware:
-        hw_descs = [h.get("description", "") for h in hardware[:3]]
-        hw_str = ", ".join(d for d in hw_descs if d)
-        if len(hardware) > 3:
-            hw_str += ", and %d more" % (len(hardware) - 3)
-        included.append("Hardware: %s" % hw_str)
+        included.append("All required hardware and mounting components")
 
     # Consumables
     consumables = priced_quote.get("consumables", [])
     if consumables:
-        included.append("Welding consumables (wire, gas, grinding discs)")
+        included.append("Welding and fabrication consumables")
 
     # Labor
     labor = priced_quote.get("labor", [])
     if labor:
-        total_hours = sum(p.get("hours", 0) for p in labor)
-        included.append("Shop labor (%.1f hours)" % total_hours)
+        included.append("Complete shop fabrication and assembly")
 
     # Finishing
     finishing = priced_quote.get("finishing", {})
     method = finishing.get("method", "raw")
     if method and method != "raw":
         method_display = method.replace("_", " ").title()
-        included.append("%s finish" % method_display)
+        included.append("%s finish applied" % method_display)
+
+    # Job-type-specific inclusions
+    if job_type in ("cantilever_gate", "swing_gate"):
+        has_motor = fields.get("has_motor", "")
+        if "yes" in str(has_motor).lower():
+            included.append("Electric gate operator")
+    elif job_type in ("straight_railing", "stair_railing", "balcony_railing"):
+        included.append("Handrail and infill as specified")
+    elif job_type == "ornamental_fence":
+        included.append("Fence panels and posts as specified")
 
     # Installation
     install = fields.get("installation", "")
     if install and "install" in str(install).lower():
-        included.append("Site installation and cleanup")
+        included.append("Delivery, site installation, and cleanup")
 
     return included

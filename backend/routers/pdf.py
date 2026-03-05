@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import decode_token, get_current_user
 from ..database import get_db
-from ..pdf_generator import generate_quote_pdf, generate_client_pdf
+from ..pdf_generator import generate_quote_pdf, generate_client_pdf, generate_client_scope
 
 router = APIRouter(prefix="/quotes", tags=["pdf"])
 
@@ -98,7 +98,29 @@ def download_pdf(
 
     # Generate PDF (convert bytearray to bytes for Response compatibility)
     if mode == "client":
-        pdf_bytes = bytes(generate_client_pdf(outputs, user_profile, inputs))
+        # Generate or retrieve cached AI scope
+        client_scope = outputs.get("_client_scope")
+        if not client_scope:
+            try:
+                fields = (inputs or {}).get("fields", {})
+                job_desc = outputs.get("job_description", "") or fields.get("description", "")
+                client_scope = generate_client_scope(
+                    outputs.get("job_type", ""),
+                    fields,
+                    job_desc,
+                )
+                # Cache in outputs_json for future requests
+                if client_scope:
+                    from sqlalchemy.orm.attributes import flag_modified
+                    outputs["_client_scope"] = client_scope
+                    quote.outputs_json = outputs
+                    flag_modified(quote, "outputs_json")
+                    db.commit()
+            except Exception:
+                client_scope = None
+
+        pdf_bytes = bytes(generate_client_pdf(outputs, user_profile, inputs,
+                                              client_scope=client_scope))
         filename = f"Proposal-{quote.quote_number or quote_id}.pdf"
     else:
         pdf_bytes = bytes(generate_quote_pdf(outputs, user_profile, inputs))

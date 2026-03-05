@@ -89,6 +89,16 @@ const Auth = {
                         Shop Address
                         <input type="text" id="prof-address" value="${u.shop_address || ''}" placeholder="123 Industrial Ave, Chicago IL">
                     </label>
+                    <div class="form-label full-width">
+                        Shop Logo
+                        <div class="logo-upload-section">
+                            ${u.logo_url ? `<img src="${u.logo_url}" class="logo-preview-img" id="logo-preview" alt="Shop logo">` : '<span id="logo-preview"></span>'}
+                            <div class="logo-upload-btn btn btn-secondary btn-sm">
+                                ${u.logo_url ? 'Change Logo' : 'Upload Logo'}
+                                <input type="file" id="logo-file-input" accept="image/jpeg,image/png,image/webp" onchange="Auth.handleLogoUpload(this)">
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="profile-actions">
@@ -158,6 +168,36 @@ const Auth = {
         try {
             this.currentUser = await API.updateProfile(data);
             App.showView('quote');
+        } catch (e) {
+            this.showError('profile-error', e.message);
+        }
+    },
+
+    async handleLogoUpload(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        if (file.size > 2 * 1024 * 1024) {
+            this.showError('profile-error', 'Logo must be under 2MB.');
+            return;
+        }
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+            await API.uploadLogo(formData);
+            // Show preview with local URL
+            const preview = document.getElementById('logo-preview');
+            if (preview) {
+                if (preview.tagName === 'IMG') {
+                    preview.src = URL.createObjectURL(file);
+                } else {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    img.className = 'logo-preview-img';
+                    img.id = 'logo-preview';
+                    img.alt = 'Shop logo';
+                    preview.replaceWith(img);
+                }
+            }
         } catch (e) {
             this.showError('profile-error', e.message);
         }

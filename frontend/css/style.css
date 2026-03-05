@@ -602,6 +602,40 @@ body {
 }
 .photo-obs-icon { font-size: 1.1rem; }
 
+/* --- Customer Section --- */
+.customer-section {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+.customer-section .form-grid { margin-bottom: 10px; }
+.customer-actions {
+    display: flex; align-items: center; gap: 10px;
+}
+.save-status { font-size: 0.8rem; }
+.save-ok { color: var(--success); }
+.save-err { color: var(--error); }
+
+/* --- Logo Upload --- */
+.logo-upload-section {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 16px;
+    margin-top: 4px;
+}
+.logo-preview-img {
+    max-width: 120px; max-height: 60px;
+    border: 1px solid var(--border);
+    border-radius: 4px; object-fit: contain;
+}
+.logo-upload-btn {
+    position: relative; overflow: hidden;
+}
+.logo-upload-btn input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+}
+
 /* --- Job Description --- */
 .job-description-section { margin-bottom: 20px; }
 .job-description-text {
