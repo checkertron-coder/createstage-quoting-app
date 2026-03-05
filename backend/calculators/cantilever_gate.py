@@ -9,10 +9,13 @@ The gate rides on roller carriages mounted to posts. The bottom rail
 sits in a guide that keeps the gate aligned.
 """
 
+import logging
 import math
 import re
 
 from .base import BaseCalculator
+
+logger = logging.getLogger(__name__)
 from .material_lookup import MaterialLookup
 
 lookup = MaterialLookup()
@@ -513,9 +516,65 @@ class CantileverGateCalculator(BaseCalculator):
         items = list(ai_result.get("items", []))
         cut_list = list(ai_result.get("cut_list", []))
 
+        # ========================================================
+        # Remove bulk aggregate items — these are Claude's raw
+        # material summaries (e.g. "sq_tube_2x2_11ga — 247.7 ft")
+        # that get replaced by the itemized pieces below.
+        # A bulk aggregate has qty=1 and description = "profile — X.X ft"
+        # ========================================================
+        items = [
+            item for item in items
+            if not (
+                item.get("quantity", 0) == 1
+                and " — " in item.get("description", "")
+                and item.get("description", "").rstrip().endswith("ft")
+            )
+        ]
+
+        # ========================================================
+        # Build itemized material items from the cut list.
+        # Each cut list entry becomes a material line item that a
+        # fabricator can read: description, profile, length, qty, price.
+        # ========================================================
+        if cut_list:
+            for cut in cut_list:
+                profile = cut.get("profile", "")
+                length_in = cut.get("length_inches", 0)
+                quantity = cut.get("quantity", 1)
+                if not profile or length_in <= 0:
+                    continue
+                length_ft = self.inches_to_feet(length_in)
+                price_ft = lookup.get_price_per_foot(profile)
+                if price_ft == 0.0:
+                    price_ft = 3.50
+                unit_price = round(length_ft * price_ft, 2)
+                desc = cut.get("description", profile)
+                items.append(self.make_material_item(
+                    description=desc,
+                    material_type=cut.get("material_type", "mild_steel"),
+                    profile=profile,
+                    length_inches=length_in,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    cut_type=cut.get("cut_type", "square"),
+                    waste_factor=0.0,
+                ))
+
         # --- Parse fields ---
         clear_width_ft = self.parse_feet(fields.get("clear_width"), default=10.0)
         height_ft = self.parse_feet(fields.get("height"), default=6.0)
+
+        # Sanity check: residential gates/fences are typically 3-12 ft.
+        # If height exceeds 12 ft, it may be a parsing error (fence length
+        # confused with gate height).
+        if height_ft > 12.0:
+            logger.warning(
+                "Gate height %.1f ft seems too tall — may be a parsing error. "
+                "height field = %r", height_ft, fields.get("height"))
+            assumptions.append(
+                "WARNING: Gate height %.1f ft exceeds typical residential range "
+                "(3-12 ft). Verify the height field is correct." % height_ft)
+
         clear_width_in = self.feet_to_inches(clear_width_ft)
         height_in = self.feet_to_inches(height_ft)
         total_gate_length_in = clear_width_in * 1.5

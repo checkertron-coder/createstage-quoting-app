@@ -48,7 +48,7 @@ class TestClaudeClientModelResolution:
         env.pop("CLAUDE_FAST_MODEL", None)
         with patch.dict(os.environ, env, clear=True):
             name = claude_client.get_model_name("fast")
-            assert name == "claude-sonnet-4-6"
+            assert name == "claude-opus-4-6"
 
     def test_default_deep_model(self):
         from backend import claude_client

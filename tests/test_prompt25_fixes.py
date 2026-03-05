@@ -163,11 +163,11 @@ class TestOverheadBeamValidation:
         from backend.calculators.cantilever_gate import CantileverGateCalculator
 
         calc = CantileverGateCalculator()
-        # AI provides wrong profile for a light gate
+        # AI provides beam via cut_list (items has bulk aggregate that gets removed)
         ai_result = {
             "items": [
                 {
-                    "description": "Overhead support beam — HSS 6×4×1/4\"",
+                    "description": "hss_6x4_0.25 — 17.0 ft",
                     "material_type": "hss_structural_tube",
                     "profile": "hss_6x4_0.25",
                     "length_inches": 204.0,
@@ -182,9 +182,11 @@ class TestOverheadBeamValidation:
                 {
                     "description": "Overhead beam",
                     "piece_name": "overhead_beam",
+                    "material_type": "hss_structural_tube",
                     "profile": "hss_6x4_0.25",
                     "length_inches": 204.0,
                     "quantity": 1,
+                    "cut_type": "square",
                 }
             ],
             "total_weight_lbs": 300.0,  # Under 800 lbs
@@ -202,9 +204,10 @@ class TestOverheadBeamValidation:
             "infill_type": "Pickets (vertical bars)",
         }
         result = calc._post_process_ai_result(ai_result, fields, [])
-        # AI included overhead beam — don't add another, but correct profile
+        # Beam from cut_list should exist with corrected profile
         beam_items = [i for i in result["items"]
-                      if "overhead" in i["description"].lower()]
+                      if "overhead" in i["description"].lower()
+                      or i.get("profile", "").startswith("hss_")]
         assert len(beam_items) == 1
         # Profile corrected to hss_4x4 for light gate
         assert beam_items[0]["profile"] == "hss_4x4_0.25"

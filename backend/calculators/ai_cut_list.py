@@ -564,6 +564,24 @@ Return ONLY valid JSON — an array of objects:
                 except (ValueError, IndexError):
                     pass
 
+            # Gate height constraint — prevent confusion with fence lengths
+            height_str = fields.get("height", fields.get("clear_height", ""))
+            if height_str:
+                try:
+                    h_ft = float(str(height_str).split()[0])
+                    h_in = h_ft * 12
+                    blocks.append(
+                        "GATE HEIGHT (HARD CONSTRAINT — DO NOT CHANGE):\n"
+                        "  Gate height = %.1f ft (%.0f\")\n"
+                        "  This is the HEIGHT of the gate and fence, NOT a length measurement.\n"
+                        "  Do NOT confuse fence section lengths (e.g. 15 ft, 13 ft) with gate height.\n"
+                        "  Picket length = height minus 2\" (for ground clearance).\n"
+                        "  Vertical stile length = height minus rail widths."
+                        % (h_ft, h_in)
+                    )
+                except (ValueError, IndexError):
+                    pass
+
             # Picket material constraint
             infill_type = fields.get("infill_type", "")
             if "Picket" in str(infill_type):

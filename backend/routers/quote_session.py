@@ -484,6 +484,7 @@ def estimate_labor(
             if session.job_type == "cantilever_gate":
                 enforced_dims = {}
                 cw = build_fields.get("clear_width", "")
+                ht = build_fields.get("height", "")
                 if cw:
                     try:
                         cw_val = float(str(cw).split()[0])
@@ -491,6 +492,12 @@ def estimate_labor(
                         enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
                         enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
                         enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
+                    except (ValueError, IndexError):
+                        pass
+                if ht:
+                    try:
+                        ht_val = float(str(ht).split()[0])
+                        enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
                     except (ValueError, IndexError):
                         pass
 
