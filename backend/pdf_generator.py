@@ -644,3 +644,314 @@ def generate_quote_pdf(
     pdf.set_text_color(0, 0, 0)
 
     return pdf.output()
+
+
+def generate_client_pdf(
+    priced_quote: dict,
+    user_profile: dict,
+    inputs: dict = None,
+) -> bytes:
+    """
+    Generate a client-facing PDF quote document.
+
+    Shows only what the client needs to see:
+    1. Cover / header with shop branding
+    2. Scope of Work summary
+    3. Price Summary (category totals, not line items)
+    4. What's Included / What's Not Included
+    5. Terms & Conditions
+
+    No cut lists, no labor breakdowns, no fabrication sequences.
+
+    Args:
+        priced_quote: PricedQuote dict (from outputs_json)
+        user_profile: User profile dict (shop_name, etc.)
+        inputs: QuoteParams dict (from inputs_json) — for job summary
+
+    Returns:
+        PDF bytes
+    """
+    shop_name = user_profile.get("shop_name") or "Quote"
+    shop_address = user_profile.get("shop_address") or ""
+    shop_phone = user_profile.get("shop_phone") or ""
+    shop_email = user_profile.get("shop_email") or ""
+
+    shop_info_parts = [p for p in [shop_address, shop_phone, shop_email] if p]
+    shop_info = " | ".join(shop_info_parts)
+
+    pdf = QuotePDF(shop_name=shop_name, shop_info=shop_info)
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pw = pdf.w - pdf.l_margin - pdf.r_margin  # printable width
+
+    # ── SECTION 1: Cover Header ──
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.cell(0, 12, shop_name, new_x="LMARGIN", new_y="NEXT")
+
+    if shop_info:
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 5, shop_info, new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+
+    pdf.ln(6)
+
+    # Quote number and date
+    quote_number = priced_quote.get("quote_number") or "Q-%s" % priced_quote.get("quote_id", "?")
+    created = priced_quote.get("created_at", "")
+    try:
+        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        date_str = dt.strftime("%B %d, %Y")
+    except (ValueError, AttributeError):
+        date_str = datetime.utcnow().strftime("%B %d, %Y")
+
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "PROPOSAL #%s" % quote_number, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(0, 5, "Date: %s" % date_str, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
+
+    # Client name
+    client = priced_quote.get("client_name")
+    if client:
+        pdf.ln(2)
+        pdf.cell(0, 5, "Prepared for: %s" % client, new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(8)
+
+    # ── SECTION 2: Scope of Work ──
+    job_type = priced_quote.get("job_type", "")
+    jt_display = JOB_TYPE_NAMES.get(job_type, job_type.replace("_", " ").title())
+    fields = (inputs or {}).get("fields", {})
+
+    pdf.section_header("SCOPE OF WORK")
+
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, jt_display, new_x="LMARGIN", new_y="NEXT")
+
+    # Job summary
+    summary = generate_job_summary(job_type, fields)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.multi_cell(0, 5, _safe(summary))
+
+    # Job description (user's original text)
+    job_desc = priced_quote.get("job_description", "") or fields.get("description", "")
+    if job_desc:
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(60, 60, 60)
+        # Truncate long descriptions for client view
+        desc_text = job_desc[:500] + ("..." if len(job_desc) > 500 else "")
+        pdf.multi_cell(0, 4.5, _safe(desc_text))
+        pdf.set_text_color(0, 0, 0)
+
+    # Key specs summary
+    _render_key_specs(pdf, job_type, fields)
+
+    pdf.ln(6)
+
+    # ── SECTION 3: Price Summary ──
+    pdf.section_header("PRICE SUMMARY")
+    pdf.set_font("Helvetica", "", 10)
+
+    totals = [
+        ("Materials & Hardware", round(
+            priced_quote.get("material_subtotal", 0)
+            + priced_quote.get("hardware_subtotal", 0)
+            + priced_quote.get("consumable_subtotal", 0), 2
+        )),
+        ("Labor", priced_quote.get("labor_subtotal", 0)),
+        ("Finishing", priced_quote.get("finishing_subtotal", 0)),
+    ]
+    for label, amount in totals:
+        if amount > 0:
+            pdf.cell(130, 7, "  %s" % label)
+            pdf.cell(60, 7, _fmt(amount), align="R")
+            pdf.ln()
+
+    # Subtotal
+    subtotal = priced_quote.get("subtotal", 0)
+    pdf.set_draw_color(200, 200, 200)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(1)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.cell(130, 7, "  Subtotal")
+    pdf.cell(60, 7, _fmt(subtotal), align="R")
+    pdf.ln()
+
+    # Markup
+    markup_pct = priced_quote.get("selected_markup_pct", 0)
+    if markup_pct > 0:
+        markup_amount = round(subtotal * markup_pct / 100.0, 2)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(130, 7, "  Markup (%d%%)" % markup_pct)
+        pdf.cell(60, 7, _fmt(markup_amount), align="R")
+        pdf.ln()
+
+    # Grand total
+    total = priced_quote.get("total", 0)
+    pdf.ln(2)
+    pdf.set_fill_color(45, 55, 72)
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(130, 12, "  PROJECT TOTAL", fill=True)
+    pdf.cell(60, 12, "%s  " % _fmt(total), fill=True, align="R")
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(10)
+
+    # ── SECTION 4: What's Included / Excluded ──
+    assumptions = priced_quote.get("assumptions", [])
+    exclusions = priced_quote.get("exclusions", [])
+
+    # Included — derive from the quote structure
+    pdf.section_header("WHAT'S INCLUDED")
+    pdf.set_font("Helvetica", "", 9)
+
+    included_items = _build_included_list(priced_quote, fields)
+    for item in included_items:
+        pdf.set_x(pdf.l_margin)
+        pdf.cell(pw, 5, _safe("  - %s" % item), new_x="LMARGIN", new_y="NEXT")
+
+    pdf.ln(4)
+
+    # Excluded
+    if exclusions:
+        pdf.section_header("NOT INCLUDED")
+        pdf.set_font("Helvetica", "", 9)
+        for e in exclusions:
+            pdf.set_x(pdf.l_margin)
+            pdf.cell(pw, 5, _safe("  - %s" % e), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+
+    # ── SECTION 5: Terms & Conditions ──
+    pdf.section_header("TERMS & CONDITIONS")
+    pdf.set_font("Helvetica", "", 9)
+
+    terms = [
+        "This proposal is valid for 7 days from the date above.",
+        "Payment: 50%% of labor + 100%% of materials due at signing. Remaining 50%% of labor due upon completion.",
+        "Timeline will be confirmed upon acceptance of this proposal.",
+        "Any changes to the scope of work may result in additional charges.",
+        "All work performed to industry standard practices.",
+    ]
+    for t in terms:
+        pdf.set_x(pdf.l_margin)
+        pdf.multi_cell(pw, 5, _safe("  %s" % t))
+        pdf.ln(1)
+
+    # Signature lines
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(pw / 2, 5, "Accepted by: _________________________")
+    pdf.cell(pw / 2, 5, "Date: _________________________", align="R")
+    pdf.ln(8)
+    pdf.cell(pw / 2, 5, "Print name: _________________________")
+    pdf.ln()
+
+    return pdf.output()
+
+
+def _render_key_specs(pdf, job_type, fields):
+    """Render key project specifications for client PDF scope section."""
+    specs = []
+
+    if job_type in ("cantilever_gate", "swing_gate"):
+        width = fields.get("clear_width", "")
+        height = fields.get("height", "")
+        finish = fields.get("finish", "")
+        install = fields.get("installation", "")
+        has_motor = fields.get("has_motor", "")
+        if width:
+            specs.append(("Opening Width", "%s ft" % width))
+        if height:
+            specs.append(("Height", "%s ft" % height))
+        if finish:
+            specs.append(("Finish", _short(finish)))
+        if "yes" in str(has_motor).lower():
+            specs.append(("Operator", "Electric operator included"))
+        if install and "install" in str(install).lower():
+            specs.append(("Installation", "Full site installation"))
+    elif job_type in ("straight_railing", "stair_railing", "balcony_railing"):
+        footage = fields.get("linear_footage", "")
+        height = fields.get("railing_height", "")
+        finish = fields.get("finish", "")
+        if footage:
+            specs.append(("Linear Footage", "%s ft" % footage))
+        if height:
+            specs.append(("Height", _short(height)))
+        if finish:
+            specs.append(("Finish", _short(finish)))
+    elif job_type == "ornamental_fence":
+        length = fields.get("total_length", "")
+        height = fields.get("height", "")
+        finish = fields.get("finish", "")
+        if length:
+            specs.append(("Total Length", "%s ft" % length))
+        if height:
+            specs.append(("Height", "%s ft" % height))
+        if finish:
+            specs.append(("Finish", _short(finish)))
+    else:
+        # Generic — show any dimension-like fields
+        for key in ("clear_width", "width", "height", "length", "linear_footage", "size"):
+            val = fields.get(key, "")
+            if val:
+                label = key.replace("_", " ").title()
+                specs.append((label, str(val)))
+        finish = fields.get("finish", "")
+        if finish:
+            specs.append(("Finish", _short(finish)))
+
+    if specs:
+        pdf.ln(3)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 5, "Project Specifications:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "", 9)
+        for label, value in specs:
+            pdf.cell(60, 5, "  %s:" % label)
+            pdf.cell(130, 5, value)
+            pdf.ln()
+
+
+def _build_included_list(priced_quote, fields):
+    """Build a human-readable list of what's included in the quote."""
+    included = []
+
+    # Materials count
+    materials = priced_quote.get("materials", [])
+    if materials:
+        included.append("All materials and steel as specified (%d items)" % len(materials))
+
+    # Hardware
+    hardware = priced_quote.get("hardware", [])
+    if hardware:
+        hw_descs = [h.get("description", "") for h in hardware[:3]]
+        hw_str = ", ".join(d for d in hw_descs if d)
+        if len(hardware) > 3:
+            hw_str += ", and %d more" % (len(hardware) - 3)
+        included.append("Hardware: %s" % hw_str)
+
+    # Consumables
+    consumables = priced_quote.get("consumables", [])
+    if consumables:
+        included.append("Welding consumables (wire, gas, grinding discs)")
+
+    # Labor
+    labor = priced_quote.get("labor", [])
+    if labor:
+        total_hours = sum(p.get("hours", 0) for p in labor)
+        included.append("Shop labor (%.1f hours)" % total_hours)
+
+    # Finishing
+    finishing = priced_quote.get("finishing", {})
+    method = finishing.get("method", "raw")
+    if method and method != "raw":
+        method_display = method.replace("_", " ").title()
+        included.append("%s finish" % method_display)
+
+    # Installation
+    install = fields.get("installation", "")
+    if install and "install" in str(install).lower():
+        included.append("Site installation and cleanup")
+
+    return included

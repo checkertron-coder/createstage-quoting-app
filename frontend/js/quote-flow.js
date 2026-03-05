@@ -219,7 +219,7 @@ const QuoteFlow = {
         const jobName = JOB_TYPES[data.job_type] || data.job_type;
         const completion = data.completion || {};
         const pct = Math.round((completion.completion_pct || 0));
-        const answered = completion.total_answered || 0;
+        const answered = completion.required_answered || 0;
         const total = completion.required_total || 0;
         const extracted = data.extracted_fields || {};
         const photoExtracted = data.photo_extracted_fields || {};
@@ -464,7 +464,7 @@ const QuoteFlow = {
         const fill = document.querySelector('.progress-fill');
         const text = document.querySelector('.progress-text');
         if (fill) fill.style.width = `${Math.round(completion.completion_pct || 0)}%`;
-        if (text) text.textContent = `${completion.total_answered || 0}/${completion.required_total || 0} fields`;
+        if (text) text.textContent = `${completion.required_answered || 0}/${completion.required_total || 0} fields`;
     },
 
     async _runPipeline() {
@@ -502,7 +502,8 @@ const QuoteFlow = {
                         <p class="results-meta">${JOB_TYPES[pq.job_type] || pq.job_type} &middot; ${new Date(pq.created_at).toLocaleDateString()}</p>
                     </div>
                     <div class="results-actions-top">
-                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf()">Download PDF</button>
+                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
+                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
                         <button class="btn btn-ghost btn-sm" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                     </div>
                 </div>
@@ -578,7 +579,8 @@ const QuoteFlow = {
                 ` : ''}
 
                 <div class="results-footer">
-                    <button class="btn btn-primary" onclick="QuoteFlow.downloadPdf()">Download PDF</button>
+                    <button class="btn btn-primary" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
+                    <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                 </div>
             </div>
@@ -875,10 +877,10 @@ const QuoteFlow = {
         }
     },
 
-    downloadPdf() {
+    downloadPdf(mode) {
         if (!this.quoteId) return;
         // Open PDF in new tab with auth token as query param
-        const url = API.getPdfUrl(this.quoteId);
+        const url = API.getPdfUrl(this.quoteId, mode || null);
         window.open(url, '_blank');
     },
 

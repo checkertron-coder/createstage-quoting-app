@@ -247,7 +247,9 @@ const API = {
         return data;
     },
 
-    getPdfUrl(quoteId) {
-        return `${this.base}/quotes/${quoteId}/pdf?token=${this._accessToken}`;
+    getPdfUrl(quoteId, mode) {
+        let url = `${this.base}/quotes/${quoteId}/pdf?token=${this._accessToken}`;
+        if (mode) url += `&mode=${mode}`;
+        return url;
     },
 };

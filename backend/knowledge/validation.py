@@ -272,6 +272,7 @@ VALID_PROFILES = {
     "round_bar_0.5", "round_bar_0.625",
     "channel_4x5.4", "channel_6x8.2",
     "pipe_3_sch40", "pipe_4_sch40", "pipe_6_sch40",
+    "hss_4x4_0.25", "hss_6x4_0.25",
     "sheet_11ga", "sheet_14ga", "sheet_16ga",
     "plate_0.25", "plate_0.375", "plate_0.5",
 }

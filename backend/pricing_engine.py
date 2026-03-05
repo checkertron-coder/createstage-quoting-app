@@ -109,6 +109,10 @@ class PricingEngine:
             from .knowledge.materials import get_stock_length
             for item in materials:
                 profile = item.get("profile", "")
+                mat_type = item.get("material_type", "")
+                # Skip non-steel materials (concrete, etc.) from stock order
+                if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+                    continue
                 sl = get_stock_length(profile)
                 if sl is not None:
                     item["stock_length_ft"] = sl

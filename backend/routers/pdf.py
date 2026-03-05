@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import decode_token, get_current_user
 from ..database import get_db
-from ..pdf_generator import generate_quote_pdf
+from ..pdf_generator import generate_quote_pdf, generate_client_pdf
 
 router = APIRouter(prefix="/quotes", tags=["pdf"])
 
@@ -45,6 +45,7 @@ def _get_user_from_token_param(
 def download_pdf(
     quote_id: int,
     token: Optional[str] = Query(None),
+    mode: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
     """
@@ -96,9 +97,12 @@ def download_pdf(
     inputs = quote.inputs_json or {}
 
     # Generate PDF (convert bytearray to bytes for Response compatibility)
-    pdf_bytes = bytes(generate_quote_pdf(outputs, user_profile, inputs))
-
-    filename = f"Quote-{quote.quote_number or quote_id}.pdf"
+    if mode == "client":
+        pdf_bytes = bytes(generate_client_pdf(outputs, user_profile, inputs))
+        filename = f"Proposal-{quote.quote_number or quote_id}.pdf"
+    else:
+        pdf_bytes = bytes(generate_quote_pdf(outputs, user_profile, inputs))
+        filename = f"Quote-{quote.quote_number or quote_id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
