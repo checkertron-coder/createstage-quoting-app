@@ -450,6 +450,25 @@ def generate_quote_pdf(
     material_sub = priced_quote.get("material_subtotal", 0)
     pdf.subtotal_row("Material Subtotal", material_sub)
 
+    # ── SECTION 2B: Stock Order Summary ──
+    materials_summary = priced_quote.get("materials_summary", [])
+    if materials_summary:
+        pdf.section_header("STOCK ORDER SUMMARY")
+        stock_cols = [("Profile", 55), ("Total Length", 30), ("Sticks", 20),
+                      ("Stock Length", 35), ("Remainder", 50)]
+        stock_widths = [c[1] for c in stock_cols]
+        pdf.table_header(stock_cols)
+
+        for ms in materials_summary:
+            profile = _safe(str(ms.get("profile", "")).replace("_", " ")[:28])
+            total_ft = "%.1f ft" % ms.get("total_length_ft", 0)
+            sticks = str(ms.get("sticks_needed", 0))
+            stock_ft = "%d ft" % ms.get("stock_length_ft", 20)
+            remainder = "%.1f ft" % ms.get("remainder_ft", 0)
+            pdf.table_row([profile, total_ft, sticks, stock_ft, remainder],
+                          stock_widths)
+        pdf.ln(4)
+
     # ── SECTION 3: Cut List ──
     pdf.section_header("CUT LIST")
     cut_cols = [("Piece", 60), ("Material", 40), ("Length", 30), ("Qty", 20), ("Cut Type", 40)]
@@ -457,13 +476,18 @@ def generate_quote_pdf(
     pdf.table_header(cut_cols)
 
     for item in materials:
+        # Skip concrete/other from cut list display
+        mat_type = item.get("material_type", "")
+        profile = item.get("profile", "")
+        if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+            continue
         desc = item.get("description", "")[:30]
-        profile = item.get("profile", "")[:20]
+        profile_short = profile[:20]
         length = item.get("length_inches")
         qty = item.get("quantity", 1)
         cut = item.get("cut_type", "square")
         length_str = _fmt_length(length)
-        pdf.table_row([_safe(desc), _safe(profile), length_str, str(qty), _safe(cut)], cut_widths)
+        pdf.table_row([_safe(desc), _safe(profile_short), length_str, str(qty), _safe(cut)], cut_widths)
 
     pdf.ln(4)
 
@@ -477,8 +501,13 @@ def generate_quote_pdf(
         pdf.table_header(detail_cols)
 
         for cut in detailed_cuts:
+            # Skip concrete/other from detailed cut list display
+            cut_mat = cut.get("material_type", "")
+            cut_prof = str(cut.get("profile", ""))
+            if cut_mat in ("concrete", "other") or cut_prof.startswith("concrete"):
+                continue
             desc = _safe(str(cut.get("description", ""))[:28])
-            profile = _safe(str(cut.get("profile", ""))[:18])
+            profile = _safe(cut_prof[:18])
             length = cut.get("length_inches")
             qty = cut.get("quantity", 1)
             cut_type = _safe(str(cut.get("cut_type", "square"))[:12])
@@ -1077,3 +1106,158 @@ def _build_included_list(priced_quote, fields):
         included.append("Delivery, site installation, and cleanup")
 
     return included
+
+
+def generate_materials_pdf(priced_quote, user_profile):
+    """
+    Generate a materials-only PDF for steel distributors.
+
+    Shows shop name header, table grouped by profile
+    (Profile | Description | Length | Qty | Stock Length | Sticks).
+    NO prices — this is for ordering, not costing.
+
+    Returns PDF bytes (bytearray).
+    """
+    import math
+
+    shop_name = user_profile.get("shop_name") or "Materials Order"
+    quote_number = priced_quote.get("quote_number") or "Q-%s" % priced_quote.get("quote_id", "?")
+
+    pdf = QuotePDF(shop_name=shop_name, shop_info="")
+    pdf.alias_nb_pages()
+    pdf.add_page()
+    pw = pdf.w - pdf.l_margin - pdf.r_margin
+
+    # Header
+    logo_url = user_profile.get("logo_url", "")
+    _render_logo(pdf, logo_url, max_w=40, max_h=20)
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, shop_name, new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(0, 8, _safe("MATERIALS LIST - %s" % quote_number), new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 9)
+    job_type = priced_quote.get("job_type", "")
+    jt_display = JOB_TYPE_NAMES.get(job_type, job_type.replace("_", " ").title())
+    pdf.cell(0, 5, "Job: %s" % jt_display, new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    # Materials table
+    pdf.section_header("CUT LIST")
+    cols = [("Profile", 50), ("Description", 55), ("Length", 25),
+            ("Qty", 15), ("Stock", 22), ("Sticks", 23)]
+    widths = [c[1] for c in cols]
+    pdf.table_header(cols)
+
+    try:
+        from .knowledge.materials import get_stock_length
+    except Exception:
+        get_stock_length = lambda p: 20  # noqa: E731
+
+    materials = priced_quote.get("materials", [])
+    for item in materials:
+        mat_type = item.get("material_type", "")
+        profile = item.get("profile", "")
+        if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+            continue
+        stock_ft = get_stock_length(profile)
+        if stock_ft is None:
+            stock_ft = 0
+
+        length_in = item.get("length_inches", 0)
+        qty = item.get("quantity", 1)
+        total_ft = (length_in * qty) / 12.0
+        sticks = int(math.ceil(total_ft / stock_ft)) if stock_ft > 0 else 0
+
+        desc = _safe(item.get("description", "")[:28])
+        prof_short = _safe(profile[:25])
+        length_str = _fmt_length(length_in)
+        stock_str = "%d ft" % stock_ft if stock_ft else "-"
+        pdf.table_row(
+            [prof_short, desc, length_str, str(qty), stock_str, str(sticks)],
+            widths,
+        )
+
+    # Stock order summary
+    summary = priced_quote.get("materials_summary", [])
+    if summary:
+        pdf.ln(4)
+        pdf.section_header("STOCK ORDER SUMMARY")
+        sum_cols = [("Profile", 60), ("Total Length", 35), ("Sticks", 20),
+                    ("Stock Length", 35), ("Remainder", 40)]
+        sum_widths = [c[1] for c in sum_cols]
+        pdf.table_header(sum_cols)
+        for ms in summary:
+            pdf.table_row([
+                _safe(str(ms.get("profile", "")).replace("_", " ")[:30]),
+                "%.1f ft" % ms.get("total_length_ft", 0),
+                str(ms.get("sticks_needed", 0)),
+                "%d ft" % ms.get("stock_length_ft", 20),
+                "%.1f ft" % ms.get("remainder_ft", 0),
+            ], sum_widths)
+
+    return pdf.output()
+
+
+def generate_materials_csv(priced_quote):
+    """
+    Generate a CSV materials list for steel ordering.
+
+    Columns: Profile, Description, Length (in), Qty, Stock Length (ft), Sticks Needed.
+    Skips concrete/other. Returns bytes.
+    """
+    import csv
+    import io
+    import math
+
+    try:
+        from .knowledge.materials import get_stock_length
+    except Exception:
+        get_stock_length = lambda p: 20  # noqa: E731
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Profile", "Description", "Length (in)", "Qty",
+                     "Stock Length (ft)", "Sticks Needed"])
+
+    materials = priced_quote.get("materials", [])
+    for item in materials:
+        mat_type = item.get("material_type", "")
+        profile = item.get("profile", "")
+        if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+            continue
+        stock_ft = get_stock_length(profile)
+        if stock_ft is None:
+            stock_ft = 0
+
+        length_in = item.get("length_inches", 0)
+        qty = item.get("quantity", 1)
+        total_ft = (length_in * qty) / 12.0
+        sticks = int(math.ceil(total_ft / stock_ft)) if stock_ft > 0 else 0
+
+        writer.writerow([
+            profile,
+            item.get("description", ""),
+            "%.1f" % length_in,
+            qty,
+            stock_ft if stock_ft else "",
+            sticks if sticks else "",
+        ])
+
+    # Add summary section
+    summary = priced_quote.get("materials_summary", [])
+    if summary:
+        writer.writerow([])
+        writer.writerow(["--- STOCK ORDER SUMMARY ---"])
+        writer.writerow(["Profile", "Total Length (ft)", "Sticks Needed",
+                         "Stock Length (ft)", "Remainder (ft)"])
+        for ms in summary:
+            writer.writerow([
+                ms.get("profile", ""),
+                "%.1f" % ms.get("total_length_ft", 0),
+                ms.get("sticks_needed", 0),
+                ms.get("stock_length_ft", 0),
+                "%.1f" % ms.get("remainder_ft", 0),
+            ])
+
+    return output.getvalue().encode("utf-8")

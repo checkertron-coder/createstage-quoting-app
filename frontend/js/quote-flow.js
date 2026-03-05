@@ -504,6 +504,8 @@ const QuoteFlow = {
                     <div class="results-actions-top">
                         <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
                         <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
+                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('materials')">Materials PDF</button>
+                        <button class="btn btn-ghost btn-sm" onclick="QuoteFlow.downloadCsv()">Materials CSV</button>
                         <button class="btn btn-ghost btn-sm" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                     </div>
                 </div>
@@ -607,6 +609,8 @@ const QuoteFlow = {
                 <div class="results-footer">
                     <button class="btn btn-primary" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
+                    <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('materials')">Materials PDF</button>
+                    <button class="btn btn-ghost" onclick="QuoteFlow.downloadCsv()">Materials CSV</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                 </div>
             </div>
@@ -945,6 +949,13 @@ const QuoteFlow = {
         }
         // Open PDF in new tab with auth token as query param
         const url = API.getPdfUrl(this.quoteId, mode || null);
+        window.open(url, '_blank');
+    },
+
+    downloadCsv() {
+        if (!this.quoteId) return;
+        // CSV downloads as a file — use same URL pattern with materials-csv mode
+        const url = API.getPdfUrl(this.quoteId, 'materials-csv');
         window.open(url, '_blank');
     },
 

@@ -295,6 +295,33 @@ def calculate_labor_hours(job_type, cut_list, fields):
     )
     if uses_punched_channel and picket_count > 0:
         fit_tack = max(1.0, fit_tack * 0.65)  # 35% reduction
+        # Grind fix: punched channel pickets sit in pre-punched holes,
+        # grind is per channel run not per picket
+        channel_runs = sum(
+            int(item.get("quantity", 1)) for item in cut_list
+            if "punched_channel" in str(item.get("profile", ""))
+        )
+        picket_grind_min = picket_count * 2  # what was counted (2 joints/picket × 1 min each)
+        channel_grind_min = channel_runs * 4  # 4 min per channel run cleanup
+        grind_clean = max(0.5, grind_clean - (picket_grind_min - channel_grind_min) / 60.0)
+        reasoning_lines.append(
+            "PUNCHED CHANNEL grind fix: -%d picket-joint min, +%d channel-run min."
+            % (picket_grind_min, channel_grind_min)
+        )
+
+    # Plate cutting labor: plasma cut + deburr adds 8 min per piece
+    plate_piece_count = 0
+    for item in cut_list:
+        profile = str(item.get("profile", "")).lower()
+        if profile.startswith("plate_") or profile.startswith("sheet_"):
+            plate_piece_count += int(item.get("quantity", 1))
+    if plate_piece_count > 0:
+        plate_cut_min = plate_piece_count * 8  # layout + plasma cut + deburr
+        cut_prep = cut_prep + plate_cut_min / 60.0
+        reasoning_lines.append(
+            "PLATE CUTTING: %d plate/sheet pcs × 8 min = %d min added to cut_prep."
+            % (plate_piece_count, plate_cut_min)
+        )
 
     # LAYOUT & SETUP: 1.5 hrs + 0.25 hr per 10 decorative pieces beyond 20
     extra_decorative = max(0, type_b_count - 20)

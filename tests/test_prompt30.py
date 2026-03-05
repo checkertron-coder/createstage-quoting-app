@@ -357,7 +357,7 @@ class TestDefaultModel:
         from backend.claude_client import _DEFAULT_FAST
         assert _DEFAULT_FAST == "claude-opus-4-6"
 
-    def test_default_deep_model_is_sonnet(self):
-        """Default deep model stays as claude-sonnet-4-6."""
+    def test_default_deep_model_is_opus(self):
+        """Default deep model should be claude-opus-4-6."""
         from backend.claude_client import _DEFAULT_DEEP
-        assert _DEFAULT_DEEP == "claude-sonnet-4-6"
+        assert _DEFAULT_DEEP == "claude-opus-4-6"

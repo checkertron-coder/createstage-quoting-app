@@ -142,15 +142,15 @@ def test_has_description_includes_notes_and_photo_observations():
 # Deliverable 3: AI cut list prompt overhaul
 # ============================================================
 
-def test_prompt_has_design_analysis_section():
-    """AI cut list prompt includes STEP 1: DESIGN ANALYSIS."""
+def test_prompt_has_core_structure():
+    """AI cut list prompt includes core structure: profiles, rules, weld guidance."""
     gen = AICutListGenerator()
     prompt = gen._build_prompt("furniture_table", {
         "description": "Modern coffee table with geometric base",
     })
-    assert "DESIGN ANALYSIS" in prompt
-    assert "PATTERN GEOMETRY" in prompt
-    assert "WELD PROCESS DETERMINATION" in prompt
+    assert "AVAILABLE PROFILES" in prompt
+    assert "WELD PROCESS GUIDANCE" in prompt
+    assert "RULES:" in prompt
 
 
 def test_prompt_has_expanded_profiles():

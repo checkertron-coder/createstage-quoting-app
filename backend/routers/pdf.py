@@ -17,7 +17,10 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..auth import decode_token, get_current_user
 from ..database import get_db
-from ..pdf_generator import generate_quote_pdf, generate_client_pdf, generate_client_scope
+from ..pdf_generator import (
+    generate_quote_pdf, generate_client_pdf, generate_client_scope,
+    generate_materials_pdf, generate_materials_csv,
+)
 
 router = APIRouter(prefix="/quotes", tags=["pdf"])
 
@@ -97,7 +100,27 @@ def download_pdf(
     inputs = quote.inputs_json or {}
 
     # Generate PDF (convert bytearray to bytes for Response compatibility)
-    if mode == "client":
+    if mode == "materials":
+        pdf_bytes = bytes(generate_materials_pdf(outputs, user_profile))
+        filename = "Materials-%s.pdf" % (quote.quote_number or quote_id)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": 'attachment; filename="%s"' % filename,
+            },
+        )
+    elif mode == "materials-csv":
+        csv_bytes = generate_materials_csv(outputs)
+        filename = "Materials-%s.csv" % (quote.quote_number or quote_id)
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": 'attachment; filename="%s"' % filename,
+            },
+        )
+    elif mode == "client":
         # Generate or retrieve cached AI scope
         client_scope = outputs.get("_client_scope")
         if not client_scope:

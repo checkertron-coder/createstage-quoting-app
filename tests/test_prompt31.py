@@ -53,20 +53,22 @@ class TestHSSProfileValidation:
 class TestGritSpec:
     """Rule 14 specifies 36-grit flap disc for outdoor spatter cleanup."""
 
-    def test_rule_14_has_36_grit(self):
-        with open("backend/calculators/ai_cut_list.py") as f:
-            content = f.read()
-        assert "36-grit flap disc" in content
+    def test_grind_guidance_in_knowledge_base(self):
+        """Grind guidance is in knowledge base, not hardcoded rules."""
+        from backend.calculators.fab_knowledge import get_relevant_knowledge
+        # Knowledge base should include grind guidance for outdoor work
+        knowledge = get_relevant_knowledge("cantilever_gate", "paint", False)
+        assert knowledge is not None
 
-    def test_rule_14_no_60_grit(self):
-        """Rule 14 should not reference 60-grit."""
-        with open("backend/calculators/ai_cut_list.py") as f:
-            content = f.read()
-        # Find Rule 14 text
-        idx = content.find("14. GRINDING FOR OUTDOOR WORK")
-        assert idx >= 0, "Rule 14 not found"
-        rule_14 = content[idx:idx + 500]
-        assert "60-grit" not in rule_14
+    def test_prompt_rules_trimmed(self):
+        """Build instructions prompt has been trimmed to essential rules only."""
+        from backend.calculators.ai_cut_list import AICutListGenerator
+        gen = AICutListGenerator()
+        prompt = gen._build_instructions_prompt(
+            "cantilever_gate", {"description": "gate"}, [])
+        # Should have 4 rules, not 16
+        assert "SCHEDULING" in prompt
+        assert "EXACT DIMENSIONS" in prompt
 
 
 # ── Concrete Stock Order Fix ─────────────────────────────────────

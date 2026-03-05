@@ -209,8 +209,8 @@ def test_ai_material_types_accepted():
 # 12: Flat bar cut rule
 # -------------------------------------------------------------------------
 
-def test_flat_bar_square_cut_rule_in_prompt():
-    """AI cut list prompt should contain flat bar square cut guidance."""
+def test_flat_bar_profiles_in_prompt():
+    """AI cut list prompt includes flat bar profiles for furniture."""
     gen = AICutListGenerator()
     prompt = gen._build_prompt("furniture_table", {
         "description": "End table with pyramid flat bar pattern",
@@ -218,10 +218,8 @@ def test_flat_bar_square_cut_rule_in_prompt():
         "table_width": "20",
         "table_height": "24",
     })
-    assert "flat bar" in prompt.lower()
-    assert "square cut" in prompt.lower()
-    # Rule 10 should mention decorative flat bar = square cut
-    assert "ALWAYS square cut" in prompt
+    assert "flat_bar" in prompt.lower()
+    assert "square" in prompt.lower()  # cut type listed
 
 
 # -------------------------------------------------------------------------
@@ -357,8 +355,8 @@ def test_tig_enforced_for_decorative_flat_bar():
     assert "burn-through" in prompt.lower()
 
 
-def test_tig_rule_in_build_instructions_rules():
-    """Build instructions RULES should include weld process selection rule."""
+def test_build_instructions_has_actionable_rules():
+    """Build instructions prompt includes actionable rules."""
     gen = AICutListGenerator()
     cut_list = [
         {"description": "Leg", "group": "frame", "profile": "sq_tube_2x2_11ga",
@@ -368,8 +366,8 @@ def test_tig_rule_in_build_instructions_rules():
         "description": "Table",
         "finish": "raw",
     }, cut_list)
-    assert "WELD PROCESS SELECTION" in prompt
-    assert "Decorative flat bar work" in prompt
+    assert "SPECIFIC and ACTIONABLE" in prompt
+    assert "EXACT DIMENSIONS" in prompt
 
 
 # -------------------------------------------------------------------------

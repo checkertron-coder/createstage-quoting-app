@@ -414,24 +414,19 @@ class TestHSSProfilesAndRule13:
         assert "hss_4x4_0.25" in hss_line
         assert "hss_6x4_0.25" in hss_line
 
-    def test_rule_13_includes_fcaw(self):
-        """Rule 13 in build instructions mentions FCAW-S."""
+    def test_field_welding_context_includes_fcaw(self):
+        """Field welding context block mentions FCAW-S when installation is specified."""
         gen = AICutListGenerator()
-        # Build a prompt to check rule 13 content
-        fields = {"height": "6", "finish": "Paint"}
-        cut_list = [{"description": "Frame", "profile": "sq_tube_2x2_11ga",
-                     "length_inches": 100, "quantity": 1, "cut_type": "square"}]
-        prompt = gen._build_instructions_prompt("cantilever_gate", fields, cut_list)
+        fields = {"height": "6", "finish": "Paint", "installation": "Yes - install on site"}
+        prompt = gen._build_prompt("cantilever_gate", fields)
         assert "FCAW-S" in prompt
         assert "self-shielded flux core" in prompt
 
-    def test_rule_13_bans_mig_outdoors(self):
-        """Rule 13 explicitly bans MIG and TIG for outdoor field work."""
+    def test_field_welding_context_bans_mig_outdoors(self):
+        """Field welding context bans MIG/TIG for outdoor work."""
         gen = AICutListGenerator()
-        fields = {"height": "6", "finish": "Paint"}
-        cut_list = [{"description": "Frame", "profile": "sq_tube_2x2_11ga",
-                     "length_inches": 100, "quantity": 1, "cut_type": "square"}]
-        prompt = gen._build_instructions_prompt("cantilever_gate", fields, cut_list)
+        fields = {"height": "6", "finish": "Paint", "installation": "Yes - install on site"}
+        prompt = gen._build_prompt("cantilever_gate", fields)
         assert "NEVER specify MIG (GMAW) or TIG (GTAW)" in prompt
 
 

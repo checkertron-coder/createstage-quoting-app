@@ -10,9 +10,9 @@ class Settings(BaseSettings):
     LABOR_RATE_DEFAULT: float = 125.00
     MARKUP_DEFAULT: float = 1.35
     ANTHROPIC_API_KEY: str = ""
-    CLAUDE_FAST_MODEL: str = "claude-sonnet-4-6"
-    CLAUDE_DEEP_MODEL: str = "claude-sonnet-4-6"
-    CLAUDE_REVIEW_MODEL: str = "claude-sonnet-4-6"
+    CLAUDE_FAST_MODEL: str = "claude-opus-4-6"
+    CLAUDE_DEEP_MODEL: str = "claude-opus-4-6"
+    CLAUDE_REVIEW_MODEL: str = "claude-opus-4-6"
 
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time

@@ -99,16 +99,17 @@ _PROFILE_GROUPS = {
     "sheet_plate": "  Sheet/plate: sheet_11ga, sheet_14ga, sheet_16ga, plate_0.25, plate_0.375, plate_0.5",
     "dom_tube": "  DOM tube: dom_tube_1.75x0.120",
     "hss": "  HSS (structural tube): hss_4x4_0.25, hss_6x4_0.25",
+    "punched_channel": "  Punched channel: punched_channel_1.25x0.5x14ga, punched_channel_1.5x0.75x14ga",
 }
 
 # Which profile groups each job type needs
 _JOB_TYPE_PROFILES = {
     "cantilever_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate", "hss"],
     "swing_gate": ["sq_tube", "rect_tube", "flat_bar", "angle", "sq_bar", "pipe", "sheet_plate"],
-    "straight_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
-    "stair_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
-    "balcony_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "sheet_plate"],
-    "ornamental_fence": ["sq_tube", "flat_bar", "sq_bar", "round_bar", "pipe"],
+    "straight_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "punched_channel"],
+    "stair_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "punched_channel"],
+    "balcony_railing": ["sq_tube", "round_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "sheet_plate", "punched_channel"],
+    "ornamental_fence": ["sq_tube", "flat_bar", "sq_bar", "round_bar", "pipe", "punched_channel"],
     "complete_stair": ["channel", "sq_tube", "angle", "sheet_plate", "round_tube", "pipe"],
     "spiral_stair": ["pipe", "round_tube", "sq_tube", "sheet_plate", "flat_bar"],
     "window_security_grate": ["sq_tube", "sq_bar", "flat_bar", "angle"],
@@ -358,15 +359,7 @@ class AICutListGenerator:
             return None
 
     def _build_prompt(self, job_type: str, fields: dict) -> str:
-        """
-        Build the AI prompt for cut list generation.
-
-        The prompt instructs the AI to:
-        1. Think through the design (structure, geometry, patterns)
-        2. Calculate pattern geometry (spacing, counts, repetitions)
-        3. Determine weld process per joint (MIG vs TIG)
-        4. Generate a precise cut list with expanded schema
-        """
+        """Build the AI prompt for cut list generation."""
         # Summarize fields — skip internal keys
         field_lines = []
         for key, val in fields.items():
@@ -416,36 +409,15 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
         # Build structured context blocks for compound/complex jobs
         context_blocks = self._build_field_context(job_type, fields)
 
-        prompt = """You are an expert metal fabricator with 25+ years of shop experience.
-You are generating a DETAILED cut list for a fabrication project.
-
-IMPORTANT: Think through this design BEFORE listing pieces.
+        prompt = """You are an expert metal fabricator generating a cut list for a fabrication project.
 
 JOB TYPE: %s
 %s
-USER-PROVIDED INFORMATION:
+PROJECT INFO:
 %s
 %s
-
-=== STEP 1: DESIGN ANALYSIS ===
-Before listing any pieces, think through:
-- What is the overall structure? (frame, enclosure, decorative, structural)
-- What are the critical dimensions and how do pieces connect?
-- Are there any repeating patterns? (pickets, panels, cross-members)
-- What joints are visible vs hidden? (visible = better cuts, TIG welds)
-- What is the load path? (structural members need to be sized appropriately)
-
-=== STEP 2: PATTERN GEOMETRY ===
-If there are repeating elements (pickets, slats, bars, cross-members):
-- Calculate: count = (available_space / spacing) + 1
-- Each repeating piece gets its OWN line item with correct quantity
-- Do NOT lump different pieces into one line
-
-=== STEP 3: WELD PROCESS DETERMINATION ===
-For each joint, determine the weld process:
+WELD PROCESS GUIDANCE:
 %s
-
-=== STEP 4: GENERATE CUT LIST ===
 
 AVAILABLE PROFILES (use ONLY these):
 %s
@@ -455,39 +427,14 @@ MATERIAL TYPES: square_tubing, round_tubing, flat_bar, angle_iron, channel, pipe
 
 CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
 
-CRITICAL RULES FOR CUSTOM FEATURES:
-- If the description mentions a PATTERN (pyramid, grid, cross-hatch, inlay, layers, concentric squares), you MUST calculate and include ALL pieces for that pattern in the cut list.
-- NEVER describe a custom feature only in notes — it must appear as real line items with quantities and lengths.
-- Before generating ANY repeating pattern, work out the geometry step by step in the "notes" field of the FIRST item in that pattern group: what is the available space, what is the step interval, how many iterations fit, and what is each piece's length. Show the math.
-- A square has exactly 4 sides. The quantity for any square layer is ALWAYS 4. Not 5, not 3 — exactly 4.
-- Each piece in a single square layer must have the SAME length (all 4 sides of a square are equal).
-- For pyramid/concentric patterns: calculate each layer separately. Start with the outermost square, step inward by the specified spacing, repeat until no more full squares fit. Each layer = 4 pieces.
-- Example: 20" inside frame, 1/4" spacing per side. Layer 1: 4 pcs at 19.5". Layer 2: 4 pcs at 19.0". Layer 3: 4 pcs at 18.5". Continue until pieces are too small to be practical (< 3").
-- UNIFORM LAYER STEPS: All layers in a concentric/pyramid pattern MUST reduce by the SAME increment.
-  Calculate: step_size = interior_span / (desired_layers - 1), round to nearest 0.25".
-  Example: 18" span, 10 layers -> step = 18/9 = 2.0". Layers: 18, 16, 14, 12, 10, 8, 6, 4.
-  WRONG: 18, 16, 15, 14, 12, 10, 9 (inconsistent steps of -2, -1, -1, -2, -2, -1).
-  RIGHT: 18, 16, 14, 12, 10, 8, 6, 4 (uniform -2" steps).
-- Do NOT invent structural pieces (tabs, supports, connectors, spacers) that were not mentioned in the description. Only include pieces the user asked for.
-- JOINT DESIGN determines cut geometry: Before assigning a cut type, determine the JOINT DESIGN at each end. Does it form a continuous profile at a corner, or does it cross/overlap/stack? Joint intent determines cut geometry, not material type.
-- COMPONENT vs ASSEMBLED dimensions: When a description specifies component construction ("two pieces stacked," "assembled from smaller parts"), list the INDIVIDUAL pieces the fabricator physically cuts. Distinguish between: individual piece dimension, assembled unit dimension, and spacing/gap dimension. These are often different numbers.
-- For repeating geometric patterns, calculate step increment from geometry and keep it UNIFORM unless description explicitly specifies variation. Irregular increments = calculation error — recheck math.
-
 RULES:
 1. Every piece must have a SPECIFIC length in inches — no "TBD" or "varies".
 2. Group related pieces (e.g., all frame members in "frame" group, all pickets in "infill" group).
 3. List each UNIQUE piece separately with its quantity — don't combine different pieces.
-4. For tables/furniture: exactly 4 legs per table (not 5). List each rail separately (2 long + 2 short).
-5. Only include connection plates, gussets, and brackets if the user mentioned them or if they are structurally required for the design described.
-6. Use miter_45 for visible frame corners. Use cope for tube-to-tube T-joints.
-7. Be practical — use sizes a real fab shop would stock and cut.
-8. Include piece_name for what the part IS (e.g., "leg", "top_rail", "picket").
-9. Quantity means the number of IDENTICAL pieces to cut. Waste factor is handled separately — do not inflate quantity to account for waste.
-10. Decorative flat bar pieces in concentric/pyramid/grid patterns are ALWAYS square cut (cut_type: "square"). Only frame rails that form miter joints at corners get miter_45.
-11. Spacers are ALWAYS square cut (cut_type: "square").
-12. INDIVIDUAL CUTTABLE PIECES: Every line in the cut list must be a SINGLE CUTTABLE PIECE that fits within standard stock lengths (max 240 inches / 20 ft). Do NOT aggregate multiple pieces into one line. Do NOT report total linear footage as a "length" — report the actual cut length of ONE piece with the quantity showing how many identical pieces to cut. A fabricator reads this cut list at the chop saw — each line = one stop on the saw fence. Example: a gate frame is NOT "1 piece at 806 inches" — it is separate lines for top rail (216"), bottom rail (216"), stiles (116" each), mid-rails (216" each), diagonal braces, etc.
-13. GATE PICKET COUNT: For cantilever gates, pickets span the FULL gate panel length (opening x 1.5), NOT just the opening width. A 12' opening with 1.5x ratio = 18' panel = 216". At 4" OC spacing: 216/4 + 1 = 55 pickets. The counterbalance tail section gets pickets too — it is visible when the gate is closed.
-14. OVERHEAD BEAM: For top-hung cantilever gates, there is exactly ONE (1) overhead support beam. It spans the full gate panel length plus 24" overhang (12" each side). Never qty 2 — it is ONE continuous beam. For residential gates under 800 lbs estimated weight, use profile hss_4x4_0.25. For heavy commercial gates over 800 lbs, use hss_6x4_0.25.
+4. Only include connection plates, gussets, and brackets if the user mentioned them or if they are structurally required.
+5. Be practical — use sizes a real fab shop would stock and cut.
+6. Include piece_name for what the part IS (e.g., "leg", "top_rail", "picket").
+7. Each line = one cuttable piece, max 240 inches. Use quantity for identical pieces.
 
 Return ONLY valid JSON — an array of objects:
 [
@@ -909,18 +856,6 @@ Do NOT include vinegar bath, acid wash, or mill scale removal steps.
             dims_lines.append("Do NOT calculate or modify these values. Use them exactly as given.\n")
             enforced_dims_block = "\n".join(dims_lines)
 
-        # Reasoning-based process order instruction
-        reasoning_instruction = """
-PROCESS ORDER — REASON THROUGH IT:
-Determine the correct fabrication sequence by applying the reasoning principles from the SHOP KNOWLEDGE BASE above. For each step, verify:
-- Is this operation physically workable at this stage? (Principle 1 — Workability)
-- Will a later step block access to something I need to finish first? (Principle 2 — Access)
-- Am I using component dimensions, not assembled or spacing dimensions? (Principle 3 — Dimensions)
-- Does my cut type match how this piece joins its neighbor? (Principle 4 — Joint Design)
-- Am I specifying only the finishing passes the customer's finish level requires? (Principle 5 — Finish as Design)
-- Have I thought forward through how this step constrains later steps? (Principle 6 — Constraints)
-"""
-
         prompt = """You are an expert metal fabricator creating step-by-step build instructions.
 A journeyman fabricator should be able to follow these instructions and build this project.
 
@@ -931,27 +866,15 @@ PROJECT DETAILS:
 
 CUT LIST:
 %s
-%s%s%s%s%s
+%s%s%s%s
 TASK: Generate a practical fabrication sequence — the exact steps a fabricator follows
 to build this project from raw material to finished product.
 
 RULES:
 1. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.
-2. Include the correct tools for each step (chop saw, band saw, TIG welder, MIG welder, angle grinder, etc.).
-3. Specify weld process (MIG vs TIG) for each welding step.
-4. Estimate realistic duration in minutes for each step.
-5. Include safety notes where relevant (PPE, ventilation for galvanized, etc.).
-6. 8-15 steps is typical. Group related operations but don't skip important steps.
-7. Include quality checks: square check after tacking, level check, fit check before welding.
-8. SCHEDULING: Unattended processes with long wait times (vinegar bath 12-24hr, paint cure, epoxy set) must be the FIRST step. Start the clock immediately. All attended work (cutting, welding, grinding) happens WHILE the unattended process runs. Never schedule an unattended long-duration process AFTER attended work — that wastes an entire day of shop time.
-9. For jobs requiring vinegar bath / mill scale removal on stock that needs finish grinding before cutting: Step 1 is ALWAYS "Submerge stock in vinegar bath." Steps 2-N are frame/structural work done WHILE the bath runs. The step AFTER all frame work is "Pull stock from vinegar bath, wash, grind, cut."
-10. WELD PROCESS SELECTION: Decorative flat bar work (1/8" or thinner, visible joints, furniture/ornamental pieces) MUST use TIG (GTAW), not MIG. TIG gives cleaner, more precise welds with less spatter and less heat input — critical for pre-finished decorative surfaces. MIG is for structural frame assembly (square tube joints, leg-to-frame connections). Spacer blocks can use either MIG (for speed) or TIG (for precision on small parts).
-11. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not estimate, round, or invent dimensions. When referring to a post, state its exact length from the cut list (e.g., "156 inches" not "15 feet"). When stating how many of a piece to cut, use the exact quantity from the cut list. If fence sections appear in the cut list, include fence fabrication and installation steps.
-12. MILL SCALE: After EVERY tube/bar cut, grind 1-2" of mill scale from each cut end using flap disc before fit-up. Mill scale causes weld porosity. 30 seconds per end. Applies to ALL material regardless of finish.
-13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018) or self-shielded flux core (FCAW-S). NEVER specify MIG (GMAW) or TIG (GTAW) for outdoor field installation — wind disperses shielding gas. Dual-shield flux core is strongest/fastest for structural field work but not needed for fence/gate. Never use "file" for deburring — use "flap disc" or "die grinder."
-14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat — grind only for fit-up interference. For painted/powder-coated outdoor work: ONE pass with 36-grit flap disc to knock down spatter. Progressive gritting (80->120->220) is ONLY for stainless steel or show-quality indoor pieces. Outdoor gates, fences, railings = single pass cleanup, NOT progressive polish.
-15. PAINT FOR OUTDOOR STEEL: Always prime THEN paint (two separate steps with dry time). Never combine into "prime and paint in one step."
-16. PRE-PAINT WIPE: Before priming, wipe all steel with surface prep solvent and clean rags. Do NOT say "degreaser" — the product is surface prep solvent (denatured alcohol). It removes oils, dust, and contaminants before primer application.
+2. SCHEDULING: Unattended processes (vinegar bath, paint cure) must be the FIRST step. All attended work happens WHILE the unattended process runs.
+3. For vinegar bath / mill scale removal: Step 1 is ALWAYS "Submerge stock in vinegar bath." Steps 2-N are structural work done WHILE the bath runs.
+4. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not round or invent dimensions.
 
 Return ONLY valid JSON — an array of step objects:
 [
@@ -965,8 +888,7 @@ Return ONLY valid JSON — an array of step objects:
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
 ]""" % (job_type, knowledge_block, fields_text, cuts_text,
-        geometry_block, enforced_dims_block, weld_note, finish_context,
-        reasoning_instruction)
+        geometry_block, enforced_dims_block, weld_note, finish_context)
 
         return prompt
 

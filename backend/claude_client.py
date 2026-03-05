@@ -5,7 +5,7 @@ is_configured, get_model_name.
 
 Model resolution:
   FAST:  CLAUDE_FAST_MODEL -> "claude-opus-4-6"
-  DEEP:  CLAUDE_DEEP_MODEL -> "claude-sonnet-4-6"
+  DEEP:  CLAUDE_DEEP_MODEL -> "claude-opus-4-6"
 
 Set ANTHROPIC_API_KEY in environment to enable.
 """
@@ -19,7 +19,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _DEFAULT_FAST = "claude-opus-4-6"
-_DEFAULT_DEEP = "claude-sonnet-4-6"
+_DEFAULT_DEEP = "claude-opus-4-6"
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"

@@ -13,38 +13,40 @@ import pytest
 # =====================================================================
 
 class TestCutListPromptRules:
-    def test_prompt_contains_max_stock_length_rule(self):
-        """AI cut list prompt requires individual pieces within 240" stock."""
+    def test_prompt_contains_max_length_rule(self):
+        """AI cut list prompt mentions 240 inch max in trimmed rule."""
         from backend.calculators.ai_cut_list import AICutListGenerator
 
         gen = AICutListGenerator()
         prompt = gen._build_prompt("cantilever_gate", {"description": "test gate"})
 
         assert "240" in prompt
-        assert "chop saw" in prompt.lower()
-        assert "INDIVIDUAL CUTTABLE PIECES" in prompt
+        assert "cuttable piece" in prompt.lower()
 
-    def test_prompt_contains_gate_picket_count_rule(self):
-        """AI cut list prompt specifies pickets span full panel (opening x 1.5)."""
+    def test_prompt_contains_gate_context_blocks(self):
+        """AI cut list prompt includes context blocks for cantilever gates."""
         from backend.calculators.ai_cut_list import AICutListGenerator
 
         gen = AICutListGenerator()
-        prompt = gen._build_prompt("cantilever_gate", {"description": "test gate"})
+        prompt = gen._build_prompt("cantilever_gate", {
+            "description": "test gate",
+            "clear_width": "12",
+            "height": "6",
+        })
+        # Context blocks handle gate-specific guidance now
+        assert "GATE PANEL LENGTH" in prompt
+        assert "GATE HEIGHT" in prompt
 
-        assert "GATE PICKET COUNT" in prompt
-        assert "FULL gate panel length" in prompt
-        assert "opening x 1.5" in prompt.lower() or "opening × 1.5" in prompt
-
-    def test_prompt_contains_overhead_beam_rule(self):
-        """AI cut list prompt specifies ONE overhead beam, never qty 2."""
+    def test_prompt_contains_overhead_beam_context(self):
+        """AI cut list prompt includes overhead beam context for top-hung gates."""
         from backend.calculators.ai_cut_list import AICutListGenerator
 
         gen = AICutListGenerator()
-        prompt = gen._build_prompt("cantilever_gate", {"description": "test gate"})
-
+        prompt = gen._build_prompt("cantilever_gate", {
+            "description": "test gate",
+            "bottom_guide": "No bottom guide (top-hung)",
+        })
         assert "OVERHEAD BEAM" in prompt
-        assert "ONE (1)" in prompt or "exactly ONE" in prompt
-        assert "Never qty 2" in prompt
 
 
 # =====================================================================
@@ -441,16 +443,16 @@ class TestDegreaserBannedTerm:
         assert "degreaser wipe-down" in BANNED_TERM_REPLACEMENTS
         assert "surface prep solvent" in BANNED_TERM_REPLACEMENTS["degreaser wipe-down"]
 
-    def test_fab_sequence_prompt_has_surface_prep_rule(self):
-        """Fab sequence prompt includes Rule 16 about surface prep solvent."""
+    def test_fab_sequence_prompt_has_core_rules(self):
+        """Fab sequence prompt includes core actionable rules."""
         from backend.calculators.ai_cut_list import AICutListGenerator
 
         gen = AICutListGenerator()
         prompt = gen._build_instructions_prompt(
             "cantilever_gate", {"description": "test gate"}, [])
 
-        assert "surface prep solvent" in prompt.lower()
-        assert "denatured alcohol" in prompt.lower()
+        assert "SPECIFIC and ACTIONABLE" in prompt
+        assert "EXACT DIMENSIONS" in prompt
 
 
 # =====================================================================

@@ -153,6 +153,9 @@ class PricingEngine:
         if build_instructions:
             result["build_instructions"] = build_instructions
 
+        # Materials summary — aggregated by profile for steel ordering
+        result["materials_summary"] = self._aggregate_materials(materials)
+
         return result
 
     def _calculate_material_subtotal(self, materials: list) -> float:
@@ -295,6 +298,60 @@ class PricingEngine:
                 f"with supplier for potential 5-15% savings."
             )
         return ""
+
+    def _aggregate_materials(self, materials: list) -> list:
+        """
+        Group materials by profile for steel ordering summary.
+
+        Returns list of dicts: profile, description, total_length_ft,
+        stock_length_ft, sticks_needed, remainder_ft.
+        Skips concrete/other and area-sold materials (sheet/plate).
+        """
+        try:
+            from .knowledge.materials import get_stock_length
+        except Exception:
+            return []
+
+        groups = {}  # type: dict
+        for item in materials:
+            profile = item.get("profile", "")
+            mat_type = item.get("material_type", "")
+            # Skip non-steel and area-sold materials
+            if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+                continue
+            stock_ft = get_stock_length(profile)
+            if stock_ft is None:
+                continue  # sheet/plate — sold by area
+
+            length_in = item.get("length_inches", 0)
+            qty = item.get("quantity", 1)
+            total_ft = (length_in * qty) / 12.0
+
+            if profile not in groups:
+                groups[profile] = {
+                    "profile": profile,
+                    "description": item.get("description", profile),
+                    "total_length_ft": 0.0,
+                    "stock_length_ft": stock_ft,
+                }
+            groups[profile]["total_length_ft"] += total_ft
+
+        result = []
+        for profile, info in sorted(groups.items()):
+            import math
+            total_ft = round(info["total_length_ft"], 1)
+            stock_ft = info["stock_length_ft"]
+            sticks = int(math.ceil(total_ft / stock_ft)) if stock_ft > 0 else 0
+            remainder = round(sticks * stock_ft - total_ft, 1) if sticks > 0 else 0
+            result.append({
+                "profile": profile,
+                "description": info["description"],
+                "total_length_ft": total_ft,
+                "stock_length_ft": stock_ft,
+                "sticks_needed": sticks,
+                "remainder_ft": remainder,
+            })
+        return result
 
     def recalculate_with_markup(self, priced_quote: dict, markup_pct: int) -> dict:
         """

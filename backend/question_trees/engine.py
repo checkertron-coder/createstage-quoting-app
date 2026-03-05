@@ -317,11 +317,23 @@ Below are the fields we need for this job type. Extract any values that the cust
 
 RULES:
 - Only extract values you are >90% confident about
-- For measurement fields, only extract if the customer gave a specific number (e.g., "10 feet" → 10). Do NOT guess from vague descriptions like "big" or "standard"
-- For choice fields, map the customer's words to the closest option
+- For measurement fields, only extract if the customer gave a specific number. Do NOT guess from vague descriptions like "big" or "standard"
+- UNIT NORMALIZATION: Convert all measurements to the field's expected unit (usually feet):
+  "10 feet" -> 10, "120 inches" -> 10, "10'" -> 10, "10ft" -> 10, "3 meters" -> 9.8
+- DIMENSION PARSING: "10x6" or "10' x 6'" -> extract both dimensions to their respective fields (e.g., clear_width=10, height=6)
+- For choice fields, map the customer's words to the closest available option:
+  "black paint" -> finishing="paint", finish_color="black"
+  "powder coat" -> finishing="powder_coat"
+  "with motor" or "electric" -> has_motor="Yes"
+  "no install" or "pickup" -> installation="No"
 - If a field is not mentioned or unclear, do NOT include it
 - Return ONLY a JSON object with field_id: value pairs
-- If nothing can be extracted, return an empty object {{}}
+- If nothing can be extracted, return an empty object {{{{}}}}
+
+EXAMPLES:
+- "10' wide by 6' tall cantilever gate with motor" -> {{"clear_width": "10", "height": "6", "has_motor": "Yes"}}
+- "30 linear feet of 42 inch railing, paint black, full install" -> {{"linear_footage": "30", "railing_height": "42 inches", "finish": "paint", "installation": "Yes - full installation"}}
+- "repair rusted section of iron fence, about 8 feet" -> {{"repair_type": "Rust damage", "length": "8"}}
 
 FIELDS:
 {field_descriptions}
