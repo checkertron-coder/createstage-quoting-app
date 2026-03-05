@@ -158,12 +158,12 @@ class TestFencePicketGateMatch:
 class TestOverheadBeamValidation:
     """Test overhead beam profile is validated against gate weight."""
 
-    def test_trusts_ai_beam_profile(self):
-        """Post-processor trusts AI's beam profile (constraints enforced via prompt)."""
+    def test_corrects_wrong_beam_profile_for_light_gate(self):
+        """Post-processor corrects hss_6x4 to hss_4x4 for light gate (<800 lbs)."""
         from backend.calculators.cantilever_gate import CantileverGateCalculator
 
         calc = CantileverGateCalculator()
-        # AI provides overhead beam — post-processor trusts the profile
+        # AI provides wrong profile for a light gate
         ai_result = {
             "items": [
                 {
@@ -187,7 +187,7 @@ class TestOverheadBeamValidation:
                     "quantity": 1,
                 }
             ],
-            "total_weight_lbs": 300.0,
+            "total_weight_lbs": 300.0,  # Under 800 lbs
             "total_sq_ft": 100.0,
             "weld_linear_inches": 200.0,
             "assumptions": [],
@@ -202,12 +202,12 @@ class TestOverheadBeamValidation:
             "infill_type": "Pickets (vertical bars)",
         }
         result = calc._post_process_ai_result(ai_result, fields, [])
-        # AI included overhead beam — trust it, don't add another
+        # AI included overhead beam — don't add another, but correct profile
         beam_items = [i for i in result["items"]
                       if "overhead" in i["description"].lower()]
         assert len(beam_items) == 1
-        # Profile is trusted as-is (constraints handled in AI prompt)
-        assert beam_items[0]["profile"] == "hss_6x4_0.25"
+        # Profile corrected to hss_4x4 for light gate
+        assert beam_items[0]["profile"] == "hss_4x4_0.25"
 
     def test_correct_profile_kept(self):
         """If AI puts the right profile, it should be kept."""

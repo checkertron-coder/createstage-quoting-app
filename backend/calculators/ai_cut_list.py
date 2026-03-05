@@ -65,6 +65,12 @@ BANNED_TERM_REPLACEMENTS = {
     "use a file": "use a flap disc",
     "hand file": "flap disc or die grinder",
     "file smooth": "grind smooth with flap disc",
+    # Pre-paint cleaning — product is surface prep solvent, not degreaser
+    "degreaser wipe-down": "surface prep solvent wipe-down",
+    "degreaser wipe": "surface prep solvent wipe",
+    "degreaser spray": "surface prep solvent",
+    "clean with degreaser": "wipe with surface prep solvent and clean rags",
+    "degreaser": "surface prep solvent",
 }
 
 # Valid cut types
@@ -479,6 +485,9 @@ RULES:
 9. Quantity means the number of IDENTICAL pieces to cut. Waste factor is handled separately — do not inflate quantity to account for waste.
 10. Decorative flat bar pieces in concentric/pyramid/grid patterns are ALWAYS square cut (cut_type: "square"). Only frame rails that form miter joints at corners get miter_45.
 11. Spacers are ALWAYS square cut (cut_type: "square").
+12. INDIVIDUAL CUTTABLE PIECES: Every line in the cut list must be a SINGLE CUTTABLE PIECE that fits within standard stock lengths (max 240 inches / 20 ft). Do NOT aggregate multiple pieces into one line. Do NOT report total linear footage as a "length" — report the actual cut length of ONE piece with the quantity showing how many identical pieces to cut. A fabricator reads this cut list at the chop saw — each line = one stop on the saw fence. Example: a gate frame is NOT "1 piece at 806 inches" — it is separate lines for top rail (216"), bottom rail (216"), stiles (116" each), mid-rails (216" each), diagonal braces, etc.
+13. GATE PICKET COUNT: For cantilever gates, pickets span the FULL gate panel length (opening x 1.5), NOT just the opening width. A 12' opening with 1.5x ratio = 18' panel = 216". At 4" OC spacing: 216/4 + 1 = 55 pickets. The counterbalance tail section gets pickets too — it is visible when the gate is closed.
+14. OVERHEAD BEAM: For top-hung cantilever gates, there is exactly ONE (1) overhead support beam. It spans the full gate panel length plus 24" overhang (12" each side). Never qty 2 — it is ONE continuous beam. For residential gates under 800 lbs estimated weight, use profile hss_4x4_0.25. For heavy commercial gates over 800 lbs, use hss_6x4_0.25.
 
 Return ONLY valid JSON — an array of objects:
 [
@@ -924,6 +933,7 @@ RULES:
 13. WELDING PROCESS: Shop fabrication = MIG (GMAW). Field/site welding = Stick (SMAW, E7018) or self-shielded flux core (FCAW-S). NEVER specify MIG (GMAW) or TIG (GTAW) for outdoor field installation — wind disperses shielding gas. Dual-shield flux core is strongest/fastest for structural field work but not needed for fence/gate. Never use "file" for deburring — use "flap disc" or "die grinder."
 14. GRINDING FOR OUTDOOR WORK: Gates, fences, railings with paint/powder finish — clean spatter, remove sharp edges, knock down high spots. DO NOT grind welds smooth or flat — grind only for fit-up interference. For painted/powder-coated outdoor work: ONE pass with flap disc to knock down spatter. Progressive gritting (80->120->220) is ONLY for stainless steel or show-quality indoor pieces. Outdoor gates, fences, railings = single pass cleanup, NOT progressive polish.
 15. PAINT FOR OUTDOOR STEEL: Always prime THEN paint (two separate steps with dry time). Never combine into "prime and paint in one step."
+16. PRE-PAINT WIPE: Before priming, wipe all steel with surface prep solvent and clean rags. Do NOT say "degreaser" — the product is surface prep solvent (denatured alcohol). It removes oils, dust, and contaminants before primer application.
 
 Return ONLY valid JSON — an array of step objects:
 [

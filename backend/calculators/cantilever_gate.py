@@ -604,7 +604,7 @@ class CantileverGateCalculator(BaseCalculator):
             ))
 
         # ========================================================
-        # SAFETY NET: Add overhead beam only if AI completely omitted it
+        # SAFETY NET: Overhead beam — add if missing, enforce qty=1 + profile
         # ========================================================
         if is_top_hung:
             has_overhead = any(_is_overhead_item(item) for item in items)
@@ -634,6 +634,34 @@ class CantileverGateCalculator(BaseCalculator):
                     waste_factor=self.WASTE_TUBE,
                 ))
                 total_weight += beam_weight
+            else:
+                # AI included overhead beam — enforce qty=1 and validate profile
+                estimated_gate_weight = total_weight
+                if estimated_gate_weight < 800:
+                    correct_profile = "hss_4x4_0.25"
+                else:
+                    correct_profile = "hss_6x4_0.25"
+                for item in items:
+                    if _is_overhead_item(item) or item.get("profile", "").startswith("hss_"):
+                        if item.get("quantity", 1) > 1:
+                            item["quantity"] = 1
+                            item["line_total"] = round(item.get("unit_price", 0), 2)
+                            assumptions.append(
+                                "Overhead beam quantity corrected to 1 "
+                                "(one beam spans full gate length).")
+                        if item.get("profile", "") != correct_profile:
+                            old_profile = item["profile"]
+                            item["profile"] = correct_profile
+                            beam_len_ft = self.inches_to_feet(
+                                item.get("length_inches", total_gate_length_in + 24))
+                            new_price = round(
+                                beam_len_ft * lookup.get_price_per_foot(correct_profile), 2)
+                            item["unit_price"] = new_price
+                            item["line_total"] = round(new_price * item.get("quantity", 1), 2)
+                            assumptions.append(
+                                "Beam profile corrected: %s -> %s "
+                                "(estimated gate weight %.0f lbs)."
+                                % (old_profile, correct_profile, estimated_gate_weight))
 
         # ========================================================
         # SAFETY NET: Add fence sections only if AI completely omitted them
@@ -657,6 +685,23 @@ class CantileverGateCalculator(BaseCalculator):
                 total_sq_ft += fence_result["sq_ft"]
                 total_weld_inches += fence_result["weld_inches"]
                 assumptions.extend(fence_result["assumptions"])
+
+        # ========================================================
+        # SAFETY NET: Validate gate picket count
+        # ========================================================
+        if "Picket" in str(infill_type) or "bar" in str(infill_type).lower():
+            expected_picket_count = math.ceil(total_gate_length_in / infill_spacing_in) + 1
+            for item in items:
+                desc_lower = item.get("description", "").lower()
+                if ("picket" in desc_lower or "infill" in desc_lower) \
+                        and "fence" not in desc_lower:
+                    actual_qty = item.get("quantity", 0)
+                    if actual_qty < expected_picket_count * 0.8:
+                        assumptions.append(
+                            "WARNING: Gate picket count (%d) may be low. "
+                            "Expected ~%d for %.0f\" panel at %.0f\" spacing."
+                            % (actual_qty, expected_picket_count,
+                               total_gate_length_in, infill_spacing_in))
 
         # ========================================================
         # Record assumptions (informational — no corrections)
@@ -970,18 +1015,22 @@ class CantileverGateCalculator(BaseCalculator):
                 picket_price_ft = lookup.get_price_per_foot(picket_profile)
                 picket_count = math.ceil(length_in / infill_spacing_in) + 1
                 picket_length_in = height_in - 2
-                picket_total_ft = self.inches_to_feet(picket_length_in * picket_count)
+                waste_rate = self.WASTE_FLAT if "Flat" in infill_type else self.WASTE_TUBE
+                qty_with_waste = self.apply_waste(picket_count, waste_rate)
+                picket_total_ft = self.inches_to_feet(picket_length_in * qty_with_waste)
                 picket_weight = self.get_weight_lbs(picket_profile, picket_total_ft)
 
                 items.append(self.make_material_item(
-                    description=f"Fence pickets — {side_name} × {picket_count} pcs",
+                    description="Fence pickets — %s × %d pcs (%d + %d%% waste)"
+                                % (side_name, qty_with_waste, picket_count,
+                                   int(waste_rate * 100)),
                     material_type="flat_bar" if "Flat" in infill_type else "square_tubing",
                     profile=picket_profile,
                     length_inches=picket_length_in,
-                    quantity=self.apply_waste(picket_count, self.WASTE_FLAT if "Flat" in infill_type else self.WASTE_TUBE),
+                    quantity=qty_with_waste,
                     unit_price=round(self.inches_to_feet(picket_length_in) * picket_price_ft, 2),
                     cut_type="square",
-                    waste_factor=self.WASTE_FLAT if "Flat" in infill_type else self.WASTE_TUBE,
+                    waste_factor=waste_rate,
                 ))
                 weight += picket_weight
                 weld_inches += self.weld_inches_for_joints(picket_count * 2, 1.5)
