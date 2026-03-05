@@ -663,18 +663,14 @@ class CantileverGateCalculator(BaseCalculator):
             ))
 
         # ========================================================
-        # SAFETY NET: Overhead beam — add if missing, enforce qty=1 + profile
+        # SAFETY NET: Overhead beam — add if missing, enforce qty=1
+        # Trust Opus for beam profile selection.
         # ========================================================
         if is_top_hung:
             has_overhead = any(_is_overhead_item(item) for item in items)
             if not has_overhead:
-                estimated_gate_weight = total_weight
-                if estimated_gate_weight < 800:
-                    beam_profile = "hss_4x4_0.25"
-                    beam_desc = "HSS 4x4x1/4\""
-                else:
-                    beam_profile = "hss_6x4_0.25"
-                    beam_desc = "HSS 6x4x1/4\""
+                beam_profile = "hss_4x4_0.25"
+                beam_desc = "HSS 4x4x1/4\""
                 beam_length_in = total_gate_length_in + 24
                 beam_length_ft = self.inches_to_feet(beam_length_in)
                 beam_price_ft = lookup.get_price_per_foot(beam_profile)
@@ -694,12 +690,7 @@ class CantileverGateCalculator(BaseCalculator):
                 ))
                 total_weight += beam_weight
             else:
-                # AI included overhead beam — enforce qty=1 and validate profile
-                estimated_gate_weight = total_weight
-                if estimated_gate_weight < 800:
-                    correct_profile = "hss_4x4_0.25"
-                else:
-                    correct_profile = "hss_6x4_0.25"
+                # AI included overhead beam — only enforce qty=1
                 for item in items:
                     if _is_overhead_item(item) or item.get("profile", "").startswith("hss_"):
                         if item.get("quantity", 1) > 1:
@@ -708,27 +699,11 @@ class CantileverGateCalculator(BaseCalculator):
                             assumptions.append(
                                 "Overhead beam quantity corrected to 1 "
                                 "(one beam spans full gate length).")
-                        if item.get("profile", "") != correct_profile:
-                            old_profile = item["profile"]
-                            item["profile"] = correct_profile
-                            beam_len_ft = self.inches_to_feet(
-                                item.get("length_inches", total_gate_length_in + 24))
-                            new_price = round(
-                                beam_len_ft * lookup.get_price_per_foot(correct_profile), 2)
-                            item["unit_price"] = new_price
-                            item["line_total"] = round(new_price * item.get("quantity", 1), 2)
-                            assumptions.append(
-                                "Beam profile corrected: %s -> %s "
-                                "(estimated gate weight %.0f lbs)."
-                                % (old_profile, correct_profile, estimated_gate_weight))
-
-                # Sync beam profile correction to cut_list entries
+                # Sync qty=1 to cut_list entries
                 for cl_entry in cut_list:
                     if _is_overhead_item(cl_entry) or cl_entry.get("profile", "").startswith("hss_"):
                         if cl_entry.get("quantity", 1) > 1:
                             cl_entry["quantity"] = 1
-                        if cl_entry.get("profile", "") != correct_profile:
-                            cl_entry["profile"] = correct_profile
 
         # ========================================================
         # SAFETY NET: Add fence sections only if AI completely omitted them

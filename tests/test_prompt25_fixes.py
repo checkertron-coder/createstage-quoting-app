@@ -158,16 +158,15 @@ class TestFencePicketGateMatch:
 class TestOverheadBeamValidation:
     """Test overhead beam profile is validated against gate weight."""
 
-    def test_corrects_wrong_beam_profile_for_light_gate(self):
-        """Post-processor corrects hss_6x4 to hss_4x4 for light gate (<800 lbs)."""
+    def test_beam_profile_trusted_from_ai(self):
+        """Post-processor should trust AI beam profile, not override it."""
         from backend.calculators.cantilever_gate import CantileverGateCalculator
 
         calc = CantileverGateCalculator()
-        # AI provides beam via cut_list (items has bulk aggregate that gets removed)
         ai_result = {
             "items": [
                 {
-                    "description": "hss_6x4_0.25 — 17.0 ft",
+                    "description": "Overhead beam — HSS 6x4x1/4",
                     "material_type": "hss_structural_tube",
                     "profile": "hss_6x4_0.25",
                     "length_inches": 204.0,
@@ -178,18 +177,8 @@ class TestOverheadBeamValidation:
                     "waste_factor": 0.05,
                 },
             ],
-            "cut_list": [
-                {
-                    "description": "Overhead beam",
-                    "piece_name": "overhead_beam",
-                    "material_type": "hss_structural_tube",
-                    "profile": "hss_6x4_0.25",
-                    "length_inches": 204.0,
-                    "quantity": 1,
-                    "cut_type": "square",
-                }
-            ],
-            "total_weight_lbs": 300.0,  # Under 800 lbs
+            "cut_list": [],
+            "total_weight_lbs": 300.0,
             "total_sq_ft": 100.0,
             "weld_linear_inches": 200.0,
             "assumptions": [],
@@ -204,13 +193,12 @@ class TestOverheadBeamValidation:
             "infill_type": "Pickets (vertical bars)",
         }
         result = calc._post_process_ai_result(ai_result, fields, [])
-        # Beam from cut_list should exist with corrected profile
         beam_items = [i for i in result["items"]
                       if "overhead" in i["description"].lower()
                       or i.get("profile", "").startswith("hss_")]
         assert len(beam_items) == 1
-        # Profile corrected to hss_4x4 for light gate
-        assert beam_items[0]["profile"] == "hss_4x4_0.25"
+        # Profile kept as-is — trust Opus
+        assert beam_items[0]["profile"] == "hss_6x4_0.25"
 
     def test_correct_profile_kept(self):
         """If AI puts the right profile, it should be kept."""
@@ -543,8 +531,8 @@ class TestReviewEndpoint:
         if price_resp.status_code != 200:
             pytest.skip("Price failed: %s" % price_resp.json().get("detail", ""))
 
-        # Now run review with mocked Claude
-        with patch("backend.routers.quote_session.review_quote", return_value=mock_review):
+        # Now run review with mocked Claude (lazy import — mock at source)
+        with patch("backend.claude_reviewer.review_quote", return_value=mock_review):
             review_resp = client.post(
                 "/api/session/%s/review" % session_id,
                 headers=auth_headers,

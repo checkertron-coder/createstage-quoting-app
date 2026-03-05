@@ -253,18 +253,22 @@ class TestLogoUpload:
 
 
 class TestBeamProfileFix:
-    """Tests for Part 5: cantilever gate beam cut_list sync."""
+    """Tests for Part 5: cantilever gate beam qty=1 enforcement."""
 
-    def test_beam_cutlist_sync_code_exists(self):
-        """cantilever_gate.py should sync beam profile to cut_list."""
+    def test_beam_qty_enforcement_code_exists(self):
+        """cantilever_gate.py should enforce beam qty=1 in cut_list."""
         from backend.calculators import cantilever_gate
         src = inspect.getsource(cantilever_gate)
-        assert "Sync beam profile correction to cut_list" in src
+        assert "Sync qty=1 to cut_list" in src
+
+    def test_no_beam_profile_override(self):
+        """Beam profile should NOT be overridden — trust Opus."""
+        from backend.calculators import cantilever_gate
+        src = inspect.getsource(cantilever_gate)
+        assert "Beam profile corrected:" not in src
 
     def test_is_overhead_item_used_on_cutlist(self):
         """The beam fix should check cut_list entries with _is_overhead_item."""
         from backend.calculators import cantilever_gate
         src = inspect.getsource(cantilever_gate)
-        # Should have two separate blocks checking _is_overhead_item:
-        # one for items, one for cut_list
         assert "for cl_entry in cut_list:" in src

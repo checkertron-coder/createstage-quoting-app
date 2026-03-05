@@ -10,7 +10,6 @@ POST /api/session/{id}/price     — Run Stage 5 pricing engine, create Quote re
 """
 
 import logging
-import os
 import threading
 import uuid
 from datetime import datetime
@@ -22,7 +21,6 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..auth import get_current_user
-from ..claude_reviewer import review_quote
 from ..database import get_db
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
 from ..calculators.registry import get_calculator, has_calculator
@@ -514,8 +512,8 @@ def estimate_labor(
                 material_list.get("items", []),
                 enforced_dimensions=enforced_dims,
             )
-        except Exception:
-            pass  # Build instructions are optional — don't block the pipeline
+        except Exception as bi_err:
+            logger.warning("Build instructions generation failed: %s", bi_err)
 
         # Store results in session
         current_params["_labor_estimate"] = labor_estimate
@@ -529,8 +527,9 @@ def estimate_labor(
         session.updated_at = datetime.utcnow()
         flag_modified(session, "params_json")
         db.commit()
-    except Exception:
+    except Exception as est_err:
         db.rollback()
+        logger.warning("AI labor estimation failed, using fallback: %s", est_err)
 
         # Fallback: use rule-based estimation
         labor_estimate = estimator._fallback_estimate(material_list, quote_params, user_rates)
@@ -729,30 +728,15 @@ def price_quote(
         flag_modified(session, "params_json")
         db.commit()
 
-        # Auto-review: trigger Claude review non-blocking if API key is set
-        review_result = None
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            try:
-                review_fields = {k: v for k, v in current_params.items()
-                                 if not k.startswith("_")}
-                review_result = review_quote(priced_quote, review_fields)
-                # Store review in session (best-effort, non-blocking)
-                current_params["_review"] = review_result
-                session.params_json = current_params
-                flag_modified(session, "params_json")
-                db.commit()
-            except Exception:
-                logger.debug("Auto-review failed — non-critical, continuing")
+        # Auto-review disabled — adds latency for no value when Opus generates.
+        # Use the manual POST /session/{id}/review endpoint if needed.
 
-        response = {
+        return {
             "session_id": session_id,
             "quote_id": quote.id,
             "quote_number": quote_number,
             "priced_quote": priced_quote,
         }
-        if review_result and review_result.get("reviewed"):
-            response["review"] = review_result
-        return response
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -803,7 +787,8 @@ def review_session(
     quote_data = dict(quote.outputs_json)
     fields = {k: v for k, v in current_params.items() if not k.startswith("_")}
 
-    # Run review
+    # Run review (lazy import — top-level import removed with auto-review)
+    from ..claude_reviewer import review_quote
     review_result = review_quote(quote_data, fields)
 
     # Store review in session

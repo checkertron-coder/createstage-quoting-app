@@ -121,8 +121,8 @@ class TestOverheadBeamQtyEnforcement:
                           for a in assumptions)
         assert has_qty_note, "Should note qty correction in assumptions"
 
-    def test_corrects_beam_profile_for_light_gate(self):
-        """Post-processor corrects hss_6x4 to hss_4x4 for gate under 800 lbs."""
+    def test_trusts_ai_beam_profile(self):
+        """Post-processor trusts AI beam profile — no override."""
         calc, fields = self._make_calc_and_fields()
 
         ai_result = {
@@ -153,7 +153,7 @@ class TestOverheadBeamQtyEnforcement:
             ],
             "cut_list": [],
             "hardware": [],
-            "total_weight_lbs": 400.0,  # Under 800 lbs
+            "total_weight_lbs": 400.0,
             "total_sq_ft": 150.0,
             "weld_linear_inches": 250.0,
             "assumptions": [],
@@ -166,10 +166,11 @@ class TestOverheadBeamQtyEnforcement:
                       if "overhead" in i.get("description", "").lower()
                       or i.get("profile", "").startswith("hss_")]
         assert len(beam_items) == 1
-        assert beam_items[0]["profile"] == "hss_4x4_0.25"
+        # Profile kept as-is — trust Opus
+        assert beam_items[0]["profile"] == "hss_6x4_0.25"
         has_profile_note = any("profile corrected" in a.lower()
                                for a in assumptions)
-        assert has_profile_note, "Should note profile correction in assumptions"
+        assert not has_profile_note, "Should NOT override profile"
 
     def test_keeps_correct_beam_profile(self):
         """Post-processor keeps hss_4x4 for a light gate (no correction needed)."""
