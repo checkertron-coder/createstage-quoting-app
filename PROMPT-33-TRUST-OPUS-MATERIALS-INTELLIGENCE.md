@@ -83,7 +83,7 @@ A quote generated from the test description below must satisfy ALL of these:
 - [ ] No naked numbers without units
 
 ### Labor
-- [ ] Grind & Clean hours reflect outdoor painted cleanup (not indoor furniture-grade grinding) and scale proportionally to project size — for THIS test case, expect roughly 2-4 hours, not 8+
+- [ ] Grind & Clean hours reflect outdoor painted cleanup theory (not indoor furniture-grade grinding), with picket cleanup counted per channel run not per picket, and scaling proportionally to project size
 - [ ] Plate cutting labor reflected when applicable
 
 ### AI & Model
@@ -298,7 +298,7 @@ ls backend/field_extractor.py
 - Every dimension has its unit (inches or feet)
 
 **Labor (shop PDF):**
-- Grind & Clean hours are proportional to project size and reflect outdoor painted cleanup, not furniture-grade grinding (for this test case, roughly 2-4 hours — NOT 8+)
+- Grind & Clean hours reflect outdoor painted cleanup theory — picket cleanup per channel run, not per picket — and scale proportionally with project size
 - Plate cutting labor present if plate pieces are being cut from sheet stock
 
 **Client proposal:**
