@@ -1,4 +1,4 @@
-# PROMPT 34 — Labor Reality Check: Batch Cuts & Outdoor Grind
+# PROMPT 34 — Labor Reality Check: Batch Cuts, Outdoor Grind & Shop PDF Materials
 
 ## 1. Problem Statement
 
@@ -7,7 +7,7 @@ The labor calculator treats every piece as individually handled, ignoring batch 
 - **Cut & Prep: 13 hrs** for mostly chop saw cuts. Formula: `total_pieces × 4 min`. 127 identical pickets × 4 min = 508 min (8.5 hrs). Reality: batch-cut pickets on a chop saw with one fence stop = 45 min for all 127.
 - **Grind & Clean: 7.1 hrs** for outdoor painted steel. Formula: `type_b_joints × 1 min + type_a_joints × 2 min + 15`. 127 pickets × 2 joints × 1 min = 254 min just from pickets. Reality: outdoor painted = cleanup only (spatter, sharp edges, high spots). One pass down each face of the assembly with a flap disc. Maybe 1.5-2 hrs total.
 
-NOTE: The shop PDF materials section is CORRECT showing per-piece detail — do NOT change it. The Stock Order Summary is a bonus section, keep it where it is.
+NOTE: The shop PDF materials section needs to be aggregated by profile (see AC-3). The per-piece detail lives in the CUT LIST section. The Stock Order Summary is a bonus section, keep it where it is.
 
 ## 2. Acceptance Criteria
 
@@ -31,8 +31,29 @@ NOTE: The shop PDF materials section is CORRECT showing per-piece detail — do 
 - The punched_channel grind fix from P33 is now unnecessary for outdoor — remove that conditional or let it be overridden by the flat rate
 - Reasoning line must explain which path was taken
 
-### AC-3: Do NOT change the shop PDF materials section
-The per-piece materials list is correct for the shop copy. Do not aggregate it. The Stock Order Summary section added in P33 stays as-is.
+### AC-3: Shop PDF Materials Section — Aggregated by Profile
+The shop PDF MATERIALS section currently shows 28 individual pieces with individual prices. This is useless for a shop copy — the guy in the shop doesn't need to know each picket costs $4.12. He needs to know "order 11 sticks of 2x2x11ga."
+
+Replace the per-piece materials table with a profile-aggregated summary:
+
+| Profile | Description | Total Footage | Sticks Needed | Stock Length | Est. Weight | Total Cost |
+|---------|-------------|---------------|---------------|--------------|-------------|------------|
+| sq_tube_2x2_11ga | 2"×2"×11ga Square Tube | 187.4 ft | 10 | 20 ft | 561 lbs | $1,247.80 |
+| sq_bar_0.625 | 5/8" Square Bar | 42.1 ft | 3 | 20 ft | 55 lbs | $189.45 |
+| ... | ... | ... | ... | ... | ... | ... |
+
+Rules:
+- Group all pieces by profile (sq_tube_2x2_11ga, sq_bar_0.625, etc.)
+- Show total linear footage per profile (sum of all piece lengths in that profile)
+- Show sticks needed: `ceil(total_ft / stock_length_ft)`
+- Show estimated weight: `WEIGHT_PER_FOOT × total_footage` (pull from material catalog)
+- Show total material cost: sum of all `line_total` values for that profile
+- **Plates/sheets**: show as "X pcs" in the Total Footage column, not linear footage
+- **Concrete**: show as a separate summary line BELOW the steel table (not in the steel table)
+- The per-piece detail ALREADY exists in the CUT LIST section — do not duplicate it here
+- Stock Order Summary section stays as bonus below (shows remainder/leftover per profile)
+- **Material subtotal must remain mathematically identical** — this is aggregation only, not recalculation
+- Test: sum of all Total Cost values in aggregated table must equal the existing material_subtotal to the penny
 
 ## 3. Constraint Architecture
 
@@ -43,9 +64,18 @@ The per-piece materials list is correct for the shop copy. Do not aggregate it. 
 - Lines ~229-233: Replace per-joint outdoor grind with flat rate by project scale
 - The punched_channel grind fix block (lines 298-310) can stay but will be moot for outdoor painted — the flat rate overrides it
 
-**`backend/pdf_generator.py`** — NO CHANGES to materials section
+**`backend/pdf_generator.py`** lines ~430-453
+- Replace the per-piece materials loop with profile-aggregated table
+- Add weight column using `weight_lbs` from aggregated materials data
+- Render plates/sheets as "X pcs" not linear footage
+- Render concrete as separate summary line below the steel table
+- Keep Stock Order Summary section below as-is
 
-**`backend/pricing_engine.py`** — NO CHANGES needed
+**`backend/pricing_engine.py`** `_aggregate_materials()` method
+- Add `weight_lbs` field to each aggregated profile group
+- Calculate as: `WEIGHT_PER_FOOT[profile] × total_linear_feet`
+- Source weight data from the material catalog constants
+- Return aggregated list grouped by profile with: total_ft, sticks_needed, stock_length, weight_lbs, total_cost
 
 ### Files NOT to modify:
 - `ai_cut_list.py` — cut list generation is fine
@@ -108,8 +138,11 @@ else:
 - Test batch cut time: 127 identical pieces = 67 min, not 508
 - Test outdoor grind: 160 pieces = 2.0 hr, not 7.1
 - Test indoor grind: still uses per-joint formula
-- Test materials_summary includes cost data
-- Test shop PDF has aggregated materials (no 28 per-piece lines)
+- Test _aggregate_materials() returns weight_lbs per profile
+- Test shop PDF materials section shows profile-aggregated rows, not 28 per-piece lines
+- Test aggregated total cost equals material_subtotal to the penny
+- Test plates/sheets show as "X pcs" not linear footage
+- Test concrete appears below steel table, not inside it
 
 ## 5. Evaluation Design
 
@@ -126,6 +159,15 @@ else:
 # Outdoor, ~160 pieces, has miters, needs mill scale
 # Expected: 2.0 + 0.5 + 1.5 = 4.0 hrs (was 7.1)
 # Without mill scale: 2.0 + 0.5 = 2.5 hrs
+```
+
+### Verify materials aggregation:
+```python
+# Shop PDF should show ~6-8 profile rows, NOT 28 per-piece rows
+# Each row: profile, description, total_ft, sticks_needed, stock_length, weight_lbs, total_cost
+# Sum of total_cost column must == material_subtotal (to the penny)
+# Plates: "2 pcs" not "4.5 ft"
+# Concrete: separate line below table
 ```
 
 ### Run full test suite:
