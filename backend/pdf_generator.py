@@ -1301,18 +1301,41 @@ def generate_materials_pdf(priced_quote, user_profile):
     if summary:
         pdf.ln(4)
         pdf.section_header("STOCK ORDER SUMMARY")
-        sum_cols = [("Profile", 60), ("Total Length", 35), ("Sticks", 20),
-                    ("Stock Length", 35), ("Remainder", 40)]
+        sum_cols = [("Profile", 55), ("Total Length", 30), ("Sticks", 20),
+                    ("Stock Length", 30), ("Remainder", 30)]
         sum_widths = [c[1] for c in sum_cols]
         pdf.table_header(sum_cols)
         for ms in summary:
+            if ms.get("is_concrete"):
+                continue
             pdf.table_row([
-                _safe(str(ms.get("profile", "")).replace("_", " ")[:30]),
-                "%.1f ft" % ms.get("total_length_ft", 0),
+                _safe(_fmt_profile(str(ms.get("profile", "")))[:28]),
+                "%.1f'" % ms.get("total_length_ft", 0),
                 str(ms.get("sticks_needed", 0)),
-                "%d ft" % ms.get("stock_length_ft", 20),
-                "%.1f ft" % ms.get("remainder_ft", 0),
+                "%d'" % ms.get("stock_length_ft", 20),
+                "%.1f'" % ms.get("remainder_ft", 0),
             ], sum_widths)
+
+    # Hardware section
+    hardware = priced_quote.get("hardware", [])
+    if hardware:
+        pdf.ln(4)
+        pdf.section_header("HARDWARE & PARTS")
+        hw_cols = [("Item", 120), ("Qty", 20), ("Part #", 50)]
+        hw_widths = [c[1] for c in hw_cols]
+        pdf.table_header(hw_cols)
+        for item in hardware:
+            desc = _safe(item.get("description", "")[:60])
+            qty = str(item.get("quantity", 1))
+            # Show part number from cheapest option if available
+            options = item.get("options", [])
+            part_num = ""
+            if options:
+                valid = [o for o in options if o.get("price") is not None]
+                if valid:
+                    cheapest = min(valid, key=lambda o: o["price"])
+                    part_num = _safe(str(cheapest.get("part_number", "") or "")[:25])
+            pdf.table_row([desc, qty, part_num], hw_widths)
 
     return pdf.output()
 
@@ -1370,12 +1393,34 @@ def generate_materials_csv(priced_quote):
         writer.writerow(["Profile", "Total Length (ft)", "Sticks Needed",
                          "Stock Length (ft)", "Remainder (ft)"])
         for ms in summary:
+            if ms.get("is_concrete"):
+                continue
             writer.writerow([
                 ms.get("profile", ""),
                 "%.1f" % ms.get("total_length_ft", 0),
                 ms.get("sticks_needed", 0),
                 ms.get("stock_length_ft", 0),
                 "%.1f" % ms.get("remainder_ft", 0),
+            ])
+
+    # Add hardware section
+    hardware = priced_quote.get("hardware", [])
+    if hardware:
+        writer.writerow([])
+        writer.writerow(["--- HARDWARE & PARTS ---"])
+        writer.writerow(["Item", "Qty", "Part Number"])
+        for item in hardware:
+            options = item.get("options", [])
+            part_num = ""
+            if options:
+                valid = [o for o in options if o.get("price") is not None]
+                if valid:
+                    cheapest = min(valid, key=lambda o: o["price"])
+                    part_num = cheapest.get("part_number", "") or ""
+            writer.writerow([
+                item.get("description", ""),
+                item.get("quantity", 1),
+                part_num,
             ])
 
     return output.getvalue().encode("utf-8")
