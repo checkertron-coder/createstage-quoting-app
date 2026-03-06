@@ -529,10 +529,10 @@ def generate_quote_pdf(
     materials = priced_quote.get("materials", [])
     material_sub = priced_quote.get("material_subtotal", 0)
 
-    pdf.section_header("MATERIALS")
+    pdf.section_header("MATERIALS - STOCK ORDER")
     if materials_summary:
-        cols = [("Profile", 50), ("Total", 30), ("Sticks", 18),
-                ("Weight", 25), ("Stock", 25), ("Cost", 25)]
+        cols = [("Profile", 42), ("Total", 24), ("Sticks", 22),
+                ("Remainder", 24), ("Weight", 22), ("Cost", 22)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
 
@@ -540,20 +540,23 @@ def generate_quote_pdf(
         concrete_items = [ms for ms in materials_summary if ms.get("is_concrete")]
 
         for ms in steel_items:
-            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:26])
+            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:24])
             is_area = ms.get("is_area_sold", False)
             if is_area:
                 total_col = "%d pcs" % ms.get("piece_count", 0)
                 sticks_col = "-"
-                stock_col = "-"
+                remain_col = "-"
             else:
-                total_col = "%.1f ft" % ms.get("total_length_ft", 0)
-                sticks_col = str(ms.get("sticks_needed", 0))
-                stock_col = "%d ft" % ms.get("stock_length_ft", 20)
+                total_col = "%.1f'" % ms.get("total_length_ft", 0)
+                stk = ms.get("sticks_needed", 0)
+                stk_len = ms.get("stock_length_ft", 20)
+                sticks_col = "%d x %d'" % (stk, stk_len)
+                remain = ms.get("remainder_ft", 0)
+                remain_col = "%.1f'" % remain if remain > 0 else "-"
             weight = ms.get("weight_lbs", 0)
             weight_col = "%.0f lbs" % weight if weight > 0 else "-"
             cost_col = _fmt(ms.get("total_cost", 0))
-            pdf.table_row([profile, total_col, sticks_col, weight_col, stock_col, cost_col],
+            pdf.table_row([profile, total_col, sticks_col, remain_col, weight_col, cost_col],
                           widths)
 
         # Concrete as separate line below steel
@@ -563,7 +566,7 @@ def generate_quote_pdf(
                 desc = _safe("Concrete - %d x 80lb bags" % qty)
                 weight_col = "%.0f lbs" % cc.get("weight_lbs", 0)
                 cost_col = _fmt(cc.get("total_cost", 0))
-                pdf.table_row([desc, "", "", weight_col, "", cost_col], widths)
+                pdf.table_row([desc, "", "", "", weight_col, cost_col], widths)
     else:
         # Fallback: per-piece table if no summary available
         cols = [("Material", 70), ("Spec", 40), ("Qty", 20), ("Unit", 30), ("Total", 30)]

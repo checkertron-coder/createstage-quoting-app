@@ -640,7 +640,7 @@ const QuoteFlow = {
                 <table class="data-table">
                     <thead><tr>
                         <th>Profile</th><th>Pcs</th><th>Total</th>
-                        <th>Sticks</th><th>Weight</th><th class="r">Cost</th>
+                        <th>Sticks</th><th>Remainder</th><th>Weight</th><th class="r">Cost</th>
                     </tr></thead>
                     <tbody>
                         ${steelRows.map(s => {
@@ -648,12 +648,14 @@ const QuoteFlow = {
                             const isArea = s.is_area_sold;
                             const totalCol = isArea ? (s.piece_count + ' pcs') : (s.total_length_ft.toFixed(1) + "'");
                             const sticksCol = isArea ? '-' : (s.sticks_needed + ' x ' + s.stock_length_ft + "'");
+                            const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "' left") : '-';
                             const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
                             return `<tr>
                                 <td>${profile}</td>
                                 <td>${s.piece_count || ''}</td>
                                 <td>${totalCol}</td>
                                 <td>${sticksCol}</td>
+                                <td>${remainCol}</td>
                                 <td>${weightCol}</td>
                                 <td class="r">${this._fmt(s.total_cost)}</td>
                             </tr>`;
@@ -661,12 +663,12 @@ const QuoteFlow = {
                         ${concreteRows.map(s => `<tr>
                             <td>Concrete (${s.piece_count} x 80lb bags)</td>
                             <td>${s.piece_count}</td>
-                            <td>-</td><td>-</td>
+                            <td>-</td><td>-</td><td>-</td>
                             <td>${Math.round(s.weight_lbs)} lbs</td>
                             <td class="r">${this._fmt(s.total_cost)}</td>
                         </tr>`).join('')}
                         <tr class="subtotal-row">
-                            <td colspan="5">Material Subtotal</td>
+                            <td colspan="6">Material Subtotal</td>
                             <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                         </tr>
                     </tbody>

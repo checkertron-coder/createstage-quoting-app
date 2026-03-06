@@ -480,67 +480,8 @@ def estimate_labor(
             sum(p["hours"] * p["rate"] for p in labor_estimate.get("processes", [])),
             2,
         )
-
-        # Generate build instructions from material list
-        build_instructions = None
-        try:
-            from ..calculators.ai_cut_list import AICutListGenerator
-            ai_gen = AICutListGenerator()
-
-            # Build enforced dimensions for the build instructions prompt
-            build_fields = {k: v for k, v in current_params.items()
-                            if not k.startswith("_")}
-            enforced_dims = None
-            if session.job_type == "cantilever_gate":
-                enforced_dims = {}
-                cw = build_fields.get("clear_width", "")
-                ht = build_fields.get("height", "")
-                if cw:
-                    try:
-                        cw_val = float(str(cw).split()[0])
-                        enforced_dims["opening_width"] = "%s ft" % cw
-                        enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
-                        enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
-                        enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
-                    except (ValueError, IndexError):
-                        pass
-                if ht:
-                    try:
-                        ht_val = float(str(ht).split()[0])
-                        enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
-                    except (ValueError, IndexError):
-                        pass
-
-            logger.info("BUILD INSTRUCTIONS: starting generation for %s with %d cut items",
-                        session.job_type, len(material_list.get("items", [])))
-            build_instructions = ai_gen.generate_build_instructions(
-                session.job_type,
-                build_fields,
-                material_list.get("items", []),
-                enforced_dimensions=enforced_dims,
-            )
-            if build_instructions:
-                logger.info("BUILD INSTRUCTIONS: generated %d steps", len(build_instructions))
-            else:
-                logger.warning("BUILD INSTRUCTIONS: returned None — AI may be unconfigured or call failed")
-        except Exception as bi_err:
-            logger.warning("Build instructions generation failed: %s", bi_err, exc_info=True)
-
-        # Store results in session
-        current_params["_labor_estimate"] = labor_estimate
-        current_params["_finishing"] = finishing
-        if build_instructions:
-            current_params["_build_instructions"] = build_instructions
-        # Store detailed cut list from material items
-        current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
-        session.params_json = current_params
-        session.stage = "price"  # Ready for Stage 5
-        session.updated_at = datetime.utcnow()
-        flag_modified(session, "params_json")
-        db.commit()
     except Exception as est_err:
-        db.rollback()
-        logger.warning("AI labor estimation failed, using fallback: %s", est_err)
+        logger.warning("Labor estimation failed, using fallback: %s", est_err)
 
         # Fallback: use rule-based estimation
         labor_estimate = estimator._fallback_estimate(material_list, quote_params, user_rates)
@@ -560,15 +501,63 @@ def estimate_labor(
             2,
         )
 
-        # Store results in session
-        current_params["_labor_estimate"] = labor_estimate
-        current_params["_finishing"] = finishing
-        current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
-        session.params_json = current_params
-        session.stage = "price"  # Ready for Stage 5
-        session.updated_at = datetime.utcnow()
-        flag_modified(session, "params_json")
-        db.commit()
+    # Generate build instructions — ALWAYS attempted, independent of labor estimation
+    build_instructions = None
+    try:
+        from ..calculators.ai_cut_list import AICutListGenerator
+        ai_gen = AICutListGenerator()
+
+        # Build enforced dimensions for the build instructions prompt
+        build_fields = {k: v for k, v in current_params.items()
+                        if not k.startswith("_")}
+        enforced_dims = None
+        if session.job_type == "cantilever_gate":
+            enforced_dims = {}
+            cw = build_fields.get("clear_width", "")
+            ht = build_fields.get("height", "")
+            if cw:
+                try:
+                    cw_val = float(str(cw).split()[0])
+                    enforced_dims["opening_width"] = "%s ft" % cw
+                    enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
+                    enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
+                    enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
+                except (ValueError, IndexError):
+                    pass
+            if ht:
+                try:
+                    ht_val = float(str(ht).split()[0])
+                    enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
+                except (ValueError, IndexError):
+                    pass
+
+        logger.info("BUILD INSTRUCTIONS: starting generation for %s with %d cut items",
+                    session.job_type, len(material_list.get("items", [])))
+        build_instructions = ai_gen.generate_build_instructions(
+            session.job_type,
+            build_fields,
+            material_list.get("items", []),
+            enforced_dimensions=enforced_dims,
+        )
+        if build_instructions:
+            logger.info("BUILD INSTRUCTIONS: generated %d steps", len(build_instructions))
+        else:
+            logger.warning("BUILD INSTRUCTIONS: returned None — AI may be unconfigured or call failed")
+    except Exception as bi_err:
+        logger.warning("Build instructions generation failed: %s", bi_err, exc_info=True)
+
+    # Store all results in session
+    current_params["_labor_estimate"] = labor_estimate
+    current_params["_finishing"] = finishing
+    if build_instructions:
+        current_params["_build_instructions"] = build_instructions
+    # Store detailed cut list from material items
+    current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
+    session.params_json = current_params
+    session.stage = "price"  # Ready for Stage 5
+    session.updated_at = datetime.utcnow()
+    flag_modified(session, "params_json")
+    db.commit()
 
     return {
         "session_id": session_id,
