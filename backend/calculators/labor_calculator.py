@@ -224,29 +224,32 @@ def calculate_labor_hours(job_type, cut_list, fields):
     # ======================================================
     # STEP 3 — GRIND TIME
     # ======================================================
-    if is_outdoor:
-        # Outdoor: cleanup only — clean spatter, remove sharp edges, knock down high spots
-        # Do NOT grind welds smooth or flat
-        grind_min = type_a_joints * 2 + type_b_joints * 1 + 15  # cleanup only
-        grind_label = "outdoor cleanup"
-    else:
-        # Indoor/furniture: full grind — smooth joints, blend welds
-        grind_min = type_a_joints * 6 + type_b_joints * 3 + 30  # wire brush / final clean
-        grind_label = "indoor full grind"
-    if needs_mill_scale:
-        grind_min += 90  # 1.5 hrs for mill scale removal
-    grind_clean = max(0.5, grind_min / 60.0)
-
-    if is_outdoor:
+    if is_outdoor and has_coating:
+        # Outdoor painted/coated: flat cleanup pass — walk the assembly with a flap disc
+        # Not per-joint grinding. One pass: hit spatter, sharp edges, high spots.
+        # TYPE A structural: 1 min each (inspect joint, knock down spatter)
+        # TYPE B decorative/pickets: 0.3 min each (quick pass, less weld to clean)
+        # Miters: +2 min each (more cleanup at miter joints)
+        grind_min = 30 + type_a_count * 1.0 + type_b_count * 0.3 + miter_cuts * 2
+        grind_label = "outdoor cleanup pass"
+        if needs_mill_scale:
+            grind_min += 90
+        grind_clean = max(0.5, grind_min / 60.0)
         reasoning_lines.append(
-            "STEP 3 — GRIND (%s): %d TYPE A joints × 2 min + %d TYPE B welds × 1 min "
-            "+ 15 min cleanup%s = %.1f min (%.2f hr)."
-            % (grind_label, type_a_joints, type_b_joints,
+            "STEP 3 — GRIND (%s): 30 base + %d structural x 1 min + %d decorative x 0.3 min "
+            "+ %d miters x 2 min%s = %.1f min (%.2f hr)."
+            % (grind_label, type_a_count, type_b_count, miter_cuts,
                " + 90 min mill scale" if needs_mill_scale else "",
                grind_min, grind_clean))
     else:
+        # Indoor/furniture/bare metal: full grind — smooth joints, blend welds per-joint
+        grind_min = type_a_joints * 6 + type_b_joints * 3 + 30
+        grind_label = "indoor full grind"
+        if needs_mill_scale:
+            grind_min += 90
+        grind_clean = max(0.5, grind_min / 60.0)
         reasoning_lines.append(
-            "STEP 3 — GRIND (%s): %d TYPE A joints × 6 min + %d TYPE B welds × 3 min "
+            "STEP 3 — GRIND (%s): %d TYPE A joints x 6 min + %d TYPE B welds x 3 min "
             "+ 30 min clean%s = %.1f min (%.2f hr)."
             % (grind_label, type_a_joints, type_b_joints,
                " + 90 min mill scale" if needs_mill_scale else "",
@@ -272,9 +275,29 @@ def calculate_labor_hours(job_type, cut_list, fields):
     # STEP 4 — REMAINING CATEGORIES
     # ======================================================
 
-    # CUT & PREP: all pieces × 4 min + miter cuts × 2 min extra
-    cut_min = total_pieces * 4 + miter_cuts * 2
+    # CUT & PREP: batch cutting — identical pieces share setup
+    # Group by (profile, length, cut_type) — each batch: set stop once, then feed
+    cut_batches = {}  # type: dict
+    for item in cut_list:
+        profile = str(item.get("profile", ""))
+        length = round(item.get("length_inches", 0), 1)
+        ct = str(item.get("cut_type", "square")).lower()
+        batch_key = (profile, length, ct)
+        qty = int(item.get("quantity", 1))
+        if batch_key not in cut_batches:
+            cut_batches[batch_key] = {"qty": 0, "cut_type": ct}
+        cut_batches[batch_key]["qty"] += qty
+
+    cut_min = 0.0
+    for batch_key, batch in cut_batches.items():
+        is_miter = batch["cut_type"] in ("miter_45", "miter_22.5", "compound")
+        setup = 6.0 if is_miter else 4.0   # first piece: measure, mark, set stop
+        feed = 1.0 if is_miter else 0.5    # subsequent: feed and cut
+        cut_min += setup + max(0, batch["qty"] - 1) * feed
     cut_prep = max(1.0, cut_min / 60.0)
+    reasoning_lines.append(
+        "CUT BATCH: %d batches from %d pieces. Setup once per batch, feed-and-cut for identical."
+        % (len(cut_batches), total_pieces))
 
     # FIT & TACK: structural frame pieces × 5 min + picket positioning × 2.5 min
     # Pickets require individual measurement, plumbing, clamping, and tack welding
@@ -363,12 +386,12 @@ def calculate_labor_hours(job_type, cut_list, fields):
     # FINAL INSPECTION
     final_inspection = 0.5
 
-    punched_note = " (× 0.65 pre-punched channel)" if uses_punched_channel and picket_count > 0 else ""
+    punched_note = " (x 0.65 pre-punched channel)" if uses_punched_channel and picket_count > 0 else ""
     reasoning_lines.append(
-        "STEP 4 — CUT: %d pcs × 4 min + %d miter × 2 = %.1f min (%.2f hr). "
-        "FIT: %d TYPE A × 5 min + %d pickets × 2.5 min = %.1f min (%.2f hr)%s. "
-        "LAYOUT: 1.5 + 0.25 × %d/10 = %.2f hr."
-        % (total_pieces, miter_cuts, cut_min, cut_prep,
+        "STEP 4 — CUT: %d batches, %.1f min (%.2f hr). "
+        "FIT: %d TYPE A x 5 min + %d pickets x 2.5 min = %.1f min (%.2f hr)%s. "
+        "LAYOUT: 1.5 + 0.25 x %d/10 = %.2f hr."
+        % (len(cut_batches), cut_min, cut_prep,
            type_a_count, picket_count, fit_min, fit_tack, punched_note,
            extra_decorative, layout_setup))
 

@@ -303,54 +303,104 @@ class PricingEngine:
         """
         Group materials by profile for steel ordering summary.
 
-        Returns list of dicts: profile, description, total_length_ft,
-        stock_length_ft, sticks_needed, remainder_ft.
-        Skips concrete/other and area-sold materials (sheet/plate).
+        Returns list of dicts with: profile, description, total_length_ft,
+        stock_length_ft, sticks_needed, remainder_ft, weight_lbs, total_cost,
+        piece_count, is_area_sold.
+        Concrete items tracked separately with is_concrete flag.
         """
+        import math
         try:
             from .knowledge.materials import get_stock_length
         except Exception:
             return []
+        try:
+            from .weights import STOCK_WEIGHTS
+        except Exception:
+            STOCK_WEIGHTS = {}
 
         groups = {}  # type: dict
+        concrete_items = []  # type: list
         for item in materials:
             profile = item.get("profile", "")
             mat_type = item.get("material_type", "")
-            # Skip non-steel and area-sold materials
-            if mat_type in ("concrete", "other") or profile.startswith("concrete"):
-                continue
-            stock_ft = get_stock_length(profile)
-            if stock_ft is None:
-                continue  # sheet/plate — sold by area
-
+            line_total = item.get("line_total", 0)
+            qty = int(item.get("quantity", 1))
             length_in = item.get("length_inches", 0)
-            qty = item.get("quantity", 1)
-            total_ft = (length_in * qty) / 12.0
+
+            # Concrete tracked separately
+            if mat_type in ("concrete", "other") or profile.startswith("concrete"):
+                concrete_items.append(item)
+                continue
+
+            stock_ft = get_stock_length(profile)
+            is_area_sold = stock_ft is None  # sheet/plate
 
             if profile not in groups:
                 groups[profile] = {
                     "profile": profile,
                     "description": item.get("description", profile),
                     "total_length_ft": 0.0,
-                    "stock_length_ft": stock_ft,
+                    "piece_count": 0,
+                    "total_cost": 0.0,
+                    "stock_length_ft": stock_ft or 0,
+                    "is_area_sold": is_area_sold,
                 }
-            groups[profile]["total_length_ft"] += total_ft
+            groups[profile]["total_length_ft"] += (length_in * qty) / 12.0
+            groups[profile]["piece_count"] += qty
+            groups[profile]["total_cost"] += line_total
 
         result = []
         for profile, info in sorted(groups.items()):
-            import math
             total_ft = round(info["total_length_ft"], 1)
             stock_ft = info["stock_length_ft"]
-            sticks = int(math.ceil(total_ft / stock_ft)) if stock_ft > 0 else 0
-            remainder = round(sticks * stock_ft - total_ft, 1) if sticks > 0 else 0
+
+            if not info["is_area_sold"] and stock_ft > 0:
+                sticks = int(math.ceil(total_ft / stock_ft))
+                remainder = round(sticks * stock_ft - total_ft, 1)
+            else:
+                sticks = 0
+                remainder = 0
+
+            # Weight lookup — try exact key, then prefix match
+            weight_per_ft = STOCK_WEIGHTS.get(profile, 0)
+            if weight_per_ft == 0:
+                for key, val in STOCK_WEIGHTS.items():
+                    if profile.startswith(key) or key.startswith(profile.split("_")[0] + "_" + profile.split("_")[1] if "_" in profile else profile):
+                        weight_per_ft = val
+                        break
+            weight_lbs = round(weight_per_ft * total_ft, 1) if weight_per_ft > 0 else 0
+
             result.append({
                 "profile": profile,
                 "description": info["description"],
                 "total_length_ft": total_ft,
+                "piece_count": info["piece_count"],
                 "stock_length_ft": stock_ft,
                 "sticks_needed": sticks,
                 "remainder_ft": remainder,
+                "weight_lbs": weight_lbs,
+                "total_cost": round(info["total_cost"], 2),
+                "is_area_sold": info["is_area_sold"],
             })
+
+        # Add concrete as separate entry
+        if concrete_items:
+            total_qty = sum(int(c.get("quantity", 1)) for c in concrete_items)
+            total_cost = sum(c.get("line_total", 0) for c in concrete_items)
+            result.append({
+                "profile": "concrete",
+                "description": concrete_items[0].get("description", "Concrete"),
+                "total_length_ft": 0,
+                "piece_count": total_qty,
+                "stock_length_ft": 0,
+                "sticks_needed": 0,
+                "remainder_ft": 0,
+                "weight_lbs": round(total_qty * 80, 1),  # 80lb bags
+                "total_cost": round(total_cost, 2),
+                "is_area_sold": False,
+                "is_concrete": True,
+            })
+
         return result
 
     def recalculate_with_markup(self, priced_quote: dict, markup_pct: int) -> dict:
