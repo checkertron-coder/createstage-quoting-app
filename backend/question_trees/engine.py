@@ -8,11 +8,14 @@ re-asking questions already answered in the user's initial description.
 
 import base64
 import json
+import logging
 import urllib.request
 from pathlib import Path
 from typing import Optional
 
 from ..claude_client import call_fast, call_vision as _claude_vision
+
+logger = logging.getLogger(__name__)
 
 # Directory where question tree JSON files live
 DATA_DIR = Path(__file__).parent / "data"
@@ -85,7 +88,20 @@ class QuestionTreeEngine:
         )
 
         # Call Claude for extraction
-        extracted = _call_claude_extract(prompt)
+        raw_extracted = _call_claude_extract(prompt)
+        logger.info(
+            "Field extraction for %s: raw=%d fields from description (%d chars)",
+            job_type, len(raw_extracted), len(description),
+        )
+
+        # Normalize choice values to exact option strings
+        extracted = _normalize_extracted_fields(raw_extracted, questions)
+        if len(extracted) != len(raw_extracted):
+            dropped = set(raw_extracted.keys()) - set(extracted.keys())
+            logger.warning(
+                "Field extraction normalization dropped %d fields: %s",
+                len(dropped), dropped,
+            )
         return extracted
 
     def extract_from_photo(self, job_type: str, photo_url_or_path: str,
@@ -308,37 +324,31 @@ def _find_question(questions: list[dict], question_id: str) -> Optional[dict]:
 def _build_extraction_prompt(job_type: str, display_name: str,
                              description: str, field_descriptions: str) -> str:
     """Build the Claude prompt for field extraction from a description."""
-    return f"""You are a metal fabrication quoting assistant. A customer is requesting a quote for a {display_name} ({job_type}).
+    return f"""You are extracting structured fields from a metal fabrication quote request.
 
-The customer provided this description:
+Job type: {display_name} ({job_type})
+
+Customer description:
 \"\"\"{description}\"\"\"
 
-Below are the fields we need for this job type. Extract any values that the customer has CLEARLY stated in their description.
+EXTRACT every field the customer stated or clearly implied. Be AGGRESSIVE — if the customer said it, extract it.
 
 RULES:
-- Only extract values you are >90% confident about
-- For measurement fields, only extract if the customer gave a specific number. Do NOT guess from vague descriptions like "big" or "standard"
-- UNIT NORMALIZATION: Convert all measurements to the field's expected unit (usually feet):
-  "10 feet" -> 10, "120 inches" -> 10, "10'" -> 10, "10ft" -> 10, "3 meters" -> 9.8
-- DIMENSION PARSING: "10x6" or "10' x 6'" -> extract both dimensions to their respective fields (e.g., clear_width=10, height=6)
-- For choice fields, map the customer's words to the closest available option:
-  "black paint" -> finishing="paint", finish_color="black"
-  "powder coat" -> finishing="powder_coat"
-  "with motor" or "electric" -> has_motor="Yes"
-  "no install" or "pickup" -> installation="No"
-- If a field is not mentioned or unclear, do NOT include it
-- Return ONLY a JSON object with field_id: value pairs
-- If nothing can be extracted, return an empty object {{{{}}}}
-
-EXAMPLES:
-- "10' wide by 6' tall cantilever gate with motor" -> {{"clear_width": "10", "height": "6", "has_motor": "Yes"}}
-- "30 linear feet of 42 inch railing, paint black, full install" -> {{"linear_footage": "30", "railing_height": "42 inches", "finish": "paint", "installation": "Yes - full installation"}}
-- "repair rusted section of iron fence, about 8 feet" -> {{"repair_type": "Rust damage", "length": "8"}}
+1. MEASUREMENTS: Convert to the field's unit. "10 feet" -> 10. "120 inches" -> 10 (feet). "10'" -> 10. "10x6" -> width=10, height=6.
+2. CHOICE FIELDS: You MUST return the EXACT option string from the options list. Do NOT paraphrase.
+   - If customer says "paint" and options are ["Powder coat (most durable, outsourced)", "Paint (in-house)", ...] -> return "Paint (in-house)"
+   - If customer says "motor" or "electric" and options are ["Yes", "No — manual operation", ...] -> return "Yes"
+   - If customer says "install" or "full install" and options include "Full installation (gate + posts + concrete)" -> return that exact string
+   - If customer says "pickup" or "no install" and options include "Shop pickup (no installation)" -> return that exact string
+   - If customer says "pickets" and options include "Pickets (vertical bars)" -> return "Pickets (vertical bars)"
+3. BOOLEAN/YES-NO: "with motor" -> "Yes". "no motor" -> "No — manual operation" (use exact option string).
+4. If the field is NOT mentioned at all, omit it. But if mentioned even briefly, EXTRACT it.
+5. Return ONLY a JSON object with field_id: extracted_value pairs. Empty object {{{{}}}} if nothing found.
 
 FIELDS:
 {field_descriptions}
 
-Return ONLY valid JSON, no explanation:"""
+Return ONLY valid JSON:"""
 
 
 def _call_claude_extract(prompt: str) -> dict:
@@ -350,13 +360,107 @@ def _call_claude_extract(prompt: str) -> dict:
     try:
         text = call_fast(prompt, timeout=30)
         if text is None:
+            logger.warning("Claude extraction returned None")
             return {}
         parsed = json.loads(text)
         if isinstance(parsed, dict):
+            logger.info("Claude extraction parsed %d fields", len(parsed))
             return parsed
+        logger.warning("Claude extraction returned non-dict: %s", type(parsed))
         return {}
-    except Exception:
+    except json.JSONDecodeError as e:
+        logger.warning("Claude extraction JSON parse error: %s", e)
         return {}
+    except Exception as e:
+        logger.warning("Claude extraction failed: %s", e)
+        return {}
+
+
+def _normalize_extracted_fields(extracted: dict, questions: list) -> dict:
+    """
+    Normalize extracted field values to match exact option strings from the
+    question tree. This ensures branching logic works (exact string match).
+
+    Strategy for choice fields:
+    1. Exact match — value is already a valid option string
+    2. Case-insensitive match — "yes" -> "Yes"
+    3. Substring match — "paint" -> "Paint (in-house)" if only one option contains it
+    4. Drop — no match found, remove the field
+
+    Measurement/text/number fields pass through unchanged.
+    """
+    # Build lookup: field_id -> question dict
+    q_map = {}
+    for q in questions:
+        q_map[q["id"]] = q
+
+    result = {}
+    for field_id, value in extracted.items():
+        q = q_map.get(field_id)
+        if q is None:
+            # Unknown field — skip
+            logger.warning("Extraction returned unknown field: %s", field_id)
+            continue
+
+        field_type = q.get("type", "text")
+        options = q.get("options", [])
+
+        if field_type in ("choice", "multi_choice") and options:
+            normalized = _match_option(str(value), options)
+            if normalized is not None:
+                result[field_id] = normalized
+            else:
+                logger.warning(
+                    "Dropping field %s: value '%s' matched no option in %s",
+                    field_id, value, options,
+                )
+        else:
+            # Measurement, text, number, boolean, photo — pass through
+            result[field_id] = value
+
+    return result
+
+
+def _match_option(value: str, options: list) -> Optional[str]:
+    """
+    Match a raw extracted value to the closest option string.
+
+    Returns the exact option string, or None if no match.
+    """
+    # 1. Exact match
+    if value in options:
+        return value
+
+    # 2. Case-insensitive exact match
+    val_lower = value.lower().strip()
+    for opt in options:
+        if opt.lower().strip() == val_lower:
+            return opt
+
+    # 3. Substring match — value is contained in exactly one option
+    substring_matches = [opt for opt in options if val_lower in opt.lower()]
+    if len(substring_matches) == 1:
+        return substring_matches[0]
+
+    # 4. Reverse substring — option is contained in value
+    reverse_matches = [opt for opt in options if opt.lower().strip() in val_lower]
+    if len(reverse_matches) == 1:
+        return reverse_matches[0]
+
+    # 5. Word overlap — find the option with the most shared words
+    val_words = set(val_lower.split())
+    best_opt = None
+    best_overlap = 0
+    for opt in options:
+        opt_words = set(opt.lower().split())
+        overlap = len(val_words & opt_words)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_opt = opt
+    if best_overlap >= 1 and best_opt is not None:
+        return best_opt
+
+    return None
 
 
 def _read_image(photo_url_or_path: str) -> Optional[bytes]:

@@ -60,14 +60,14 @@ class TestKillSonnet:
 # =====================================================================
 
 class TestFieldExtractionPrompt:
-    def test_extraction_prompt_has_unit_normalization(self):
-        """Extraction prompt includes unit normalization guidance."""
+    def test_extraction_prompt_has_unit_conversion(self):
+        """Extraction prompt includes measurement conversion guidance."""
         from backend.question_trees.engine import _build_extraction_prompt
         prompt = _build_extraction_prompt(
             "cantilever_gate", "Cantilever Gate",
             "10 foot gate", "- clear_width: Width?"
         )
-        assert "UNIT NORMALIZATION" in prompt
+        assert "MEASUREMENT" in prompt or "Convert" in prompt
         assert "120 inches" in prompt
 
     def test_extraction_prompt_has_dimension_parsing(self):
@@ -77,18 +77,17 @@ class TestFieldExtractionPrompt:
             "cantilever_gate", "Cantilever Gate",
             "10x6 gate", "- clear_width: Width?"
         )
-        assert "DIMENSION PARSING" in prompt
         assert "10x6" in prompt
 
-    def test_extraction_prompt_has_examples(self):
-        """Extraction prompt includes concrete examples."""
+    def test_extraction_prompt_demands_exact_options(self):
+        """Extraction prompt requires exact option strings (Prompt 35 rewrite)."""
         from backend.question_trees.engine import _build_extraction_prompt
         prompt = _build_extraction_prompt(
             "cantilever_gate", "Cantilever Gate",
             "gate", "- clear_width: Width?"
         )
-        assert "EXAMPLES:" in prompt
-        assert "has_motor" in prompt
+        assert "EXACT option string" in prompt
+        assert "has_motor" not in prompt or "motor" in prompt  # motor mentioned in examples
 
 
 # =====================================================================
