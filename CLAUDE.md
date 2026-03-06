@@ -1,6 +1,33 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: Post Session 10 hotfix (Feb 28, 2026) — all contracts verified against code.*
+*Last verified: Prompt 34 (March 5, 2026)*
+
+---
+
+## 0. How We Build — The Nate B. Jones 5-Primitive Approach
+
+Every prompt and every implementation follows this framework. No exceptions.
+
+### The 5 Primitives
+1. **Problem Statement** — What's broken, why it matters, what the user experiences. Plain language. No code.
+2. **Acceptance Criteria** — What "done" looks like from the user's perspective. Testable outcomes, not implementation details.
+3. **Constraint Architecture** — What files are in play, what's off-limits, what must not break. Guard rails, not blueprints.
+4. **Decomposition** — Break the work into logical chunks. Describe WHAT each chunk accomplishes, not HOW to code it. Trust the builder.
+5. **Evaluation Design** — How to verify it worked. Real-world test cases, expected before/after.
+
+### The Philosophy: Teach, Don't Tell
+- **TEACH the theory** — "outdoor painted steel gets a cleanup pass, not full grinding" 
+- **DON'T dictate the code** — no hardcoded minute values, no Python snippets, no line-by-line instructions
+- **Trust Opus** — it's the most capable model available. Give it principles and constraints, it figures out the implementation.
+- **Fewer rules, better rules** — every rule in an AI prompt is noise that dilutes the rules that matter. Only include what Opus can't know on its own (shop-specific decisions, naming conventions, business rules).
+- **Scale over specifics** — a fix that only works for "this test case" is worthless. Teach the underlying principle so it works for every job type.
+
+### Anti-Patterns (things that have burned us)
+- ❌ Hardcoding hours/minutes for specific job types — breaks on every other job
+- ❌ Writing the Python code in the prompt — Claude Code becomes a typist, not a thinker
+- ❌ 16 numbered rules in an AI prompt — Opus drowns in noise, misses what matters
+- ❌ "For this test case..." — if it only works for one scenario, it's not a fix
+- ❌ Telling the AI what answer to produce — it'll parrot it back without understanding
 
 ---
 
