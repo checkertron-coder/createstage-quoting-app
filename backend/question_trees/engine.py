@@ -360,16 +360,25 @@ def _call_claude_extract(prompt: str) -> dict:
     try:
         text = call_fast(prompt, timeout=30)
         if text is None:
-            logger.warning("Claude extraction returned None")
+            logger.warning("Claude extraction returned None — API key may not be set")
             return {}
-        parsed = json.loads(text)
+        # Strip markdown code fences if Claude wrapped the JSON
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]  # remove first line
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+        parsed = json.loads(cleaned)
         if isinstance(parsed, dict):
-            logger.info("Claude extraction parsed %d fields", len(parsed))
+            logger.info("Claude extraction parsed %d fields: %s",
+                        len(parsed), list(parsed.keys()))
             return parsed
         logger.warning("Claude extraction returned non-dict: %s", type(parsed))
         return {}
     except json.JSONDecodeError as e:
-        logger.warning("Claude extraction JSON parse error: %s", e)
+        logger.warning("Claude extraction JSON parse error: %s — raw text: %.200s",
+                       e, text)
         return {}
     except Exception as e:
         logger.warning("Claude extraction failed: %s", e)

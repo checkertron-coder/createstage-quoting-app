@@ -100,6 +100,11 @@ def start_session(
         tree_loaded = True
         # Extract fields from the description
         extracted_fields = engine.extract_from_description(job_type, request.description)
+        logger.info(
+            "SESSION START extraction: job_type=%s, desc_len=%d, extracted=%d fields: %s",
+            job_type, len(request.description), len(extracted_fields),
+            list(extracted_fields.keys()),
+        )
 
         # Extract fields from photos (if any)
         photo_extracted_fields = {}
