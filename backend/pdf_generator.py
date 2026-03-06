@@ -182,14 +182,111 @@ def _fmt(amount) -> str:
 
 
 def _fmt_length(length) -> str:
-    """Format a length in inches for display. Handles sub-inch values."""
+    """Format a length in inches for display using feet'inches" notation."""
     if length is None or length <= 0:
         return "-"
     if length < 1:
         return '%.2f"' % length
-    if length == int(length):
-        return '%d"' % int(length)
-    return '%.1f"' % length
+    feet = int(length) // 12
+    inches = length - (feet * 12)
+    if feet > 0 and inches > 0:
+        if inches == int(inches):
+            return "%d'-%d\"" % (feet, int(inches))
+        return "%d'-%.1f\"" % (feet, inches)
+    elif feet > 0:
+        return "%d'-0\"" % feet
+    else:
+        if length == int(length):
+            return '%d"' % int(length)
+        return '%.1f"' % length
+
+
+def _fmt_profile(profile: str) -> str:
+    """Format a profile key into readable text with dimension marks.
+
+    sq_tube_2x2_11ga -> 2\"x2\" 11ga Sq Tube
+    flat_bar_1x0.25  -> 1\"x1/4\" Flat Bar
+    plate_0.25       -> 1/4\" Plate
+    angle_2x2x0.1875 -> 2\"x2\"x3/16\" Angle
+    """
+    if not profile:
+        return ""
+    parts = profile.split("_")
+    # Known shape prefixes (may be 1 or 2 words)
+    shapes = {
+        "sq tube": "Sq Tube", "sq bar": "Sq Bar", "rd tube": "Rd Tube",
+        "rd bar": "Rd Bar", "flat bar": "Flat Bar", "rect tube": "Rect Tube",
+        "angle": "Angle", "channel": "Channel", "plate": "Plate",
+        "sheet": "Sheet", "pipe": "Pipe", "punched channel": "Punched Ch.",
+    }
+    # Try to match shape from prefix
+    shape_name = ""
+    dim_start = 0
+    for n in (3, 2, 1):
+        candidate = " ".join(parts[:n]).lower()
+        if candidate in shapes:
+            shape_name = shapes[candidate]
+            dim_start = n
+            break
+    if not shape_name:
+        return profile.replace("_", " ")
+
+    # Parse remaining parts as dimensions and gauge
+    dims = parts[dim_start:]
+    formatted_dims = []
+    gauge = ""
+    for d in dims:
+        if d.endswith("ga"):
+            gauge = d
+        else:
+            # Convert decimal fractions to shop fractions
+            formatted_dims.append(_dec_to_fraction(d))
+
+    dim_str = "x".join(formatted_dims)
+    if gauge:
+        return '%s %s %s' % (dim_str, gauge, shape_name)
+    return '%s %s' % (dim_str, shape_name)
+
+
+def _dec_to_fraction(val: str) -> str:
+    """Convert decimal dimension to fraction with inch marks.
+
+    '2' -> '2\"'
+    '0.25' -> '1/4\"'
+    '0.1875' -> '3/16\"'
+    '2x2' -> '2\"x2\"'  (handles combined dims)
+    """
+    # Handle combined dims like '2x2'
+    if "x" in val:
+        return "x".join(_dec_to_fraction(p) for p in val.split("x"))
+
+    try:
+        f = float(val)
+    except ValueError:
+        return val
+
+    # Common shop fractions
+    fractions = {
+        0.0625: '1/16"', 0.125: '1/8"', 0.1875: '3/16"',
+        0.25: '1/4"', 0.3125: '5/16"', 0.375: '3/8"',
+        0.4375: '7/16"', 0.5: '1/2"', 0.5625: '9/16"',
+        0.625: '5/8"', 0.75: '3/4"', 0.875: '7/8"',
+    }
+
+    if f in fractions:
+        return fractions[f]
+
+    # Check for mixed: e.g. 1.5 -> 1-1/2"
+    whole = int(f)
+    frac = round(f - whole, 4)
+    if whole > 0 and frac in fractions:
+        frac_str = fractions[frac].rstrip('"')
+        return '%d-%s"' % (whole, frac_str)
+
+    # No fraction match — use as-is with inch mark
+    if f == int(f):
+        return '%d"' % int(f)
+    return '%s"' % val
 
 
 def _fmt_hrs(hours) -> str:
@@ -443,7 +540,7 @@ def generate_quote_pdf(
         concrete_items = [ms for ms in materials_summary if ms.get("is_concrete")]
 
         for ms in steel_items:
-            profile = _safe(str(ms.get("profile", "")).replace("_", " ")[:26])
+            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:26])
             is_area = ms.get("is_area_sold", False)
             if is_area:
                 total_col = "%d pcs" % ms.get("piece_count", 0)
@@ -500,7 +597,7 @@ def generate_quote_pdf(
         if mat_type in ("concrete", "other") or profile.startswith("concrete"):
             continue
         desc = item.get("description", "")[:30]
-        profile_short = profile[:20]
+        profile_short = _fmt_profile(profile)[:22]
         length = item.get("length_inches")
         qty = item.get("quantity", 1)
         cut = item.get("cut_type", "square")

@@ -511,14 +511,20 @@ def estimate_labor(
                     except (ValueError, IndexError):
                         pass
 
+            logger.info("BUILD INSTRUCTIONS: starting generation for %s with %d cut items",
+                        session.job_type, len(material_list.get("items", [])))
             build_instructions = ai_gen.generate_build_instructions(
                 session.job_type,
                 build_fields,
                 material_list.get("items", []),
                 enforced_dimensions=enforced_dims,
             )
+            if build_instructions:
+                logger.info("BUILD INSTRUCTIONS: generated %d steps", len(build_instructions))
+            else:
+                logger.warning("BUILD INSTRUCTIONS: returned None — AI may be unconfigured or call failed")
         except Exception as bi_err:
-            logger.warning("Build instructions generation failed: %s", bi_err)
+            logger.warning("Build instructions generation failed: %s", bi_err, exc_info=True)
 
         # Store results in session
         current_params["_labor_estimate"] = labor_estimate

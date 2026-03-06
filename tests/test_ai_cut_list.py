@@ -674,13 +674,17 @@ def test_furniture_hardware_in_ai_path():
 
 
 def test_spacer_length_format_not_zero():
-    """_fmt_length handles sub-inch values without rounding to 0."""
+    """_fmt_length handles sub-inch values and feet'inches" notation."""
     assert _fmt_length(0.5) == '0.50"'
     assert _fmt_length(0.25) == '0.25"'
     assert _fmt_length(0.75) == '0.75"'
-    assert _fmt_length(24) == '24"'
-    assert _fmt_length(24.0) == '24"'
-    assert _fmt_length(18.5) == '18.5"'
+    assert _fmt_length(24) == '2\'-0"'       # 24" = 2'-0"
+    assert _fmt_length(24.0) == '2\'-0"'
+    assert _fmt_length(18.5) == '1\'-6.5"'   # 18.5" = 1'-6.5"
+    assert _fmt_length(6) == '6"'            # under 12" stays inches only
+    assert _fmt_length(11) == '11"'
+    assert _fmt_length(36) == '3\'-0"'       # 36" = 3'-0"
+    assert _fmt_length(30) == '2\'-6"'       # 30" = 2'-6"
     assert _fmt_length(0) == "-"
     assert _fmt_length(None) == "-"
     assert _fmt_length(-1) == "-"

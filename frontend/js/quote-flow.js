@@ -627,56 +627,72 @@ const QuoteFlow = {
     },
 
     _renderMaterialsTable(pq) {
+        const summary = pq.materials_summary || [];
         const items = pq.materials || [];
-        if (!items.length) return '<p class="empty-section">No materials</p>';
+        if (!items.length && !summary.length) return '<p class="empty-section">No materials</p>';
 
-        // Group by profile for stock ordering summary
-        const stockGroups = {};
-        items.forEach(m => {
-            const profile = m.profile || 'unknown';
-            const stockFt = m.stock_length_ft;
-            if (!stockFt) return;
-            const lenFt = (m.length_inches || 0) / 12;
-            const qty = m.quantity || 1;
-            const totalFt = lenFt * qty;
-            if (!stockGroups[profile]) {
-                stockGroups[profile] = { stockFt: stockFt, totalFt: 0, desc: m.description || profile };
-            }
-            stockGroups[profile].totalFt += totalFt;
-        });
+        // Primary view: aggregated stock order by profile
+        if (summary.length > 0) {
+            const steelRows = summary.filter(s => !s.is_concrete);
+            const concreteRows = summary.filter(s => s.is_concrete);
 
-        const stockSummary = Object.keys(stockGroups).length > 0
-            ? `<div class="stock-order-summary">
-                <strong>Stock Order:</strong>
-                ${Object.entries(stockGroups).map(([profile, info]) => {
-                    const sticks = Math.ceil(info.totalFt / info.stockFt);
-                    const remainder = Math.round((sticks * info.stockFt - info.totalFt) * 10) / 10;
-                    return `<span class="stock-item">${sticks} x ${info.stockFt}' ${profile.replace(/_/g, ' ')} (${info.totalFt.toFixed(1)}' needed, ${remainder}' remaining)</span>`;
-                }).join('')}
-            </div>`
-            : '';
+            return `
+                <table class="data-table">
+                    <thead><tr>
+                        <th>Profile</th><th>Pcs</th><th>Total</th>
+                        <th>Sticks</th><th>Weight</th><th class="r">Cost</th>
+                    </tr></thead>
+                    <tbody>
+                        ${steelRows.map(s => {
+                            const profile = (s.profile || '').replace(/_/g, ' ');
+                            const isArea = s.is_area_sold;
+                            const totalCol = isArea ? (s.piece_count + ' pcs') : (s.total_length_ft.toFixed(1) + "'");
+                            const sticksCol = isArea ? '-' : (s.sticks_needed + ' x ' + s.stock_length_ft + "'");
+                            const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
+                            return `<tr>
+                                <td>${profile}</td>
+                                <td>${s.piece_count || ''}</td>
+                                <td>${totalCol}</td>
+                                <td>${sticksCol}</td>
+                                <td>${weightCol}</td>
+                                <td class="r">${this._fmt(s.total_cost)}</td>
+                            </tr>`;
+                        }).join('')}
+                        ${concreteRows.map(s => `<tr>
+                            <td>Concrete (${s.piece_count} x 80lb bags)</td>
+                            <td>${s.piece_count}</td>
+                            <td>-</td><td>-</td>
+                            <td>${Math.round(s.weight_lbs)} lbs</td>
+                            <td class="r">${this._fmt(s.total_cost)}</td>
+                        </tr>`).join('')}
+                        <tr class="subtotal-row">
+                            <td colspan="5">Material Subtotal</td>
+                            <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
 
+        // Fallback: per-piece table if no summary
         return `
             <table class="data-table">
-                <thead><tr><th>Material</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th><th></th></tr></thead>
+                <thead><tr><th>Material</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
                 <tbody>
-                    ${items.map((m, i) => `
+                    ${items.map(m => `
                         <tr>
                             <td>${m.description || ''}</td>
                             <td>${m.quantity || 1}</td>
                             <td class="r">${this._fmt(m.unit_price)}</td>
                             <td class="r">${this._fmt(m.line_total)}</td>
-                            <td>${m.profile ? `<button class="btn btn-ghost btn-xs swap-btn" onclick="QuoteFlow.openSwapModal(${i})">Swap</button>` : ''}</td>
                         </tr>
                     `).join('')}
                     <tr class="subtotal-row">
-                        <td colspan="4">Material Subtotal</td>
+                        <td colspan="3">Material Subtotal</td>
                         <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
-            ${stockSummary}
-            <div id="swap-modal-container"></div>
         `;
     },
 
