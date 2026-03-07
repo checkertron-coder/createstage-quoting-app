@@ -531,12 +531,16 @@ def estimate_labor(
                 except (ValueError, IndexError):
                     pass
 
+        # Use detailed cut list (per-piece), NOT consolidated items (per-profile).
+        # The build instructions prompt needs actual pieces ("Frame leg, 30in, qty 4")
+        # not profile summaries ("sq_tube_2x2_11ga — 48.5 ft").
+        detailed_cuts = material_list.get("cut_list", material_list.get("items", []))
         logger.info("BUILD INSTRUCTIONS: starting generation for %s with %d cut items",
-                    session.job_type, len(material_list.get("items", [])))
+                    session.job_type, len(detailed_cuts))
         build_instructions = ai_gen.generate_build_instructions(
             session.job_type,
             build_fields,
-            material_list.get("items", []),
+            detailed_cuts,
             enforced_dimensions=enforced_dims,
         )
         if build_instructions:
