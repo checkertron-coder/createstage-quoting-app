@@ -461,6 +461,16 @@ body {
 .inline-edit:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
 .inline-edit-sm { width: 50px; }
 
+/* --- Build Instructions Retry Banner --- */
+.build-retry-banner {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-radius: var(--radius);
+    background: #fef3c7; border: 1px solid #f59e0b;
+}
+.build-retry-icon { font-size: 1.2rem; }
+.build-retry-text { flex: 1; font-weight: 500; color: #92400e; }
+.build-retry-detail { font-size: 0.8rem; color: var(--text-secondary); margin-top: 6px; padding-left: 16px; }
+
 /* --- Notes Section --- */
 .notes-section { margin-top: 20px; }
 .notes-section h3 {

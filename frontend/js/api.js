@@ -257,6 +257,15 @@ const API = {
         return data;
     },
 
+    async retryBuildInstructions(sessionId) {
+        const resp = await this._fetch(`/session/${sessionId}/retry-build-instructions`, {
+            method: 'POST',
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Build instructions retry failed');
+        return data;
+    },
+
     async updateCustomer(sessionId, customerData) {
         const resp = await this._fetch(`/session/${sessionId}/customer`, {
             method: 'PATCH',

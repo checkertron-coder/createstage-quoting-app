@@ -503,6 +503,7 @@ def estimate_labor(
 
     # Generate build instructions — ALWAYS attempted, independent of labor estimation
     build_instructions = None
+    build_instructions_error = None
     try:
         from ..calculators.ai_cut_list import AICutListGenerator
         ai_gen = AICutListGenerator()
@@ -547,14 +548,19 @@ def estimate_labor(
             logger.info("BUILD INSTRUCTIONS: generated %d steps", len(build_instructions))
         else:
             logger.warning("BUILD INSTRUCTIONS: returned None — AI may be unconfigured or call failed")
+            build_instructions_error = "AI returned empty response"
     except Exception as bi_err:
         logger.warning("Build instructions generation failed: %s", bi_err, exc_info=True)
+        build_instructions_error = str(bi_err)
 
     # Store all results in session
     current_params["_labor_estimate"] = labor_estimate
     current_params["_finishing"] = finishing
     if build_instructions:
         current_params["_build_instructions"] = build_instructions
+        current_params.pop("_build_instructions_error", None)
+    else:
+        current_params["_build_instructions_error"] = build_instructions_error or "generation failed"
     # Store detailed cut list from material items
     current_params["_detailed_cut_list"] = material_list.get("cut_list", material_list.get("items", []))
     session.params_json = current_params
@@ -649,6 +655,11 @@ def price_quote(
 
     pricing_engine = PricingEngine()
     priced_quote = pricing_engine.build_priced_quote(session_data, user_dict)
+
+    # Pass build instructions error flag so frontend can show retry button
+    bi_error = current_params.get("_build_instructions_error")
+    if bi_error and not priced_quote.get("build_instructions"):
+        priced_quote["_build_instructions_error"] = bi_error
 
     # --- Validation layer: catch AI hallucinations before PDF ---
     try:
@@ -806,6 +817,112 @@ def review_session(
     return {
         "session_id": session_id,
         "review": review_result,
+    }
+
+
+@router.post("/{session_id}/retry-build-instructions")
+def retry_build_instructions(
+    session_id: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Retry generating build instructions for a completed quote.
+
+    Can be called any time after /estimate. Regenerates build instructions
+    and updates both the session and the Quote record's outputs_json.
+    """
+    session = db.query(models.QuoteSession).filter(
+        models.QuoteSession.id == session_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session")
+
+    current_params = dict(session.params_json or {})
+    material_list = current_params.get("_material_list")
+    if not material_list:
+        raise HTTPException(status_code=400, detail="No material_list — run /calculate first.")
+
+    from ..calculators.ai_cut_list import AICutListGenerator
+    from sqlalchemy.orm.attributes import flag_modified
+
+    ai_gen = AICutListGenerator()
+    build_fields = {k: v for k, v in current_params.items() if not k.startswith("_")}
+
+    # Build enforced dimensions (same logic as /estimate)
+    enforced_dims = None
+    if session.job_type == "cantilever_gate":
+        enforced_dims = {}
+        cw = build_fields.get("clear_width", "")
+        ht = build_fields.get("height", "")
+        if cw:
+            try:
+                cw_val = float(str(cw).split()[0])
+                enforced_dims["opening_width"] = "%s ft" % cw
+                enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
+                enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
+                enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
+            except (ValueError, IndexError):
+                pass
+        if ht:
+            try:
+                ht_val = float(str(ht).split()[0])
+                enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
+            except (ValueError, IndexError):
+                pass
+
+    detailed_cuts = material_list.get("cut_list", material_list.get("items", []))
+    logger.info("RETRY BUILD INSTRUCTIONS: %s with %d cut items", session.job_type, len(detailed_cuts))
+
+    try:
+        build_instructions = ai_gen.generate_build_instructions(
+            session.job_type,
+            build_fields,
+            detailed_cuts,
+            enforced_dimensions=enforced_dims,
+        )
+    except Exception as e:
+        logger.warning("Retry build instructions failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Build instructions generation failed: %s" % str(e),
+        )
+
+    if not build_instructions:
+        raise HTTPException(
+            status_code=500,
+            detail="AI returned empty build instructions. Check ANTHROPIC_API_KEY on server.",
+        )
+
+    logger.info("RETRY BUILD INSTRUCTIONS: generated %d steps", len(build_instructions))
+
+    # Store in session
+    current_params["_build_instructions"] = build_instructions
+    current_params.pop("_build_instructions_error", None)
+    session.params_json = current_params
+    session.updated_at = datetime.utcnow()
+    flag_modified(session, "params_json")
+
+    # Also update the Quote record if it exists
+    quote = db.query(models.Quote).filter(
+        models.Quote.session_id == session_id,
+    ).first()
+    if quote and quote.outputs_json:
+        outputs = dict(quote.outputs_json)
+        outputs["build_instructions"] = build_instructions
+        outputs.pop("_build_instructions_error", None)
+        quote.outputs_json = outputs
+        quote.updated_at = datetime.utcnow()
+        flag_modified(quote, "outputs_json")
+
+    db.commit()
+
+    return {
+        "session_id": session_id,
+        "build_instructions": build_instructions,
+        "step_count": len(build_instructions),
     }
 
 

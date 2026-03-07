@@ -550,7 +550,9 @@ const QuoteFlow = {
                 ${pq.consumables && pq.consumables.length ? this._renderSection('Consumables', this._renderConsumablesTable(pq)) : ''}
 
                 ${pq.detailed_cut_list && pq.detailed_cut_list.length ? this._renderSection('Cut List', this._renderCutListTable(pq)) : ''}
-                ${pq.build_instructions && pq.build_instructions.length ? this._renderSection('Build Sequence', this._renderBuildInstructions(pq)) : ''}
+                ${pq.build_instructions && pq.build_instructions.length
+                    ? this._renderSection('Build Sequence', this._renderBuildInstructions(pq))
+                    : this._renderBuildInstructionsRetry(pq)}
 
                 ${this._renderSection('Labor', this._renderLaborTable(pq))}
                 ${this._renderSection('Finishing', this._renderFinishing(pq))}
@@ -868,6 +870,50 @@ const QuoteFlow = {
                 }).join('')}
             </ol>
         `;
+    },
+
+    _renderBuildInstructionsRetry(pq) {
+        const error = pq._build_instructions_error || '';
+        return `
+            <div class="result-section build-retry-section">
+                <h3 class="section-title">Build Sequence</h3>
+                <div class="build-retry-banner">
+                    <span class="build-retry-icon">&#9888;&#65039;</span>
+                    <span class="build-retry-text">Fabrication sequence unavailable</span>
+                    <button class="btn btn-accent btn-sm" id="btn-retry-build" onclick="QuoteFlow.retryBuildInstructions()">
+                        Retry
+                    </button>
+                </div>
+                ${error ? `<p class="build-retry-detail">${error}</p>` : ''}
+            </div>
+        `;
+    },
+
+    async retryBuildInstructions() {
+        if (!this.sessionId) return;
+        const btn = document.getElementById('btn-retry-build');
+        if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+        try {
+            const result = await API.retryBuildInstructions(this.sessionId);
+            if (result.build_instructions && result.build_instructions.length) {
+                this.pricedQuote.build_instructions = result.build_instructions;
+                delete this.pricedQuote._build_instructions_error;
+                // Re-render the build section in place
+                const section = document.querySelector('.build-retry-section');
+                if (section) {
+                    section.outerHTML = this._renderSection('Build Sequence', this._renderBuildInstructions(this.pricedQuote));
+                }
+            }
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+            const detail = document.querySelector('.build-retry-detail');
+            if (detail) {
+                detail.textContent = e.message;
+            } else {
+                const banner = document.querySelector('.build-retry-banner');
+                if (banner) banner.insertAdjacentHTML('afterend', `<p class="build-retry-detail">${e.message}</p>`);
+            }
+        }
     },
 
     _getShopRate(pq) {
