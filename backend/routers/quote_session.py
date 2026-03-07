@@ -575,6 +575,7 @@ def estimate_labor(
         "finishing": finishing,
         "total_labor_hours": total_labor_hours,
         "total_labor_cost": total_labor_cost,
+        "build_instructions_status": "ok (%d steps)" % len(build_instructions) if build_instructions else "FAILED — check logs",
     }
 
 
