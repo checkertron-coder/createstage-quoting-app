@@ -323,7 +323,10 @@ class AICutListGenerator:
             prompt = self._build_instructions_prompt(
                 job_type, fields, cut_list,
                 enforced_dimensions=enforced_dimensions)
+            logger.info("BUILD INSTRUCTIONS: calling AI with prompt length=%d", len(prompt))
             response_text = self._call_ai(prompt)
+            logger.info("BUILD INSTRUCTIONS: AI returned %d chars",
+                        len(response_text) if response_text else 0)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
                 # 1. Strip banned terms from customer-facing text FIRST
@@ -355,7 +358,7 @@ class AICutListGenerator:
             logger.warning("AI build instructions returned empty — skipping")
             return None
         except Exception as e:
-            logger.warning("AI build instructions failed: %s — skipping", e)
+            logger.warning("AI build instructions failed: %s — skipping", e, exc_info=True)
             return None
 
     def _build_prompt(self, job_type: str, fields: dict) -> str:
@@ -980,18 +983,54 @@ Return ONLY valid JSON — an array of step objects:
 
     def _parse_instructions_response(self, response_text: str) -> Optional[List[Dict]]:
         """Parse AI response into build instruction steps."""
+        if not response_text:
+            logger.warning("BUILD INSTRUCTIONS parse: empty response text")
+            return None
+
+        # Strip markdown code fences if present
+        cleaned = response_text.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            # Remove first line (```json or ```) and last line (```)
+            if lines[-1].strip() == "```":
+                lines = lines[1:-1]
+            else:
+                lines = lines[1:]
+            cleaned = "\n".join(lines)
+
         try:
-            data = json.loads(response_text)
+            data = json.loads(cleaned)
         except json.JSONDecodeError:
-            match = re.search(r'\[[\s\S]*\]', response_text)
+            match = re.search(r'\[[\s\S]*\]', cleaned)
             if not match:
+                logger.warning("BUILD INSTRUCTIONS parse: no JSON array found in response (first 200 chars: %s)",
+                               cleaned[:200])
                 return None
             try:
                 data = json.loads(match.group())
             except json.JSONDecodeError:
+                logger.warning("BUILD INSTRUCTIONS parse: extracted JSON array failed to parse")
                 return None
 
+        # Handle dict wrapper — Claude often returns {"steps": [...]} or {"instructions": [...]}
+        if isinstance(data, dict):
+            # Try common wrapper keys
+            for key in ("steps", "instructions", "build_instructions",
+                        "fabrication_sequence", "sequence", "build_steps"):
+                if key in data and isinstance(data[key], list):
+                    logger.info("BUILD INSTRUCTIONS parse: unwrapped from dict key '%s'", key)
+                    data = data[key]
+                    break
+            else:
+                # Last resort: look for any list value in the dict
+                for key, val in data.items():
+                    if isinstance(val, list) and len(val) > 0 and isinstance(val[0], dict):
+                        logger.info("BUILD INSTRUCTIONS parse: unwrapped from dict key '%s' (fallback)", key)
+                        data = val
+                        break
+
         if not isinstance(data, list):
+            logger.warning("BUILD INSTRUCTIONS parse: response is not a list (type=%s)", type(data).__name__)
             return None
 
         validated = []

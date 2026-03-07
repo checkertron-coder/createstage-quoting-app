@@ -449,6 +449,18 @@ body {
 }
 .rate-input:focus { color: var(--accent); }
 
+/* --- Inline Edit (editable fields in tables) --- */
+.inline-edit {
+    width: 60px; border: 1px solid var(--border); border-radius: 4px;
+    padding: 2px 4px; font-size: 0.85rem; font-family: var(--font);
+    text-align: right; background: var(--surface);
+    -moz-appearance: textfield;
+}
+.inline-edit::-webkit-inner-spin-button,
+.inline-edit::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.inline-edit:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+.inline-edit-sm { width: 50px; }
+
 /* --- Notes Section --- */
 .notes-section { margin-top: 20px; }
 .notes-section h3 {

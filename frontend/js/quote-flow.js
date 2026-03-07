@@ -705,7 +705,7 @@ const QuoteFlow = {
             <table class="data-table">
                 <thead><tr><th>Item</th><th>Supplier</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
                 <tbody>
-                    ${items.map(h => {
+                    ${items.map((h, idx) => {
                         const opts = h.options || [];
                         const valid = opts.filter(o => o.price != null);
                         const cheap = valid.length ? valid.reduce((a, b) => a.price < b.price ? a : b) : null;
@@ -716,7 +716,11 @@ const QuoteFlow = {
                             <tr>
                                 <td>${h.description || ''}</td>
                                 <td>${cheap ? cheap.supplier : '—'}</td>
-                                <td>${qty}</td>
+                                <td>
+                                    <input type="number" class="inline-edit inline-edit-sm" step="1" min="0"
+                                        value="${qty}" data-hw-idx="${idx}"
+                                        onchange="QuoteFlow.adjustHardwareQty(${idx}, parseInt(this.value))">
+                                </td>
                                 <td class="r">${this._fmt(price)}</td>
                                 <td class="r">${this._fmt(price * qty)}</td>
                             </tr>
@@ -738,12 +742,16 @@ const QuoteFlow = {
             <table class="data-table">
                 <thead><tr><th>Item</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
                 <tbody>
-                    ${items.map(c => `
+                    ${items.map((c, idx) => `
                         <tr>
                             <td>${c.description || ''}</td>
-                            <td>${c.quantity || 1}</td>
+                            <td>
+                                <input type="number" class="inline-edit inline-edit-sm" step="0.5" min="0"
+                                    value="${parseFloat(c.quantity || 1).toFixed(1)}" data-cons-idx="${idx}"
+                                    onchange="QuoteFlow.adjustConsumableQty(${idx}, parseFloat(this.value))">
+                            </td>
                             <td class="r">${this._fmt(c.unit_price)}</td>
-                            <td class="r">${this._fmt(c.line_total)}</td>
+                            <td class="r">${this._fmt((c.unit_price || 0) * (c.quantity || 1))}</td>
                         </tr>
                     `).join('')}
                     <tr class="subtotal-row">
@@ -765,9 +773,14 @@ const QuoteFlow = {
                     ${procs.map(p => `
                         <tr>
                             <td>${PROCESS_NAMES[p.process] || p.process}</td>
-                            <td class="r">${parseFloat(p.hours).toFixed(1)}</td>
+                            <td class="r">
+                                <input type="number" class="inline-edit" step="0.5" min="0"
+                                    value="${parseFloat(p.hours).toFixed(1)}"
+                                    data-process="${p.process}"
+                                    onchange="QuoteFlow.adjustLaborHours('${p.process}', parseFloat(this.value))">
+                            </td>
                             <td class="r">${this._fmt(p.rate)}/hr</td>
-                            <td class="r">${this._fmt(p.hours * p.rate)}</td>
+                            <td class="r labor-line-total" data-process="${p.process}">${this._fmt(p.hours * p.rate)}</td>
                         </tr>
                     `).join('')}
                     <tr class="subtotal-row">
@@ -868,12 +881,85 @@ const QuoteFlow = {
     changeRate(newRate) {
         if (!this.pricedQuote || !newRate || newRate <= 0) return;
         const pq = this.pricedQuote;
-        let laborTotal = 0;
-        (pq.labor || []).forEach(p => {
-            p.rate = newRate;
-            laborTotal += (p.hours || 0) * newRate;
+        (pq.labor || []).forEach(p => { p.rate = newRate; });
+        this._recalcTotals();
+
+        // Re-render labor table to show updated rates
+        const laborSections = document.querySelectorAll('.result-section');
+        laborSections.forEach(sec => {
+            const title = sec.querySelector('.section-title');
+            if (title && title.textContent === 'Labor') {
+                sec.innerHTML = '<h3 class="section-title">Labor</h3>' + this._renderLaborTable(pq);
+            }
         });
-        pq.labor_subtotal = Math.round(laborTotal * 100) / 100;
+    },
+
+    adjustLaborHours(process, newHours) {
+        if (!this.pricedQuote || isNaN(newHours) || newHours < 0) return;
+        const pq = this.pricedQuote;
+        const proc = (pq.labor || []).find(p => p.process === process);
+        if (!proc) return;
+        proc.hours = Math.round(newHours * 10) / 10;
+
+        // Update line total display
+        const lineEl = document.querySelector(`td.labor-line-total[data-process="${process}"]`);
+        if (lineEl) lineEl.textContent = this._fmt(proc.hours * proc.rate);
+
+        // Recalculate labor subtotal
+        this._recalcTotals();
+
+        // Persist to backend (debounced)
+        this._debouncedAdjust('labor', { [process]: proc.hours });
+    },
+
+    adjustHardwareQty(idx, newQty) {
+        if (!this.pricedQuote || isNaN(newQty) || newQty < 0) return;
+        const pq = this.pricedQuote;
+        const hw = (pq.hardware || [])[idx];
+        if (!hw) return;
+        hw.quantity = Math.max(0, Math.round(newQty));
+
+        // Recalculate hardware subtotal
+        let hwTotal = 0;
+        (pq.hardware || []).forEach(h => {
+            const opts = h.options || [];
+            const valid = opts.filter(o => o.price != null);
+            if (valid.length) {
+                const cheapest = valid.reduce((a, b) => a.price < b.price ? a : b);
+                hwTotal += cheapest.price * (h.quantity || 1);
+            }
+        });
+        pq.hardware_subtotal = Math.round(hwTotal * 100) / 100;
+
+        this._recalcTotals();
+        this._debouncedAdjust('hardware', { [idx]: hw.quantity });
+    },
+
+    adjustConsumableQty(idx, newQty) {
+        if (!this.pricedQuote || isNaN(newQty) || newQty < 0) return;
+        const pq = this.pricedQuote;
+        const item = (pq.consumables || [])[idx];
+        if (!item) return;
+        item.quantity = Math.round(newQty * 10) / 10;
+        item.line_total = Math.round(item.unit_price * item.quantity * 100) / 100;
+
+        // Recalculate consumable subtotal
+        pq.consumable_subtotal = Math.round(
+            (pq.consumables || []).reduce((s, c) => s + (c.line_total || 0), 0) * 100
+        ) / 100;
+
+        this._recalcTotals();
+        this._debouncedAdjust('consumable', { [idx]: item.quantity });
+    },
+
+    _recalcTotals() {
+        const pq = this.pricedQuote;
+        if (!pq) return;
+        // Recalculate labor subtotal
+        pq.labor_subtotal = Math.round(
+            (pq.labor || []).reduce((s, p) => s + (p.hours || 0) * (p.rate || 0), 0) * 100
+        ) / 100;
+
         pq.subtotal = Math.round((
             (pq.material_subtotal || 0) +
             (pq.hardware_subtotal || 0) +
@@ -881,6 +967,7 @@ const QuoteFlow = {
             pq.labor_subtotal +
             (pq.finishing_subtotal || 0)
         ) * 100) / 100;
+
         const markupPct = pq.selected_markup_pct || 0;
         pq.total = Math.round(pq.subtotal * (1 + markupPct / 100) * 100) / 100;
 
@@ -891,16 +978,25 @@ const QuoteFlow = {
         if (laborEl) laborEl.textContent = this._fmt(pq.labor_subtotal);
         if (subEl) subEl.textContent = this._fmt(pq.subtotal);
         if (totalEl) totalEl.textContent = this._fmt(pq.total);
+    },
 
-        // Re-render labor table to show updated rates
-        const laborSection = document.querySelector('.result-section:has(table) h3.section-title');
-        const laborSections = document.querySelectorAll('.result-section');
-        laborSections.forEach(sec => {
-            const title = sec.querySelector('.section-title');
-            if (title && title.textContent === 'Labor') {
-                sec.innerHTML = '<h3 class="section-title">Labor</h3>' + this._renderLaborTable(pq);
-            }
-        });
+    _adjustTimers: {},
+    _debouncedAdjust(type, data) {
+        if (this._adjustTimers[type]) clearTimeout(this._adjustTimers[type]);
+        // Accumulate adjustments
+        if (!this._pendingAdjustments) this._pendingAdjustments = {};
+        if (!this._pendingAdjustments[type]) this._pendingAdjustments[type] = {};
+        Object.assign(this._pendingAdjustments[type], data);
+
+        this._adjustTimers[type] = setTimeout(() => {
+            if (!this.quoteId || !this._pendingAdjustments) return;
+            const payload = {};
+            if (this._pendingAdjustments.labor) payload.labor_adjustments = this._pendingAdjustments.labor;
+            if (this._pendingAdjustments.hardware) payload.hardware_adjustments = this._pendingAdjustments.hardware;
+            if (this._pendingAdjustments.consumable) payload.consumable_adjustments = this._pendingAdjustments.consumable;
+            this._pendingAdjustments = {};
+            API.adjustLineItems(this.quoteId, payload).catch(e => console.error('Adjust failed:', e));
+        }, 800);
     },
 
     async changeMarkup(pct, btn) {

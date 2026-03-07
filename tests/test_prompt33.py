@@ -274,13 +274,15 @@ class TestMaterialsExport:
         # Concrete should be excluded
         assert "concrete" not in text.lower()
 
-    def test_materials_csv_has_summary(self):
-        """Materials CSV includes stock order summary section."""
+    def test_materials_csv_has_aggregated_data(self):
+        """Materials CSV uses aggregated stock order as primary view."""
         from backend.pdf_generator import generate_materials_csv
         pq = self._make_priced_quote()
         result = generate_materials_csv(pq)
         text = result.decode("utf-8")
-        assert "STOCK ORDER SUMMARY" in text
+        # Primary view now shows aggregated columns
+        assert "Total Length (ft)" in text
+        assert "Sticks Needed" in text
 
 
 # =====================================================================

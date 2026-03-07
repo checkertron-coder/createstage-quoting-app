@@ -486,6 +486,127 @@ def get_material_alternatives(
     return results
 
 
+class AdjustLineItemsRequest(BaseModel):
+    """Adjust labor hours, hardware quantities, or consumable quantities."""
+    labor_adjustments: Optional[dict] = None      # {"process_name": new_hours, ...}
+    hardware_adjustments: Optional[dict] = None    # {"item_index": new_qty, ...}
+    consumable_adjustments: Optional[dict] = None  # {"item_index": new_qty, ...}
+
+
+@router.patch("/{quote_id}/adjust")
+def adjust_line_items(
+    quote_id: int,
+    request: AdjustLineItemsRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Adjust labor hours, hardware quantities, or consumable quantities on a quote.
+
+    Recalculates all affected subtotals, markup options, and total.
+    Returns the updated outputs_json.
+    """
+    quote = db.query(models.Quote).filter(models.Quote.id == quote_id).first()
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your quote")
+    if not quote.outputs_json:
+        raise HTTPException(status_code=400, detail="Quote has no outputs")
+
+    outputs = dict(quote.outputs_json)
+    changed = False
+
+    # --- Labor hour adjustments ---
+    if request.labor_adjustments:
+        labor = outputs.get("labor", [])
+        for proc_name, new_hours in request.labor_adjustments.items():
+            new_hours = max(0, float(new_hours))
+            for proc in labor:
+                if proc.get("process") == proc_name:
+                    proc["hours"] = round(new_hours, 2)
+                    changed = True
+                    break
+        if changed:
+            outputs["labor"] = labor
+            outputs["labor_subtotal"] = round(
+                sum(p.get("hours", 0) * p.get("rate", 0) for p in labor), 2
+            )
+
+    # --- Hardware quantity adjustments ---
+    if request.hardware_adjustments:
+        hardware = outputs.get("hardware", [])
+        for idx_str, new_qty in request.hardware_adjustments.items():
+            idx = int(idx_str)
+            new_qty = max(0, int(new_qty))
+            if 0 <= idx < len(hardware):
+                hardware[idx]["quantity"] = new_qty
+                changed = True
+        if changed:
+            outputs["hardware"] = hardware
+            # Recalculate hardware subtotal
+            hw_total = 0.0
+            for item in hardware:
+                qty = item.get("quantity", 1)
+                options = item.get("options", [])
+                valid = [o for o in options if o.get("price") is not None]
+                if valid:
+                    cheapest = min(valid, key=lambda o: o["price"])
+                    hw_total += cheapest["price"] * qty
+            outputs["hardware_subtotal"] = round(hw_total, 2)
+
+    # --- Consumable quantity adjustments ---
+    if request.consumable_adjustments:
+        consumables = outputs.get("consumables", [])
+        for idx_str, new_qty in request.consumable_adjustments.items():
+            idx = int(idx_str)
+            new_qty = max(0, float(new_qty))
+            if 0 <= idx < len(consumables):
+                item = consumables[idx]
+                unit_price = item.get("unit_price", 0)
+                item["quantity"] = round(new_qty, 2)
+                item["line_total"] = round(unit_price * new_qty, 2)
+                changed = True
+        if changed:
+            outputs["consumables"] = consumables
+            outputs["consumable_subtotal"] = round(
+                sum(c.get("line_total", 0) for c in consumables), 2
+            )
+
+    if not changed:
+        return outputs
+
+    # Recalculate subtotal and total
+    subtotal = round(
+        outputs.get("material_subtotal", 0)
+        + outputs.get("hardware_subtotal", 0)
+        + outputs.get("consumable_subtotal", 0)
+        + outputs.get("labor_subtotal", 0)
+        + outputs.get("finishing_subtotal", 0),
+        2,
+    )
+    outputs["subtotal"] = subtotal
+
+    from ..pricing_engine import PricingEngine
+    pe = PricingEngine()
+    outputs["markup_options"] = pe._build_markup_options(subtotal)
+
+    markup_pct = outputs.get("selected_markup_pct", 0)
+    outputs["total"] = outputs["markup_options"].get(str(markup_pct), subtotal)
+
+    # Persist
+    quote.outputs_json = outputs
+    quote.subtotal = subtotal
+    quote.total = outputs["total"]
+    quote.updated_at = datetime.utcnow()
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(quote, "outputs_json")
+    db.commit()
+    db.refresh(quote)
+
+    return outputs
+
+
 @router.get("/{quote_id}/breakdown")
 def get_quote_breakdown(quote_id: int, db: Session = Depends(get_db)):
     """Returns full cost breakdown — for internal use (shows profit margin)."""

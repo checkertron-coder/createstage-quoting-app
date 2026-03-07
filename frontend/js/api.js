@@ -247,6 +247,16 @@ const API = {
         return data;
     },
 
+    async adjustLineItems(quoteId, adjustments) {
+        const resp = await this._fetch(`/quotes/${quoteId}/adjust`, {
+            method: 'PATCH',
+            body: JSON.stringify(adjustments),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Adjustment failed');
+        return data;
+    },
+
     async updateCustomer(sessionId, customerData) {
         const resp = await this._fetch(`/session/${sessionId}/customer`, {
             method: 'PATCH',
