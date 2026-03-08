@@ -897,7 +897,7 @@ Return ONLY valid JSON — an array of step objects:
 
     def _call_ai(self, prompt: str) -> str:
         """Call Claude API. Raises RuntimeError on failure."""
-        text = call_fast(prompt, timeout=180)
+        text = call_fast(prompt, timeout=360)
         if text is None:
             raise RuntimeError("AI provider returned no response")
         return text
