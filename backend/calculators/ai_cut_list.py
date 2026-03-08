@@ -366,7 +366,7 @@ class AICutListGenerator:
         # Summarize fields — skip internal keys
         field_lines = []
         for key, val in fields.items():
-            if key.startswith("_"):
+            if key.startswith("_") and not key.startswith("_ai_"):
                 continue
             if val is not None and str(val).strip():
                 field_lines.append("  - %s: %s" % (key, val))
@@ -744,7 +744,7 @@ Return ONLY valid JSON — an array of objects:
         # Summarize fields (skip internal keys)
         field_lines = []
         for key, val in fields.items():
-            if key.startswith("_"):
+            if key.startswith("_") and not key.startswith("_ai_"):
                 continue
             if val is not None and str(val).strip():
                 field_lines.append("  - %s: %s" % (key, val))

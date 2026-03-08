@@ -133,6 +133,18 @@ def start_session(
         # Get next questions (skipping all extracted)
         next_questions = engine.get_next_questions(job_type, merged_fields)
 
+        # Ask AI to suggest additional questions not covered by the tree
+        try:
+            tree_question_ids = [q["id"] for q in next_questions]
+            ai_questions = engine.suggest_additional_questions(
+                job_type, request.description, merged_fields, tree_question_ids
+            )
+            if ai_questions:
+                next_questions.extend(ai_questions)
+                logger.info("AI suggested %d additional questions", len(ai_questions))
+        except Exception:
+            pass  # AI suggestion failure never blocks session start
+
     # Create session record
     session_id = str(uuid.uuid4())
     merged_for_storage = dict(extracted_fields)

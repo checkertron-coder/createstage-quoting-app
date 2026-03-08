@@ -377,3 +377,156 @@ class TestFormatHelpers:
         assert _fmt_length(24) == "2'-0\""
         assert _fmt_length(30) == "2'-6\""
         assert _fmt_length(6) == '6"'
+
+
+# =====================================================================
+# AI-Suggested Questions (Prompt 36 addition)
+# =====================================================================
+
+class TestAISuggestedQuestions:
+    """Tests for engine.suggest_additional_questions()."""
+
+    def test_suggest_returns_valid_schema(self):
+        """Mock call_fast returning 2 questions — verify schema."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        ai_response = json.dumps([
+            {"id": "material_gauge", "text": "What gauge for the steel?",
+             "type": "choice", "options": ["14 gauge", "11 gauge", "3/16\""],
+             "hint": "Thicker = stronger"},
+            {"id": "surface_finish", "text": "What surface finish?",
+             "type": "choice", "options": ["Mill finish", "Brushed", "Mirror"],
+             "hint": "Affects labor time"},
+        ])
+
+        with patch("backend.question_trees.engine.call_fast", return_value=ai_response):
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "furniture_table",
+                "Build me a steel table with a glass top",
+                {"clear_width": "48"},
+                ["clear_width", "height", "frame_material"],
+            )
+
+        assert len(result) == 2
+        for q in result:
+            assert q["id"].startswith("_ai_")
+            assert "text" in q
+            assert "type" in q
+            assert q["required"] is False
+            assert q["source"] == "ai_suggested"
+
+    def test_suggest_returns_empty_on_full_coverage(self):
+        """When AI returns [], result is empty list."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        with patch("backend.question_trees.engine.call_fast", return_value="[]"):
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "bollard", "Standard 4-inch bollard",
+                {"diameter": "4"}, ["diameter", "height"],
+            )
+
+        assert result == []
+
+    def test_suggest_handles_ai_failure(self):
+        """When call_fast returns None, returns empty list without exception."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        with patch("backend.question_trees.engine.call_fast", return_value=None):
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "swing_gate", "A gate",
+                {}, ["clear_width"],
+            )
+
+        assert result == []
+
+    def test_suggest_caps_at_3(self):
+        """Even if AI returns 5, only 3 are returned."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        ai_response = json.dumps([
+            {"id": "q1", "text": "Q1?", "type": "text"},
+            {"id": "q2", "text": "Q2?", "type": "text"},
+            {"id": "q3", "text": "Q3?", "type": "text"},
+            {"id": "q4", "text": "Q4?", "type": "text"},
+            {"id": "q5", "text": "Q5?", "type": "text"},
+        ])
+
+        with patch("backend.question_trees.engine.call_fast", return_value=ai_response):
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "custom_fab", "Complex project with many details",
+                {}, [],
+            )
+
+        assert len(result) == 3
+
+    def test_suggest_enforces_ai_prefix(self):
+        """Questions with IDs like 'gauge' should become '_ai_gauge'."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        ai_response = json.dumps([
+            {"id": "gauge", "text": "What gauge?", "type": "choice",
+             "options": ["14ga", "11ga"]},
+            {"id": "_ai_already_prefixed", "text": "Already prefixed?",
+             "type": "text"},
+        ])
+
+        with patch("backend.question_trees.engine.call_fast", return_value=ai_response):
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "furniture_table", "Steel table",
+                {}, [],
+            )
+
+        assert result[0]["id"] == "_ai_gauge"
+        assert result[1]["id"] == "_ai_already_prefixed"
+
+    def test_suggest_handles_empty_description(self):
+        """Empty description returns [] immediately without AI call."""
+        from backend.question_trees.engine import QuestionTreeEngine
+
+        with patch("backend.question_trees.engine.call_fast") as mock_ai:
+            engine = QuestionTreeEngine()
+            result = engine.suggest_additional_questions(
+                "bollard", "", {}, [],
+            )
+
+        assert result == []
+        mock_ai.assert_not_called()
+
+
+class TestAIFieldsInPrompts:
+    """Tests that _ai_ prefixed fields pass through to AI prompts."""
+
+    def test_ai_fields_in_cut_list_prompt(self):
+        """_ai_ fields should appear in _build_prompt, _internal should not."""
+        from backend.calculators.ai_cut_list import AICutListGenerator
+        gen = AICutListGenerator()
+        fields = {
+            "clear_width": "10",
+            "_ai_gauge": "11ga",
+            "_internal": "skip_me",
+            "_material_list": {"items": []},
+        }
+        prompt = gen._build_prompt("led_sign_custom", fields)
+        assert "_ai_gauge: 11ga" in prompt
+        assert "_internal" not in prompt
+        assert "_material_list" not in prompt
+
+    def test_ai_fields_in_build_instructions_prompt(self):
+        """_ai_ fields should appear in _build_instructions_prompt, _internal should not."""
+        from backend.calculators.ai_cut_list import AICutListGenerator
+        gen = AICutListGenerator()
+        fields = {
+            "height": "6",
+            "_ai_waterproof_rating": "IP65",
+            "_labor_estimate": {"hours": 10},
+        }
+        cut_list = [{"description": "Rail", "quantity": 2, "length_inches": 72,
+                     "cut_type": "square"}]
+        prompt = gen._build_instructions_prompt("utility_enclosure", fields, cut_list)
+        assert "_ai_waterproof_rating: IP65" in prompt
+        assert "_labor_estimate" not in prompt

@@ -287,6 +287,134 @@ class QuestionTreeEngine:
             ),
         }
 
+    def suggest_additional_questions(self, job_type: str, description: str,
+                                     extracted_fields: dict,
+                                     tree_question_ids: list) -> list:
+        """
+        Use AI to suggest 0-3 additional questions not covered by the question tree.
+
+        Identifies critical fabrication/engineering details (gauge, electronics specs,
+        waterproofing, paint coats, etc.) that would materially affect materials,
+        labor, or pricing.
+
+        Returns list of question dicts matching the tree question schema, or [].
+        Never raises — returns [] on any error.
+        """
+        try:
+            if not description or not description.strip():
+                return []
+
+            # Build context about what's already covered
+            extracted_summary = ""
+            if extracted_fields:
+                extracted_lines = [
+                    "  - %s: %s" % (k, v)
+                    for k, v in extracted_fields.items()
+                    if not str(k).startswith("_")
+                ]
+                if extracted_lines:
+                    extracted_summary = "\n".join(extracted_lines)
+
+            tree_topics = ", ".join(tree_question_ids) if tree_question_ids else "(none)"
+
+            prompt = (
+                "You are a metal fabrication quoting assistant. A customer submitted "
+                "a job description and we already have a standard set of questions "
+                "for this job type. Identify 0-3 CRITICAL fabrication details NOT "
+                "covered by the existing questions that would materially affect "
+                "materials, labor, or pricing.\n\n"
+                "If everything important is already covered, return `[]`.\n\n"
+                "Job type: %s\n\n"
+                "Customer description:\n\"\"\"%s\"\"\"\n\n"
+                "Already extracted fields:\n%s\n\n"
+                "Existing question topics already covered: %s\n\n"
+                "EXAMPLES of what to ask about (only if relevant to this description):\n"
+                "- Material gauge/thickness when not specified\n"
+                "- Electronics specs (controllers, LED drivers, voltage)\n"
+                "- Waterproofing/IP rating for outdoor items\n"
+                "- Number of paint/clear coats\n"
+                "- Surface finish quality (mill finish, brushed, mirror)\n"
+                "- Load rating / weight capacity requirements\n"
+                "- Specific alloy grade (6061 vs 5052 aluminum, 304 vs 316 SS)\n\n"
+                "RULES:\n"
+                "1. Only ask about things the description HINTS at but doesn't specify.\n"
+                "2. Do NOT repeat questions already covered by the existing topics.\n"
+                "3. Each question must have a clear impact on materials, labor, or price.\n"
+                "4. Max 3 questions. Fewer is better. Return [] if none needed.\n\n"
+                "Return ONLY valid JSON — an array of question objects:\n"
+                "[\n"
+                "  {\n"
+                '    "id": "material_gauge",\n'
+                '    "text": "What gauge/thickness for the aluminum?",\n'
+                '    "type": "choice",\n'
+                '    "options": ["14 gauge", "11 gauge", "3/16\\"", "1/4\\""],\n'
+                '    "hint": "Thicker = stronger but heavier and more expensive"\n'
+                "  }\n"
+                "]\n\n"
+                "Valid types: choice, measurement, text, number\n"
+                "For choice type, provide 2-5 practical options.\n"
+                "Return ONLY the JSON array, nothing else."
+                % (job_type, description, extracted_summary or "  (none)", tree_topics)
+            )
+
+            text = call_fast(prompt, timeout=30)
+            if text is None:
+                return []
+
+            # Strip markdown code fences
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, list):
+                return []
+
+            # Validate, normalize, and cap at 3
+            validated = []
+            for q in parsed:
+                if not isinstance(q, dict):
+                    continue
+                if not q.get("text") or not q.get("type"):
+                    continue
+
+                # Ensure _ai_ prefix on ID
+                qid = str(q.get("id", "question"))
+                if not qid.startswith("_ai_"):
+                    qid = "_ai_" + qid
+
+                question = {
+                    "id": qid,
+                    "text": str(q["text"]),
+                    "type": str(q["type"]),
+                    "required": False,
+                    "hint": q.get("hint"),
+                    "source": "ai_suggested",
+                }
+                if q.get("options") and isinstance(q["options"], list):
+                    question["options"] = [str(o) for o in q["options"]]
+                if q.get("unit"):
+                    question["unit"] = str(q["unit"])
+
+                validated.append(question)
+                if len(validated) >= 3:
+                    break
+
+            if validated:
+                logger.info(
+                    "AI suggested %d additional questions for %s: %s",
+                    len(validated), job_type,
+                    [q["id"] for q in validated],
+                )
+            return validated
+
+        except Exception as e:
+            logger.warning("AI question suggestion failed: %s", e)
+            return []
+
     def get_quote_params(self, job_type: str, answered_fields: dict,
                          user_id: int = 0, session_id: str = "",
                          photos: Optional[list[str]] = None,
