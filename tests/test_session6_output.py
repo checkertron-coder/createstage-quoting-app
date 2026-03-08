@@ -211,7 +211,7 @@ def test_frontend_serves_index_html(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
-    assert "Fabrication Quoting" in resp.text
+    assert "CreateQuote" in resp.text
 
 
 def test_frontend_serves_css(client):

@@ -62,7 +62,7 @@ const App = {
         const nav = document.getElementById('main-nav');
         if (!nav) return;
 
-        const shopName = Auth.currentUser?.shop_name || 'Quoting';
+        const shopName = Auth.currentUser?.shop_name || 'CreateQuote';
         const nameEl = document.getElementById('nav-shop-name');
         if (nameEl) nameEl.textContent = shopName;
     },
