@@ -145,6 +145,27 @@ def start_session(
         except Exception:
             pass  # AI suggestion failure never blocks session start
 
+        # Electronics keyword detection — guarantee an electronics question
+        # when description mentions LED/neon/illumination terms
+        _electronics_kw = ("led", "neon", "illuminat", "backlit", "back-lit",
+                           "controller", "driver", "rgb", "pixel")
+        desc_lower = request.description.lower()
+        if any(kw in desc_lower for kw in _electronics_kw):
+            all_qids = {q.get("id", "") for q in next_questions}
+            has_electronics_q = any("electron" in qid or "power" in qid
+                                    or "voltage" in qid or "led" in qid
+                                    for qid in all_qids)
+            if not has_electronics_q:
+                next_questions.append({
+                    "id": "_ai_electronics_spec",
+                    "text": "What electronics are needed? (power supply, LED driver, controller, voltage)",
+                    "type": "text",
+                    "required": False,
+                    "hint": "e.g. 12V LED modules with Mean Well power supply, or 'not sure'",
+                    "source": "electronics_keyword_detection",
+                })
+                logger.info("Injected electronics question for LED/illumination keywords")
+
     # Create session record
     session_id = str(uuid.uuid4())
     merged_for_storage = dict(extracted_fields)

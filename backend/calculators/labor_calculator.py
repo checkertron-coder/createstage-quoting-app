@@ -1,14 +1,18 @@
 """
-Deterministic labor hour calculator based on cut list analysis.
+Labor hour calculator — Opus AI estimation with deterministic fallback.
 
-Uses TYPE A / TYPE B categorization from FAB_KNOWLEDGE.md Section 7:
+Primary path: Opus AI receives job context + FAB_KNOWLEDGE domain guidance,
+returns per-process hour breakdown as JSON.
+
+Fallback path: TYPE A / TYPE B categorization from FAB_KNOWLEDGE.md Section 7:
   TYPE A — Structural welding (tube frames, legs, rails): weld-inch math
   TYPE B — Precision decorative placement (flat bar patterns, pickets,
            ornamental grids): per-piece time standard (5-8 min/piece)
 
-Every hour is traceable to a rule. No AI involved.
+Fallback is deterministic — every hour is traceable to a rule.
 """
 
+import json
 import logging
 from typing import Dict, List, Optional
 
@@ -104,6 +108,222 @@ def _is_type_b(item):
 
 
 def calculate_labor_hours(job_type, cut_list, fields):
+    # type: (str, List[Dict], Dict) -> Dict[str, object]
+    """
+    Labor hours — tries Opus AI first, falls back to deterministic.
+
+    Returns dict with 8 hour keys (floats) plus:
+      _reasoning: str  — chain-of-thought calculation log
+      _flagged: bool    — True if any guardrail was tripped
+
+    Args:
+        job_type: The job type string
+        cut_list: List of cut item dicts from Stage 3
+        fields: Answered fields from Stage 2
+    """
+    # Try Opus AI estimation first
+    try:
+        result = _opus_estimate_labor(job_type, cut_list, fields)
+        if result is not None:
+            return result
+    except Exception as e:
+        logger.warning("Opus labor estimation failed, using fallback: %s", e)
+
+    # Deterministic fallback
+    return _fallback_calculate_labor_hours(job_type, cut_list, fields)
+
+
+def _opus_estimate_labor(job_type, cut_list, fields):
+    # type: (str, List[Dict], Dict) -> Optional[Dict[str, object]]
+    """
+    Call Opus to estimate labor hours from job context + cut list.
+
+    Returns a dict matching _fallback_calculate_labor_hours output format,
+    or None if Opus is unavailable or returns invalid data.
+    """
+    from ..claude_client import call_deep, is_configured
+
+    if not is_configured():
+        return None
+
+    if not cut_list:
+        return None  # Let fallback handle empty cut lists
+
+    # Build context
+    finish = str(fields.get("finish", fields.get("finish_type", "raw")) or "raw").lower()
+    all_fields = " ".join(str(v) for v in fields.values()).lower()
+    description = str(fields.get("description", "") or "")
+
+    is_aluminum = any(k in all_fields for k in ("aluminum", "6061", "5052"))
+    is_stainless = any(k in all_fields for k in ("stainless", "304", "316"))
+
+    total_pieces = sum(int(item.get("quantity", 1)) for item in cut_list)
+
+    # Summarize cut list for prompt
+    cut_summary_lines = []
+    for item in cut_list[:30]:  # Cap at 30 items
+        desc = item.get("description", item.get("profile", "unknown"))
+        qty = item.get("quantity", 1)
+        length = item.get("length_inches", 0)
+        cut_type = item.get("cut_type", "square")
+        profile = item.get("profile", "")
+        group = item.get("group", "")
+        weld_proc = item.get("weld_process", "")
+        cut_summary_lines.append(
+            "  - %s | profile=%s | %.0f\" | qty=%d | cut=%s | group=%s%s"
+            % (desc, profile, length, qty, cut_type, group,
+               " | weld=%s" % weld_proc if weld_proc else "")
+        )
+
+    # Get relevant FAB_KNOWLEDGE context
+    fab_knowledge = ""
+    try:
+        from .fab_knowledge import get_relevant_knowledge
+        fab_knowledge = get_relevant_knowledge(
+            job_type, finish,
+            has_stainless=is_stainless,
+            description=description,
+        )
+    except Exception:
+        pass
+
+    material_label = "ALUMINUM" if is_aluminum else ("STAINLESS STEEL" if is_stainless else "MILD STEEL")
+
+    prompt = """You are an expert metal fabrication labor estimator with 20+ years of shop experience.
+
+TASK: Estimate labor hours per process for a %s job.
+
+JOB TYPE: %s
+MATERIAL: %s
+FINISH: %s
+TOTAL PIECES: %d
+
+DESCRIPTION:
+%s
+
+CUT LIST:
+%s
+
+=== DOMAIN KNOWLEDGE ===
+%s
+
+=== LABOR HOUR ESTIMATION ===
+
+Return hours for these 8 processes. These are the ONLY keys you may use:
+
+1. layout_setup — Reading drawings, measuring, marking, squaring table. Usually 1.0-2.0 hrs.
+2. cut_prep — Sawing, plasma cutting, deburring. Scale with piece count and cut complexity.
+3. fit_tack — Fitting pieces together, clamping, tack welding. Most variable — think carefully.
+4. full_weld — Full welding all joints. Base on weld inches and process (MIG vs TIG).
+5. grind_clean — Grinding, cleaning, blending welds. Depends on finish requirements.
+6. finish_prep — Surface prep for coating. 0 for raw steel.
+7. coating_application — In-house clear coat or paint application. 0 for raw/powder coat/galvanized.
+8. final_inspection — Always 0.5 hrs.
+
+CRITICAL RULES:
+- TIG welding is 2.5-3x slower than MIG. Stainless/aluminum require TIG.
+- Outdoor painted steel: grind is cleanup pass, not full furniture-grade grinding.
+- Bare metal finish (clear coat, raw, brushed): requires mill scale removal — significant grind time.
+- Ground smooth / blended joints: grind time can equal or exceed weld time.
+- Batch cutting: identical pieces share setup — one stop setting, then feed-and-cut.
+- If powder_coat or galvanized finish: coating_application = 0 (outsourced).
+- If raw finish: finish_prep = minimal (1.0 hr cleanup), coating_application = 0.
+
+Return ONLY valid JSON:
+{
+    "layout_setup": 1.5,
+    "cut_prep": 2.0,
+    "fit_tack": 3.0,
+    "full_weld": 4.0,
+    "grind_clean": 1.5,
+    "finish_prep": 1.0,
+    "coating_application": 0.0,
+    "final_inspection": 0.5,
+    "reasoning": "Brief chain of thought explaining your estimates"
+}""" % (
+        job_type, job_type, material_label, finish, total_pieces,
+        description[:500] if description else "(no description)",
+        "\n".join(cut_summary_lines) if cut_summary_lines else "  (no cut list)",
+        fab_knowledge if fab_knowledge else "(no domain knowledge available)",
+    )
+
+    text = call_deep(prompt, temperature=0.1, timeout=90)
+    if text is None:
+        return None
+
+    # Parse response
+    try:
+        # Strip markdown code fences if present
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[-1]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            cleaned = cleaned.strip()
+
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            logger.warning("Opus labor: response is not a dict")
+            return None
+
+        # Extract and validate the 8 required keys
+        required_keys = [
+            "layout_setup", "cut_prep", "fit_tack", "full_weld",
+            "grind_clean", "finish_prep", "coating_application", "final_inspection",
+        ]
+
+        result = {}
+        for key in required_keys:
+            val = parsed.get(key, 0.0)
+            if isinstance(val, dict):
+                val = val.get("hours", 0.0)
+            try:
+                val = float(val)
+            except (TypeError, ValueError):
+                val = 0.0
+            result[key] = round(max(val, 0.0), 2)
+
+        # Sanity checks
+        total_hrs = sum(result.values())
+        if total_hrs < 1.0 or total_hrs > 200.0:
+            logger.warning(
+                "Opus labor: total %.1f hrs out of range [1, 200] — rejecting",
+                total_hrs,
+            )
+            return None
+
+        # Extract reasoning
+        reasoning = parsed.get("reasoning", "Opus AI estimation")
+        if isinstance(reasoning, dict):
+            reasoning = str(reasoning)
+
+        # Guardrails
+        flagged = False
+        if result["full_weld"] > 40:
+            flagged = True
+            reasoning += " [FLAGGED: full_weld %.1f > 40 hrs]" % result["full_weld"]
+        if result["grind_clean"] > result["full_weld"] * 2:
+            flagged = True
+            reasoning += " [FLAGGED: grind_clean %.1f > 2x full_weld]" % result["grind_clean"]
+
+        result["_reasoning"] = "Opus AI: " + str(reasoning)
+        result["_flagged"] = flagged
+        # Track extra keys with zero so downstream code doesn't break
+        result["stock_prep_grind"] = 0.0
+        result["post_weld_cleanup"] = 0.0
+
+        logger.info(
+            "Opus labor for %s: %.1f total hrs (%d pcs)",
+            job_type, total_hrs, total_pieces,
+        )
+        return result
+
+    except (json.JSONDecodeError, KeyError, TypeError) as e:
+        logger.warning("Opus labor: failed to parse response: %s", e)
+        return None
+
+
+def _fallback_calculate_labor_hours(job_type, cut_list, fields):
     # type: (str, List[Dict], Dict) -> Dict[str, object]
     """
     Deterministic labor hours from TYPE A / TYPE B categorization.

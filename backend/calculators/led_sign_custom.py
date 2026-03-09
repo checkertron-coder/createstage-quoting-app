@@ -13,6 +13,34 @@ from .material_lookup import MaterialLookup
 
 lookup = MaterialLookup()
 
+# Standard sheet sizes: (width_in, length_in, label)
+STANDARD_SHEETS = [
+    (48, 96, "4'x8'"),
+    (48, 120, "4'x10'"),
+    (60, 120, "5'x10'"),
+]
+
+# Maximum stock sheet dimension — faces wider than this require seaming
+MAX_SHEET_DIM = 120  # 10 ft = 120 inches
+
+
+def _sheets_needed(area_sqft):
+    # type: (float) -> tuple
+    """Pick the best standard sheet size and return (count, label).
+
+    Tries each standard sheet size (smallest first). Uses the smallest
+    sheet that keeps waste under 30%. Falls back to 4'x8' otherwise.
+    """
+    for w, l, label in STANDARD_SHEETS:
+        sheet_sqft = (w * l) / 144.0
+        count = max(1, math.ceil(area_sqft / sheet_sqft))
+        waste_pct = (count * sheet_sqft - area_sqft) / (count * sheet_sqft) if count > 0 else 0
+        if waste_pct < 0.30 or count == 1:
+            return (count, label)
+    # Default: 4'x8' (32 sqft)
+    sheet_sqft = (48 * 96) / 144.0
+    return (max(1, math.ceil(area_sqft / sheet_sqft)), "4'x8'")
+
 
 class LedSignCustomCalculator(BaseCalculator):
 
@@ -87,13 +115,14 @@ class LedSignCustomCalculator(BaseCalculator):
             if is_stainless:
                 sheet_price_sqft *= 3.0
 
-            sheet_count = self.apply_waste(math.ceil(face_area_sqft / 32.0), self.WASTE_SHEET)
+            sheet_count, sheet_label = _sheets_needed(face_area_sqft)
+            sheet_count = self.apply_waste(sheet_count, self.WASTE_SHEET)
             face_weight = face_area_sqft * 1.5
 
             items.append(self.make_material_item(
-                description="Letter faces + backs — %s %s (%.1f sq ft total)" % (
+                description="Letter faces + backs — %s %s %s (%.1f sq ft total)" % (
                     "aluminum" if is_aluminum else ("stainless" if is_stainless else "steel"),
-                    sheet_profile, face_area_sqft),
+                    sheet_profile, sheet_label, face_area_sqft),
                 material_type="aluminum_6061" if is_aluminum else (
                     "stainless_304" if is_stainless else "plate"),
                 profile=sheet_profile,
@@ -130,12 +159,26 @@ class LedSignCustomCalculator(BaseCalculator):
             if is_aluminum:
                 sheet_price_sqft *= 1.5
 
-            sheet_count = self.apply_waste(math.ceil(total_sheet_sqft / 32.0), self.WASTE_SHEET)
+            sheet_count, sheet_label = _sheets_needed(total_sheet_sqft)
+            sheet_count = self.apply_waste(sheet_count, self.WASTE_SHEET)
             cabinet_weight = total_sheet_sqft * 1.5
 
+            # Seaming detection — if face exceeds max stock sheet dimension
+            needs_seam = overall_width_in > MAX_SHEET_DIM or overall_height_in > MAX_SHEET_DIM
+            if needs_seam:
+                seam_dim = max(overall_width_in, overall_height_in)
+                seam_count = math.ceil(seam_dim / MAX_SHEET_DIM) - 1
+                seam_length_in = min(overall_width_in, overall_height_in)
+                total_weld_inches += seam_count * seam_length_in
+                assumptions.append(
+                    "Face exceeds %.0f\" stock sheet width — %d seam(s) required "
+                    "(%.0f\" each, TIG welded + ground flush)."
+                    % (MAX_SHEET_DIM, seam_count, seam_length_in)
+                )
+
             items.append(self.make_material_item(
-                description="Cabinet box — %s (%.0f\" x %.0f\" x %.0f\" deep)" % (
-                    sheet_profile, overall_width_in, overall_height_in, cabinet_depth_in),
+                description="Cabinet box — %s %s (%.0f\" x %.0f\" x %.0f\" deep)" % (
+                    sheet_profile, sheet_label, overall_width_in, overall_height_in, cabinet_depth_in),
                 material_type="aluminum_6061" if is_aluminum else "plate",
                 profile=sheet_profile,
                 length_inches=overall_width_in,

@@ -124,10 +124,10 @@ class FinishingBuilder:
 
     def _normalize_finish_type(self, finish_type: str) -> str:
         """Normalize free-text finish answer to one of the 5 standard types."""
-        f = str(finish_type).lower()
-        if "raw" in f or "none" in f or "no finish" in f:
+        f = str(finish_type).lower().strip()
+        if not f or "raw" in f or "none" in f or "no finish" in f or "bare" in f:
             return "raw"
-        if "clear" in f or "urethane" in f:
+        if any(k in f for k in ("clear", "urethane", "permalac", "lacquer", "wax")):
             return "clearcoat"
         if "powder" in f:
             return "powder_coat"
@@ -135,9 +135,7 @@ class FinishingBuilder:
             return "galvanized"
         if "paint" in f or "primer" in f:
             return "paint"
-        # Default: if they said something but we can't parse, treat as paint
-        if f and f != "raw":
-            return "paint"
+        # Default: unrecognized finish string → raw (not paint)
         return "raw"
 
     def _extract_finish_hours(self, method: str, labor_processes: list) -> float:
