@@ -3,14 +3,12 @@ Tests for Prompt 39 — 'Let Opus Drive'.
 
 AC-1: Opus labor estimation with deterministic fallback
 AC-2: Finish label default → "raw" (not "paint")
-AC-3: Real sheet dimensions in LED sign calculator
-AC-4: Seaming detection when face > 120"
+AC-3/AC-4: Sheet dimensions and seaming — Opus handles this natively (no deterministic code)
 AC-5: Electronics keyword detection for dynamic questions
 AC-6: No regressions — existing tests must pass
 """
 
 import json
-import math
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -222,103 +220,6 @@ class TestFinishDefaults:
         from backend.finishing import FinishingBuilder
         fb = FinishingBuilder()
         assert fb._normalize_finish_type("raw") == "raw"
-
-
-# ── AC-3: Real sheet dimensions ──────────────────────────────────────────
-
-
-class TestRealSheetDimensions:
-    """LED sign calculator uses real sheet sizes instead of abstract counts."""
-
-    def test_sheets_needed_small_area(self):
-        from backend.calculators.led_sign_custom import _sheets_needed
-        count, label = _sheets_needed(10.0)  # 10 sqft
-        assert count == 1
-        assert "4'" in label  # Should be a standard sheet label
-
-    def test_sheets_needed_large_area(self):
-        from backend.calculators.led_sign_custom import _sheets_needed
-        # 100 sqft requires multiple 4'x8' (32 sqft) sheets
-        count, label = _sheets_needed(100.0)
-        assert count >= 3  # At least 3 sheets for 100 sqft
-
-    def test_sheets_needed_exact_one_sheet(self):
-        from backend.calculators.led_sign_custom import _sheets_needed
-        count, label = _sheets_needed(30.0)  # Just under one 4'x8' (32 sqft)
-        assert count == 1
-
-    def test_sheet_label_in_material_description(self):
-        """Template calculation includes sheet size label in item description."""
-        from backend.calculators.led_sign_custom import LedSignCustomCalculator
-        calc = LedSignCustomCalculator()
-        result = calc.calculate({
-            "sign_type": "Channel letters (individual 3D letters)",
-            "dimensions": "8 ft x 2 ft",
-            "letter_height": "18",
-            "letter_count": "8",
-            "material": "Steel",
-        })
-        # At least one item should have a sheet size label
-        descriptions = [item["description"] for item in result["items"]]
-        has_sheet_label = any(
-            "4'" in d or "5'" in d for d in descriptions
-        )
-        assert has_sheet_label, "No sheet size label found in descriptions: %s" % descriptions
-
-
-# ── AC-4: Seaming detection ──────────────────────────────────────────────
-
-
-class TestSeamingDetection:
-    """When face exceeds 120\" stock sheet width, seaming is detected."""
-
-    def test_cabinet_seaming_detected(self):
-        """Cabinet sign wider than 120\" triggers seaming assumption."""
-        from backend.calculators.led_sign_custom import LedSignCustomCalculator
-        calc = LedSignCustomCalculator()
-        result = calc.calculate({
-            "sign_type": "Cabinet/box sign",
-            "dimensions": "180 x 48",  # 15 ft wide — exceeds 120"
-            "letter_height": "18",
-            "letter_count": "8",
-            "material": "Aluminum (standard for sign fabrication)",
-        })
-        assumptions = result.get("assumptions", [])
-        has_seam = any("seam" in a.lower() for a in assumptions)
-        assert has_seam, "No seaming assumption for 180\" wide cabinet: %s" % assumptions
-
-    def test_no_seaming_for_small_cabinet(self):
-        """Cabinet sign under 120\" does NOT trigger seaming."""
-        from backend.calculators.led_sign_custom import LedSignCustomCalculator
-        calc = LedSignCustomCalculator()
-        result = calc.calculate({
-            "sign_type": "Cabinet/box sign",
-            "dimensions": "96 x 48",  # 8 ft — under 120"
-            "letter_height": "18",
-            "letter_count": "8",
-            "material": "Aluminum",
-        })
-        assumptions = result.get("assumptions", [])
-        has_seam = any("seam" in a.lower() for a in assumptions)
-        assert not has_seam, "Unexpected seaming for 96\" wide cabinet"
-
-    def test_seaming_adds_weld_inches(self):
-        """Seaming adds weld inches for the seam joints."""
-        from backend.calculators.led_sign_custom import LedSignCustomCalculator
-        calc = LedSignCustomCalculator()
-
-        small = calc.calculate({
-            "sign_type": "Cabinet/box sign",
-            "dimensions": "96 x 48",
-            "material": "Steel",
-        })
-        large = calc.calculate({
-            "sign_type": "Cabinet/box sign",
-            "dimensions": "180 x 48",
-            "material": "Steel",
-        })
-        # Large should have more weld inches due to seaming
-        assert large["weld_linear_inches"] > small["weld_linear_inches"]
 
 
 # ── AC-5: Electronics keyword detection ──────────────────────────────────
