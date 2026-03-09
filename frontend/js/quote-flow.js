@@ -201,11 +201,11 @@ const QuoteFlow = {
             this.extractedFields = data.extracted_fields || {};
             this.allQuestions = data.next_questions || [];
 
-            if (data.completion && data.completion.is_complete) {
-                await this._runPipeline();
-            } else if (data.next_questions && data.next_questions.length > 0) {
+            if (data.next_questions && data.next_questions.length > 0) {
                 this._renderClarifyStep(data);
                 this._showStep('clarify');
+            } else if (data.completion && data.completion.is_complete) {
+                await this._runPipeline();
             } else {
                 this._showProcessing('No questions available for this job type yet.');
             }

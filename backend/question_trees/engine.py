@@ -472,6 +472,13 @@ RULES:
 3. BOOLEAN/YES-NO: "with motor" -> "Yes". "no motor" -> "No — manual operation" (use exact option string).
 4. If the field is NOT mentioned at all, omit it. But if mentioned even briefly, EXTRACT it.
 5. Return ONLY a JSON object with field_id: extracted_value pairs. Empty object {{{{}}}} if nothing found.
+6. FINISH FIELD: If the customer mentions ANY finish/coating term, extract the "finish" field. Map these terms:
+   - "clear coat", "clear coated", "clearcoat", "clear-coat", "permalac", "lacquer" -> closest clear coat option, or "clearcoat" if no exact match
+   - "powder coat", "powdercoat" -> closest powder coat option
+   - "anodize", "anodized" -> "anodized"
+   - "brushed", "polished", "mill finish" -> closest option
+   - "raw", "no finish" -> "raw"
+   If NO option in the list matches, still extract the finish field with the customer's term verbatim.
 
 FIELDS:
 {field_descriptions}

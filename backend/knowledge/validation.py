@@ -259,22 +259,62 @@ DIMENSION_RANGES = {
 
 # Valid profile keys (must match material_lookup.py)
 VALID_PROFILES = {
-    "sq_tube_1x1_14ga", "sq_tube_1.5x1.5_11ga", "sq_tube_2x2_11ga",
-    "sq_tube_2x2_14ga", "sq_tube_3x3_11ga", "sq_tube_4x4_11ga",
-    "rect_tube_2x3_11ga", "rect_tube_2x4_11ga",
-    "round_tube_1.5_14ga", "round_tube_2_11ga",
+    # Square tube
+    "sq_tube_1x1_11ga", "sq_tube_1x1_14ga", "sq_tube_1x1_16ga",
+    "sq_tube_1.25x1.25_11ga",
+    "sq_tube_1.5x1.5_11ga", "sq_tube_1.5x1.5_14ga", "sq_tube_1.5x1.5_16ga",
+    "sq_tube_1.75x1.75_11ga",
+    "sq_tube_2x2_11ga", "sq_tube_2x2_14ga", "sq_tube_2x2_16ga",
+    "sq_tube_2.5x2.5_11ga",
+    "sq_tube_3x3_11ga", "sq_tube_3x3_7ga",
+    "sq_tube_4x4_11ga",
+    "sq_tube_6x6_7ga",
+    # Rectangular tube
+    "rect_tube_2x1_11ga", "rect_tube_2x3_11ga", "rect_tube_2x4_11ga",
+    # Round tube
+    "round_tube_1.25_14ga", "round_tube_1.5_11ga", "round_tube_1.5_14ga",
+    "round_tube_2_11ga",
+    # DOM tube
     "dom_tube_1.75x0.120",
+    # Flat bar
+    "flat_bar_0.75x0.25",
     "flat_bar_1x0.125", "flat_bar_1x0.1875", "flat_bar_1x0.25",
     "flat_bar_1.5x0.25", "flat_bar_2x0.25", "flat_bar_3x0.25",
-    "angle_1.5x1.5x0.125", "angle_2x2x0.1875", "angle_2x2x0.25",
-    "angle_3x3x0.1875",
-    "sq_bar_0.5", "sq_bar_0.625", "sq_bar_0.75",
-    "round_bar_0.5", "round_bar_0.625",
+    # Angle iron
+    "angle_1.5x1.5x0.125", "angle_2x2x0.125", "angle_2x2x0.1875",
+    "angle_2x2x0.25", "angle_3x3x0.1875",
+    # Square bar
+    "sq_bar_0.5", "sq_bar_0.625", "sq_bar_0.75", "sq_bar_1.0",
+    # Round bar
+    "round_bar_0.5", "round_bar_0.625", "round_bar_0.75",
+    # Channel
     "channel_4x5.4", "channel_6x8.2",
-    "pipe_3_sch40", "pipe_4_sch40", "pipe_6_sch40",
+    # Pre-punched channel (fence mid-rails)
+    "punched_channel_1x0.5_fits_0.5",
+    "punched_channel_1.5x0.5_fits_0.5", "punched_channel_1.5x0.5_fits_0.625",
+    "punched_channel_1.5x0.5_fits_0.75",
+    "punched_channel_2x1_fits_0.75",
+    # Pipe
+    "pipe_3_sch40", "pipe_3.5_sch40", "pipe_4_sch40", "pipe_6_sch40",
+    # HSS
     "hss_4x4_0.25", "hss_6x4_0.25",
+    # Sheet / plate
     "sheet_11ga", "sheet_14ga", "sheet_16ga",
     "plate_0.25", "plate_0.375", "plate_0.5",
+    # Expanded metal
+    "expanded_metal_10ga", "expanded_metal_13ga", "expanded_metal_16ga",
+    # Aluminum tube — 6061-T6 (P38)
+    "al_sq_tube_1x1_0.125", "al_sq_tube_1.5x1.5_0.125", "al_sq_tube_2x2_0.125",
+    "al_rect_tube_1x2_0.125",
+    # Aluminum angle (P38)
+    "al_angle_1.5x1.5x0.125", "al_angle_2x2x0.125",
+    # Aluminum flat bar (P38)
+    "al_flat_bar_1x0.125", "al_flat_bar_1.5x0.125", "al_flat_bar_2x0.25",
+    # Aluminum round tube (P38)
+    "al_round_tube_1.5_0.125",
+    # Aluminum sheet (P38)
+    "al_sheet_0.040", "al_sheet_0.063", "al_sheet_0.080",
+    "al_sheet_0.125", "al_sheet_0.190",
 }
 
 # Valid cut types
