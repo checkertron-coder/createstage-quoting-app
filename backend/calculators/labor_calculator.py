@@ -133,6 +133,23 @@ def calculate_labor_hours(job_type, cut_list, fields):
     return _fallback_calculate_labor_hours(job_type, cut_list, fields)
 
 
+# Shop owner calibration benchmarks — injected into Opus prompt as reference data
+LABOR_CALIBRATION_NOTES = """
+LABOR CALIBRATION (from shop owner testing):
+- Fence/Gate (12' cantilever + 28' of fence sections, 128 pickets):
+  Fit & Tack: ~6 hrs | Full Weld: ~6-8 hrs | Grind & Clean: ~4 hrs
+- LED Sign (138"x28"x6" aluminum box with laser-cut letters):
+  Fit & Tack: ~6 hrs | Full Weld: ~6 hrs | Grind & Clean: ~4 hrs | Hardware Install: ~4-6 hrs
+- End Table (simple steel frame, 4 legs + rails):
+  Fit & Tack: ~1-2 hrs | Full Weld: ~1-2 hrs | Grind & Clean: ~1-2 hrs
+- These are REFERENCE POINTS, not hard limits. Scale proportionally for larger/smaller jobs.
+- When in doubt, estimate LOWER — the shop owner consistently reports AI overestimates welding time.
+- Hardware install for electronics (ESP32, LED strips, wiring, waterproofing): 4-6 hours minimum, NOT 0.4 hours.
+- Batch cutting identical pieces is fast: set the stop once, then feed-and-cut.
+- Picket/baluster positioning: ~2-3 min per picket with a jig, not 5-8 min.
+"""
+
+
 def _opus_estimate_labor(job_type, cut_list, fields):
     # type: (str, List[Dict], Dict) -> Optional[Dict[str, object]]
     """
@@ -229,6 +246,9 @@ CRITICAL RULES:
 - If powder_coat or galvanized finish: coating_application = 0 (outsourced).
 - If raw finish: finish_prep = minimal (1.0 hr cleanup), coating_application = 0.
 
+=== SHOP OWNER REFERENCE DATA ===
+%s
+
 Return ONLY valid JSON:
 {
     "layout_setup": 1.5,
@@ -245,6 +265,7 @@ Return ONLY valid JSON:
         description[:500] if description else "(no description)",
         "\n".join(cut_summary_lines) if cut_summary_lines else "  (no cut list)",
         fab_knowledge if fab_knowledge else "(no domain knowledge available)",
+        LABOR_CALIBRATION_NOTES,
     )
 
     text = call_deep(prompt, temperature=0.1, timeout=90)

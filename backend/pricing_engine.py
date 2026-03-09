@@ -55,6 +55,11 @@ class PricingEngine:
         raw_hardware = material_list.get("hardware", [])
         priced_hardware = self.hardware_sourcer.price_hardware_list(raw_hardware)
 
+        # --- Electronics / specialty hardware ---
+        electronics = self.hardware_sourcer.estimate_electronics(job_description)
+        if electronics:
+            priced_hardware.extend(electronics)
+
         # --- Estimate consumables ---
         weld_inches = material_list.get("weld_linear_inches", 0)
         total_sq_ft = material_list.get("total_sq_ft", 0)

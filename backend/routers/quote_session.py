@@ -166,6 +166,30 @@ def start_session(
                 })
                 logger.info("Injected electronics question for LED/illumination keywords")
 
+        # Material type question — ALWAYS ask if not extracted from description
+        _material_field_names = ("material", "frame_material", "material_type")
+        has_material = any(merged_fields.get(f) for f in _material_field_names)
+        all_qids = {q.get("id", "") for q in next_questions}
+        has_material_q = any(f in all_qids for f in _material_field_names)
+        if not has_material and not has_material_q:
+            next_questions.insert(0, {
+                "id": "material",
+                "text": "What material is this project made from?",
+                "type": "choice",
+                "options": [
+                    "Mild steel",
+                    "Aluminum (6061-T6)",
+                    "Aluminum (5052-H32)",
+                    "Stainless steel (304)",
+                    "Stainless steel (316)",
+                    "Other (specify in notes)",
+                ],
+                "required": True,
+                "hint": "This determines profile keys, weld process, and consumables",
+                "source": "material_always_required",
+            })
+            logger.info("Injected required material question — not specified in description")
+
     # Create session record
     session_id = str(uuid.uuid4())
     merged_for_storage = dict(extracted_fields)

@@ -642,21 +642,23 @@ const QuoteFlow = {
                 <table class="data-table">
                     <thead><tr>
                         <th>Profile</th><th>Pcs</th><th>Total</th>
-                        <th>Sticks</th><th>Remainder</th><th>Weight</th><th class="r">Cost</th>
+                        <th>Qty</th><th>Remainder</th><th>Weight</th><th class="r">Cost</th>
                     </tr></thead>
                     <tbody>
-                        ${steelRows.map(s => {
+                        ${steelRows.map((s, idx) => {
                             const profile = (s.profile || '').replace(/_/g, ' ');
                             const isArea = s.is_area_sold;
                             const totalCol = isArea ? (s.piece_count + ' pcs') : (s.total_length_ft.toFixed(1) + "'");
-                            const sticksCol = isArea ? '-' : (s.sticks_needed + ' x ' + s.stock_length_ft + "'");
+                            const sticks = s.sticks_needed || 0;
+                            const stockLen = s.stock_length_ft || 20;
+                            const sticksInput = isArea ? '-' : `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))"> x ${stockLen}'`;
                             const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "' left") : '-';
                             const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
                             return `<tr>
                                 <td>${profile}</td>
                                 <td>${s.piece_count || ''}</td>
                                 <td>${totalCol}</td>
-                                <td>${sticksCol}</td>
+                                <td>${sticksInput}</td>
                                 <td>${remainCol}</td>
                                 <td>${weightCol}</td>
                                 <td class="r">${this._fmt(s.total_cost)}</td>
@@ -794,17 +796,28 @@ const QuoteFlow = {
         `;
     },
 
+    _detectMaterialLabel(pq) {
+        const materials = pq.materials || [];
+        const total = materials.length || 1;
+        const alCount = materials.filter(m => (m.profile || '').startsWith('al_')).length;
+        if (alCount > total * 0.3) return 'Aluminum';
+        const ssCount = materials.filter(m => (m.material_type || '').toLowerCase().includes('stainless')).length;
+        if (ssCount > total * 0.3) return 'Stainless Steel';
+        return '';
+    },
+
     _renderFinishing(pq) {
         const f = pq.finishing || {};
+        const matLabel = this._detectMaterialLabel(pq) || 'Steel';
         const FINISH_DISPLAY = {
             clearcoat: 'Clear Coat', clear_coat: 'Clear Coat',
             powder_coat: 'Powder Coat', paint: 'Paint',
-            galvanized: 'Galvanized', raw: 'Raw Steel',
+            galvanized: 'Galvanized', raw: 'Raw ' + matLabel,
         };
         const methodRaw = f.method || 'raw';
         const method = FINISH_DISPLAY[methodRaw] || methodRaw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         if (methodRaw === 'raw') {
-            return `<p>Method: <strong>Raw Steel</strong> — no finish applied.</p>`;
+            return `<p>Method: <strong>Raw ${matLabel}</strong> — no finish applied.</p>`;
         }
         const isOutsourced = (f.outsource_cost || 0) > 0;
         return `
@@ -985,6 +998,30 @@ const QuoteFlow = {
 
         this._recalcTotals();
         this._debouncedAdjust('hardware', { [idx]: hw.quantity });
+    },
+
+    adjustMaterialQty(idx, newSticks) {
+        if (!this.pricedQuote || isNaN(newSticks) || newSticks < 1) return;
+        const pq = this.pricedQuote;
+        const summary = pq.materials_summary || [];
+        const steelRows = summary.filter(s => !s.is_concrete);
+        const item = steelRows[idx];
+        if (!item || item.is_area_sold) return;
+
+        // Update sticks count and recalculate cost
+        const oldSticks = item.sticks_needed || 1;
+        item.sticks_needed = newSticks;
+        const ratio = newSticks / oldSticks;
+        item.total_cost = Math.round((item.total_cost || 0) * ratio * 100) / 100;
+        item.remainder_ft = Math.round((newSticks * (item.stock_length_ft || 20) - (item.total_length_ft || 0)) * 10) / 10;
+
+        // Recalculate material subtotal
+        pq.material_subtotal = Math.round(
+            summary.reduce((s, m) => s + (m.total_cost || 0), 0) * 100
+        ) / 100;
+
+        this._recalcTotals();
+        this._debouncedAdjust('material', { [idx]: newSticks });
     },
 
     adjustConsumableQty(idx, newQty) {

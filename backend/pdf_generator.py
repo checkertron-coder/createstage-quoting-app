@@ -208,16 +208,31 @@ def _fmt_profile(profile: str) -> str:
     flat_bar_1x0.25  -> 1\"x1/4\" Flat Bar
     plate_0.25       -> 1/4\" Plate
     angle_2x2x0.1875 -> 2\"x2\"x3/16\" Angle
+    al_sq_tube_2x2_0.125 -> 6061-T6 Al Sq Tube 2\"x2\" 1/8\" wall
     """
     if not profile:
         return ""
-    parts = profile.split("_")
+
+    # Detect material prefix
+    material_prefix = ""
+    clean = profile
+    if profile.startswith("al_"):
+        material_prefix = "6061-T6 Al"
+        clean = profile[3:]
+    elif profile.startswith("ss_"):
+        material_prefix = "304 SS"
+        clean = profile[3:]
+
+    parts = clean.split("_")
     # Known shape prefixes (may be 1 or 2 words)
     shapes = {
         "sq tube": "Sq Tube", "sq bar": "Sq Bar", "rd tube": "Rd Tube",
         "rd bar": "Rd Bar", "flat bar": "Flat Bar", "rect tube": "Rect Tube",
         "angle": "Angle", "channel": "Channel", "plate": "Plate",
         "sheet": "Sheet", "pipe": "Pipe", "punched channel": "Punched Ch.",
+        "round tube": "Rd Tube", "round bar": "Rd Bar",
+        "dom tube": "DOM Tube", "hss": "HSS",
+        "expanded metal": "Expanded Metal",
     }
     # Try to match shape from prefix
     shape_name = ""
@@ -229,7 +244,10 @@ def _fmt_profile(profile: str) -> str:
             dim_start = n
             break
     if not shape_name:
-        return profile.replace("_", " ")
+        result = clean.replace("_", " ")
+        if material_prefix:
+            return "%s %s" % (material_prefix, result)
+        return result
 
     # Parse remaining parts as dimensions and gauge
     dims = parts[dim_start:]
@@ -243,9 +261,10 @@ def _fmt_profile(profile: str) -> str:
             formatted_dims.append(_dec_to_fraction(d))
 
     dim_str = "x".join(formatted_dims)
+    shape_label = "%s %s" % (material_prefix, shape_name) if material_prefix else shape_name
     if gauge:
-        return '%s %s %s' % (dim_str, gauge, shape_name)
-    return '%s %s' % (dim_str, shape_name)
+        return '%s %s %s' % (dim_str, gauge, shape_label)
+    return '%s %s' % (dim_str, shape_label) if dim_str else shape_label
 
 
 def _dec_to_fraction(val: str) -> str:
@@ -289,17 +308,55 @@ def _dec_to_fraction(val: str) -> str:
     return '%s"' % val
 
 
-def _finish_display_name(method: str) -> str:
-    """Map finishing method codes to clean display names."""
+def _finish_display_name(method: str, material_label: str = "") -> str:
+    """Map finishing method codes to clean display names.
+
+    Args:
+        method: Canonical finish method (raw, clearcoat, paint, etc.)
+        material_label: "Aluminum", "Stainless Steel", or empty for mild steel.
+    """
+    mat = material_label or "Steel"
     _DISPLAY = {
         "clearcoat": "Clear Coat",
         "clear_coat": "Clear Coat",
         "powder_coat": "Powder Coat",
         "paint": "Paint",
         "galvanized": "Galvanized",
-        "raw": "Raw Steel",
+        "anodized": "Anodized",
+        "raw": "Raw %s" % mat,
     }
-    return _DISPLAY.get(method, method.replace("_", " ").title())
+    name = _DISPLAY.get(method, method.replace("_", " ").title())
+    # Append material context for in-house finishes on non-steel
+    if material_label and method not in ("raw", "galvanized") and material_label != "Steel":
+        name = "%s (%s)" % (name, material_label)
+    return name
+
+
+def _detect_material_label(priced_quote: dict) -> str:
+    """Detect material label from profiles in the materials list.
+
+    Returns 'Aluminum', 'Stainless Steel', or '' (for mild steel).
+    """
+    materials = priced_quote.get("materials", [])
+    al_count = sum(1 for m in materials if str(m.get("profile", "")).startswith("al_"))
+    ss_count = sum(1 for m in materials if "stainless" in str(m.get("material_type", "")).lower())
+    total = len(materials) or 1
+    if al_count > total * 0.3:
+        return "Aluminum"
+    if ss_count > total * 0.3:
+        return "Stainless Steel"
+    return ""
+
+
+def _fmt_sheet_dims(stock_length_ft: float) -> str:
+    """Format sheet stock dimensions from stock length."""
+    if stock_length_ft >= 10:
+        return "4'x10'"
+    elif stock_length_ft >= 8:
+        return "4'x8'"
+    elif stock_length_ft >= 5:
+        return "5'x10'"
+    return "%d' sheet" % int(stock_length_ft)
 
 
 def _fmt_hrs(hours) -> str:
@@ -544,7 +601,7 @@ def generate_quote_pdf(
 
     pdf.section_header("MATERIALS - STOCK ORDER")
     if materials_summary:
-        cols = [("Profile", 42), ("Total", 24), ("Sticks", 22),
+        cols = [("Profile", 42), ("Total", 24), ("Dimensions", 22),
                 ("Remainder", 24), ("Weight", 22), ("Cost", 22)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
@@ -555,9 +612,17 @@ def generate_quote_pdf(
         for ms in steel_items:
             profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:24])
             is_area = ms.get("is_area_sold", False)
-            if is_area:
-                total_col = "%d pcs" % ms.get("piece_count", 0)
-                sticks_col = "-"
+            prof_key = str(ms.get("profile", "")).lower()
+            is_sheet = "sheet" in prof_key or "plate" in prof_key
+            if is_area or is_sheet:
+                pcs = ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
+                stk_len = ms.get("stock_length_ft", 20)
+                if is_sheet and stk_len >= 8:
+                    total_col = "%d pcs" % pcs
+                    sticks_col = _fmt_sheet_dims(stk_len)
+                else:
+                    total_col = "%d pcs" % pcs
+                    sticks_col = "-"
                 remain_col = "-"
             else:
                 total_col = "%.1f'" % ms.get("total_length_ft", 0)
@@ -726,13 +791,15 @@ def generate_quote_pdf(
     fin_total = finishing.get("total", 0)
 
     pdf.set_font("Helvetica", "", 9)
-    method_display = _finish_display_name(method)
+    mat_label = _detect_material_label(priced_quote)
+    method_display = _finish_display_name(method, mat_label)
     outsource_cost = finishing.get("outsource_cost", 0)
     materials_cost = finishing.get("materials_cost", 0)
 
+    raw_material_name = mat_label or "Steel"
     if method == "raw":
-        pdf.cell(0, 5, "Method: Raw Steel", new_x="LMARGIN", new_y="NEXT")
-        pdf.cell(0, 5, "No finish applied - raw steel delivered as-is", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, "Method: Raw %s" % raw_material_name, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5, "No finish applied - raw %s delivered as-is" % raw_material_name.lower(), new_x="LMARGIN", new_y="NEXT")
     elif outsource_cost > 0:
         pdf.cell(0, 5, f"Method: {method_display} (outsourced)", new_x="LMARGIN", new_y="NEXT")
         pdf.cell(0, 5, f"Area: {area:.0f} sq ft", new_x="LMARGIN", new_y="NEXT")
@@ -1279,7 +1346,7 @@ def generate_materials_pdf(priced_quote, user_profile):
 
     pdf.section_header("STOCK ORDER")
     if summary:
-        cols = [("Profile", 52), ("Total Length", 28), ("Sticks", 22),
+        cols = [("Profile", 52), ("Total", 28), ("Dimensions", 22),
                 ("Stock Length", 28), ("Remainder", 28), ("Weight", 32)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
@@ -1290,9 +1357,17 @@ def generate_materials_pdf(priced_quote, user_profile):
         for ms in steel_items:
             profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:26])
             is_area = ms.get("is_area_sold", False)
-            if is_area:
-                total_col = "%d pcs" % ms.get("piece_count", 0)
-                sticks_col = "-"
+            prof_key = str(ms.get("profile", "")).lower()
+            is_sheet = "sheet" in prof_key or "plate" in prof_key
+            if is_area or is_sheet:
+                pcs = ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
+                stk_len = ms.get("stock_length_ft", 20)
+                if is_sheet and stk_len >= 8:
+                    total_col = "%d pcs" % pcs
+                    sticks_col = _fmt_sheet_dims(stk_len)
+                else:
+                    total_col = "%d pcs" % pcs
+                    sticks_col = "-"
                 remain_col = "-"
             else:
                 total_col = "%.1f'" % ms.get("total_length_ft", 0)
@@ -1316,7 +1391,7 @@ def generate_materials_pdf(priced_quote, user_profile):
     else:
         # Fallback: per-piece table if no summary
         cols = [("Profile", 50), ("Description", 55), ("Length", 25),
-                ("Qty", 15), ("Stock", 22), ("Sticks", 23)]
+                ("Qty", 15), ("Stock", 22), ("Dimensions", 23)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
 

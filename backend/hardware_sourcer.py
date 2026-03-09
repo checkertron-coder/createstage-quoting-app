@@ -286,6 +286,77 @@ HARDWARE_PRICES = {
     },
 }
 
+# --- Electronics / specialty components ---
+# Estimated prices for common electronics used in LED signs, smart projects, etc.
+# Prices are approximate and labeled as estimates.
+
+ELECTRONICS_CATALOG = {
+    "esp32": {
+        "description": "ESP32 Dev Board (Est.)",
+        "price": 12.00,
+        "keywords": ["esp32", "esp-32"],
+    },
+    "arduino": {
+        "description": "Arduino Mega / compatible board (Est.)",
+        "price": 18.00,
+        "keywords": ["arduino"],
+    },
+    "led_strip_5m": {
+        "description": "LED Strip 5m RGBW IP67 (Est.)",
+        "price": 35.00,
+        "keywords": ["led strip", "led tape", "sk6812", "ws2812", "neopixel",
+                      "rgbw strip", "rgb strip", "pixel strip", "btf-lighting"],
+    },
+    "psu_5v": {
+        "description": "Mean Well 5V Power Supply (Est.)",
+        "price": 20.00,
+        "keywords": ["5v power", "mean well", "apv-35", "5v psu",
+                      "5 volt power supply"],
+    },
+    "psu_12v": {
+        "description": "12V LED Power Supply (Est.)",
+        "price": 25.00,
+        "keywords": ["12v power", "12v psu", "12 volt power supply",
+                      "led power supply", "led driver"],
+    },
+    "psu_24v": {
+        "description": "24V LED Power Supply (Est.)",
+        "price": 30.00,
+        "keywords": ["24v power", "24v psu", "24 volt power supply"],
+    },
+    "cable_glands": {
+        "description": "Waterproof Cable Glands PG7/PG9 pack (Est.)",
+        "price": 10.00,
+        "keywords": ["cable gland", "pg7", "pg9", "waterproof connector",
+                      "waterproof gland"],
+    },
+    "wire_connectors": {
+        "description": "Wire, connectors, heat shrink kit (Est.)",
+        "price": 18.00,
+        "keywords": ["wire", "connector", "heat shrink", "solder",
+                      "wiring harness"],
+    },
+    "led_controller": {
+        "description": "LED Controller / Dimmer (Est.)",
+        "price": 15.00,
+        "keywords": ["led controller", "dimmer", "rgb controller"],
+    },
+    "led_modules": {
+        "description": "LED Modules (channel letter, per set) (Est.)",
+        "price": 45.00,
+        "keywords": ["led module", "channel letter led", "sign module"],
+    },
+}
+
+# Keywords that trigger electronics hardware sourcing
+_ELECTRONICS_TRIGGERS = (
+    "esp32", "arduino", "led strip", "led tape", "neopixel", "sk6812",
+    "ws2812", "mean well", "power supply", "led driver", "controller",
+    "rgb", "pixel", "waterproof connector", "cable gland", "led module",
+    "btf-lighting",
+)
+
+
 # --- Consumables ---
 # Estimated per job from weld_linear_inches and total_sq_ft
 CONSUMABLES = {
@@ -696,3 +767,69 @@ class HardwareSourcer:
             return "cable_end_fitting"
 
         return ""
+
+    def estimate_electronics(self, job_description: str) -> list:
+        """
+        Detect electronics components from description and return hardware items.
+
+        Scans for keywords (ESP32, LED strip, power supply, etc.) and adds
+        matching items from ELECTRONICS_CATALOG. Returns list of hardware items
+        with estimated prices.
+
+        Args:
+            job_description: The user's job description text.
+
+        Returns:
+            list of HardwareItem-like dicts with options.
+        """
+        desc_lower = str(job_description).lower()
+
+        # Check if any electronics trigger words are present
+        if not any(kw in desc_lower for kw in _ELECTRONICS_TRIGGERS):
+            return []
+
+        items = []
+        matched_keys = set()
+
+        for key, entry in ELECTRONICS_CATALOG.items():
+            if key in matched_keys:
+                continue
+            if any(kw in desc_lower for kw in entry["keywords"]):
+                matched_keys.add(key)
+                price = entry["price"]
+                items.append({
+                    "description": entry["description"],
+                    "quantity": 1,
+                    "options": [
+                        {"supplier": "Amazon (Est.)", "price": price,
+                         "part_number": None, "url": "", "lead_days": 5},
+                        {"supplier": "Specialty (Est.)", "price": round(price * 1.2, 2),
+                         "part_number": None, "url": "", "lead_days": 3},
+                    ],
+                })
+
+        # If we matched any power-related items but not wire/connectors, add basics
+        has_power = any(k in matched_keys for k in ("psu_5v", "psu_12v", "psu_24v"))
+        has_led = any(k in matched_keys for k in ("led_strip_5m", "led_modules"))
+        if (has_power or has_led) and "wire_connectors" not in matched_keys:
+            entry = ELECTRONICS_CATALOG["wire_connectors"]
+            items.append({
+                "description": entry["description"],
+                "quantity": 1,
+                "options": [
+                    {"supplier": "Amazon (Est.)", "price": entry["price"],
+                     "part_number": None, "url": "", "lead_days": 5},
+                ],
+            })
+        if (has_power or has_led) and "cable_glands" not in matched_keys:
+            entry = ELECTRONICS_CATALOG["cable_glands"]
+            items.append({
+                "description": entry["description"],
+                "quantity": 1,
+                "options": [
+                    {"supplier": "Amazon (Est.)", "price": entry["price"],
+                     "part_number": None, "url": "", "lead_days": 5},
+                ],
+            })
+
+        return items
