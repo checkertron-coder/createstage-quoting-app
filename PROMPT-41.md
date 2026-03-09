@@ -40,12 +40,13 @@ LABOR CALIBRATION (from shop owner testing):
 ```
 This is context, not rules. Opus should use these as anchors and reason from there.
 
-### AC-2: Material type defaults to steel unless explicitly specified
-In the field extraction and calculator pipeline:
-- If the user does NOT specify material (aluminum, stainless, etc.), default to **mild steel**
-- Only use aluminum profiles (`al_*`) when the user explicitly says "aluminum" or the job type inherently requires it (e.g., `led_sign_custom` defaults to aluminum per industry standard)
-- For `fence_gate`, `railing`, `staircase` job types: default to **steel** unless user specifies otherwise
-- NEVER mix aluminum frame with steel posts in the same assembly unless the user explicitly requests it
+### AC-2: Material is ALWAYS a required question — no defaults by job type
+Material type (mild steel, aluminum, stainless steel, etc.) must ALWAYS be confirmed by the user. The system should NOT default material based on job type — steel signs, aluminum fences, stainless tables are all valid combinations.
+- If the user specifies material in their description, extract it. Done.
+- If the user does NOT specify material, the question tree MUST ask. Material should be a required field that cannot be skipped.
+- The `material` question should offer: "Mild steel", "Aluminum (6061-T6)", "Aluminum (5052-H32)", "Stainless steel (304)", "Stainless steel (316)", "Other (specify)"
+- Once material is confirmed, ALL profiles in the cut list must match that material. NEVER mix aluminum frame with steel posts in the same assembly unless the user explicitly requests mixed materials.
+- The AI cut list prompt must receive the confirmed material type so Opus generates the correct profile keys (`al_*` for aluminum, `ss_*` for stainless, standard keys for steel).
 
 ### AC-3: Finish label never says "steel" on aluminum jobs
 - The finish display must use the ACTUAL material name: "Raw Aluminum", "Clear Coat (Aluminum)", "Paint (Aluminum)" — never "Raw Steel" on a job using aluminum profiles
@@ -110,9 +111,13 @@ The materials section in the quote UI must allow the user to adjust quantities (
 **File:** `backend/calculators/labor_calculator.py`
 **What:** Add a `LABOR_CALIBRATION_NOTES` string constant with Burton's benchmark corrections. Inject it into the Opus prompt in `_opus_estimate_labor()` as a "Shop Owner Reference Data" section.
 
-### Task B: Material type defaults (AC-2)
-**Files:** `backend/question_trees/engine.py` (extraction), `backend/calculators/` (calculator selection)
-**What:** When `material` field is not extracted or answered, default to "Mild steel" for structural job types (fence, gate, railing, staircase, furniture). Default to "Aluminum" for signage job types (led_sign_custom, channel_letters). Add a `DEFAULT_MATERIAL_BY_JOB_TYPE` dict.
+### Task B: Material is always required (AC-2)
+**Files:** `backend/question_trees/data/*.json` (all job type trees), `backend/question_trees/engine.py`, `backend/calculators/ai_cut_list.py`
+**What:**
+1. Ensure `material` is in the `required_fields` list for EVERY question tree JSON — not just some
+2. If material is not extracted from the description, the question MUST fire (never skipped)
+3. Update the material question options across all trees to include: Mild steel, Aluminum (6061-T6), Aluminum (5052-H32), Stainless steel (304), Stainless steel (316), Other
+4. Pass the confirmed material type into the AI cut list prompt so Opus uses the correct profile keys
 
 ### Task C: Finish label fix (AC-3)
 **Files:** `backend/finishing.py`, `backend/pdf_generator.py`
@@ -168,8 +173,8 @@ The materials section in the quote UI must allow the user to adjust quantities (
 ### Automated Tests:
 - Add tests to `tests/test_prompt41.py`:
   1. `test_labor_calibration_in_prompt` — verify calibration notes appear in Opus prompt
-  2. `test_default_material_steel_for_fence` — fence job defaults to steel
-  3. `test_default_material_aluminum_for_sign` — LED sign defaults to aluminum
+  2. `test_material_required_all_job_types` — material is in required_fields for every question tree
+  3. `test_material_question_fires_when_missing` — if material not in description, question appears
   4. `test_finish_label_aluminum` — never says "steel" on aluminum job
   5. `test_finish_extraction_clear_coat` — "clear coated" in description → finish = clear_coat
   6. `test_weight_calculation` — verify weight calc for known profiles
