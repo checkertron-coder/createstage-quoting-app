@@ -135,6 +135,7 @@ def calculate_labor_hours(job_type, cut_list, fields):
     finish = str(fields.get("finish", fields.get("finish_type", "raw")) or "raw").lower()
     all_fields = " ".join(str(v) for v in fields.values()).lower()
 
+    is_aluminum = any(k in all_fields for k in ("aluminum", "6061", "5052"))
     is_stainless = any(k in all_fields for k in ("stainless", "304", "316"))
     has_tig_items = any(
         str(item.get("weld_process", "")).lower() == "tig" for item in cut_list
@@ -156,6 +157,9 @@ def calculate_labor_hours(job_type, cut_list, fields):
     ]
     has_coating = any(k in finish for k in coating_kw)
     needs_mill_scale = not has_coating and any(k in finish for k in bare_metal_kw)
+    # Aluminum has no mill scale — suppress unconditionally
+    if is_aluminum:
+        needs_mill_scale = False
     is_outdoor = job_type in _OUTDOOR_JOB_TYPES
 
     reasoning_lines = []
@@ -203,6 +207,18 @@ def calculate_labor_hours(job_type, cut_list, fields):
         "STEP 1: Categorized %d TYPE A (structural), %d TYPE B (decorative) "
         "from %d total pieces." % (type_a_count, type_b_count, total_pieces))
 
+    # Sheet/plate piece count — needed for panel/sign grind path
+    sheet_piece_count = 0
+    for item in cut_list:
+        profile = str(item.get("profile", "")).lower()
+        if profile.startswith("sheet_") or profile.startswith("plate_"):
+            sheet_piece_count += int(item.get("quantity", 1))
+    sheet_pct = sheet_piece_count / max(total_pieces, 1)
+    is_panel_job = (
+        job_type in ("led_sign_custom", "sign_frame")
+        or sheet_pct > 0.4
+    )
+
     # ======================================================
     # STEP 2 — WELD TIME
     # ======================================================
@@ -239,6 +255,26 @@ def calculate_labor_hours(job_type, cut_list, fields):
             "STEP 3 — GRIND (%s): 30 base + %d structural x 1 min + %d decorative x 0.3 min "
             "+ %d miters x 2 min%s = %.1f min (%.2f hr)."
             % (grind_label, type_a_count, type_b_count, miter_cuts,
+               " + 90 min mill scale" if needs_mill_scale else "",
+               grind_min, grind_clean))
+    elif is_panel_job:
+        # Sign/panel jobs: surface-area-based grind, not per-joint furniture grind.
+        # Sheet pieces get one flap disc pass per face. Structural joints get cleanup only.
+        grind_min = 20 + sheet_piece_count * 8 + type_a_joints * 1.5
+        grind_label = "panel/sign surface grind"
+        if "clear" in finish:
+            grind_min = int(grind_min * 0.5)
+            grind_label += " (clear coat 0.5x)"
+        if is_aluminum:
+            grind_min = int(grind_min * 0.7)
+            grind_label += " (aluminum 0.7x)"
+        if needs_mill_scale:
+            grind_min += 90
+        grind_clean = max(0.5, grind_min / 60.0)
+        reasoning_lines.append(
+            "STEP 3 — GRIND (%s): 20 base + %d sheet pcs x 8 min + %d structural joints x 1.5 min"
+            "%s = %.1f min (%.2f hr)."
+            % (grind_label, sheet_piece_count, type_a_joints,
                " + 90 min mill scale" if needs_mill_scale else "",
                grind_min, grind_clean))
     else:

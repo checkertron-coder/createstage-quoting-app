@@ -127,7 +127,7 @@ class FinishingBuilder:
         f = str(finish_type).lower()
         if "raw" in f or "none" in f or "no finish" in f:
             return "raw"
-        if "clear" in f:
+        if "clear" in f or "urethane" in f:
             return "clearcoat"
         if "powder" in f:
             return "powder_coat"

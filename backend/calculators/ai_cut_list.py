@@ -805,6 +805,12 @@ Return ONLY valid JSON — an array of objects:
             and any(k in all_fields_lower for k in bare_metal_keywords)
         )
 
+        # Aluminum has no mill scale — oxide layer is handled differently.
+        # Do NOT inject vinegar bath or mill scale removal for aluminum.
+        is_aluminum = any(k in all_fields_lower for k in ("aluminum", "6061", "5052"))
+        if is_aluminum:
+            needs_mill_scale_removal = False
+
         # Inject relevant fabrication knowledge (includes reasoning principles)
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
         description = str(fields.get("description", "") or "")
@@ -859,6 +865,26 @@ Do NOT include vinegar bath, acid wash, or mill scale removal steps.
             dims_lines.append("Do NOT calculate or modify these values. Use them exactly as given.\n")
             enforced_dims_block = "\n".join(dims_lines)
 
+        # Build rules — conditional on whether mill scale removal is needed
+        rules_lines = [
+            "1. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.",
+        ]
+        if needs_mill_scale_removal:
+            rules_lines.append(
+                "2. SCHEDULING: Unattended processes (vinegar bath, paint cure) must be the FIRST step. "
+                "All attended work happens WHILE the unattended process runs.")
+            rules_lines.append(
+                '3. For vinegar bath / mill scale removal: Step 1 is ALWAYS "Submerge stock in vinegar bath." '
+                "Steps 2-N are structural work done WHILE the bath runs.")
+        else:
+            rules_lines.append(
+                "2. SCHEDULING: Order steps for maximum efficiency. "
+                "If paint cure is needed, schedule it so other work can happen during drying.")
+        rules_lines.append(
+            "%d. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. "
+            "Do not round or invent dimensions." % (len(rules_lines) + 1))
+        rules_block = "\n".join(rules_lines)
+
         prompt = """You are an expert metal fabricator creating step-by-step build instructions.
 A journeyman fabricator should be able to follow these instructions and build this project.
 
@@ -874,10 +900,7 @@ TASK: Generate a practical fabrication sequence — the exact steps a fabricator
 to build this project from raw material to finished product.
 
 RULES:
-1. Each step must be SPECIFIC and ACTIONABLE — not generic. Reference actual pieces from the cut list.
-2. SCHEDULING: Unattended processes (vinegar bath, paint cure) must be the FIRST step. All attended work happens WHILE the unattended process runs.
-3. For vinegar bath / mill scale removal: Step 1 is ALWAYS "Submerge stock in vinegar bath." Steps 2-N are structural work done WHILE the bath runs.
-4. EXACT DIMENSIONS: Use the EXACT dimensions and quantities from the CUT LIST above. Do not round or invent dimensions.
+%s
 
 Return ONLY valid JSON — an array of step objects:
 [
@@ -891,7 +914,8 @@ Return ONLY valid JSON — an array of step objects:
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
 ]""" % (job_type, knowledge_block, fields_text, cuts_text,
-        geometry_block, enforced_dims_block, weld_note, finish_context)
+        geometry_block, enforced_dims_block, weld_note, finish_context,
+        rules_block)
 
         return prompt
 

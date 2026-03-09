@@ -289,6 +289,19 @@ def _dec_to_fraction(val: str) -> str:
     return '%s"' % val
 
 
+def _finish_display_name(method: str) -> str:
+    """Map finishing method codes to clean display names."""
+    _DISPLAY = {
+        "clearcoat": "Clear Coat",
+        "clear_coat": "Clear Coat",
+        "powder_coat": "Powder Coat",
+        "paint": "Paint",
+        "galvanized": "Galvanized",
+        "raw": "Raw Steel",
+    }
+    return _DISPLAY.get(method, method.replace("_", " ").title())
+
+
 def _fmt_hrs(hours) -> str:
     """Format hours as X.X"""
     try:
@@ -713,7 +726,7 @@ def generate_quote_pdf(
     fin_total = finishing.get("total", 0)
 
     pdf.set_font("Helvetica", "", 9)
-    method_display = method.replace("_", " ").title()
+    method_display = _finish_display_name(method)
     outsource_cost = finishing.get("outsource_cost", 0)
     materials_cost = finishing.get("materials_cost", 0)
 
@@ -1205,7 +1218,7 @@ def _build_included_list(priced_quote, fields):
     finishing = priced_quote.get("finishing", {})
     method = finishing.get("method", "raw")
     if method and method != "raw":
-        method_display = method.replace("_", " ").title()
+        method_display = _finish_display_name(method)
         included.append("%s finish applied" % method_display)
 
     # Job-type-specific inclusions
