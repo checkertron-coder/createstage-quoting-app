@@ -319,6 +319,17 @@ CONSUMABLES = {
         "price_per_can": 8.50,
         "coverage_sq_ft": 20.0,
     },
+    # Aluminum consumables
+    "welding_wire_er4043": {
+        "description": "ER4043 aluminum TIG filler rod",
+        "price_per_lb": 18.00,
+        "usage_per_100_weld_inches": 0.3,  # lbs per 100 weld inches
+    },
+    "shielding_gas_argon": {
+        "description": "100% Argon shielding gas",
+        "price_per_cu_ft": 0.10,
+        "usage_cu_ft_per_weld_hour": 20.0,  # CFH at standard flow rate
+    },
 }
 
 
@@ -386,20 +397,30 @@ class HardwareSourcer:
                 option["url"] = "https://www.gatedepot.com/search?q=%s" % search_term
 
     def estimate_consumables(self, weld_linear_inches: float, total_sq_ft: float,
-                             finish_type: str = "raw") -> list:
+                             finish_type: str = "raw",
+                             material_type: str = "mild_steel") -> list:
         """
         Estimate consumable costs from weld inches and square footage.
         Returns list of consumable line items.
+
+        Args:
+            material_type: "mild_steel" (default), "aluminum_6061", "stainless_304", etc.
         """
         items = []
         weld_hundreds = weld_linear_inches / 100.0
 
-        # Welding wire
-        wire = CONSUMABLES["welding_wire_er70s6"]
+        # Detect aluminum from material_type
+        is_aluminum = "aluminum" in str(material_type).lower()
+
+        # Welding wire — select based on material
+        if is_aluminum:
+            wire = CONSUMABLES["welding_wire_er4043"]
+        else:
+            wire = CONSUMABLES["welding_wire_er70s6"]
         wire_lbs = math.ceil(weld_hundreds * wire["usage_per_100_weld_inches"])
         if wire_lbs > 0:
             items.append({
-                "description": f"{wire['description']} ({wire_lbs} lbs)",
+                "description": "%s (%d lbs)" % (wire["description"], wire_lbs),
                 "quantity": wire_lbs,
                 "unit_price": wire["price_per_lb"],
                 "line_total": round(wire_lbs * wire["price_per_lb"], 2),
@@ -411,7 +432,7 @@ class HardwareSourcer:
         disc_count = math.ceil(weld_hundreds * grind["usage_per_100_weld_inches"])
         if disc_count > 0:
             items.append({
-                "description": f"{grind['description']} x{disc_count}",
+                "description": "%s x%d" % (grind["description"], disc_count),
                 "quantity": disc_count,
                 "unit_price": grind["price_each"],
                 "line_total": round(disc_count * grind["price_each"], 2),
@@ -423,20 +444,23 @@ class HardwareSourcer:
         flap_count = math.ceil(weld_hundreds * flap["usage_per_100_weld_inches"])
         if flap_count > 0:
             items.append({
-                "description": f"{flap['description']} x{flap_count}",
+                "description": "%s x%d" % (flap["description"], flap_count),
                 "quantity": flap_count,
                 "unit_price": flap["price_each"],
                 "line_total": round(flap_count * flap["price_each"], 2),
                 "category": "consumable",
             })
 
-        # Shielding gas
-        gas = CONSUMABLES["shielding_gas_75_25"]
+        # Shielding gas — select based on material
+        if is_aluminum:
+            gas = CONSUMABLES["shielding_gas_argon"]
+        else:
+            gas = CONSUMABLES["shielding_gas_75_25"]
         weld_hours = weld_linear_inches / 80.0  # ~80 in/hr effective welding rate
         gas_cu_ft = math.ceil(weld_hours * gas["usage_cu_ft_per_weld_hour"])
         if gas_cu_ft > 0:
             items.append({
-                "description": f"{gas['description']} ({gas_cu_ft} cu ft)",
+                "description": "%s (%d cu ft)" % (gas["description"], gas_cu_ft),
                 "quantity": gas_cu_ft,
                 "unit_price": gas["price_per_cu_ft"],
                 "line_total": round(gas_cu_ft * gas["price_per_cu_ft"], 2),

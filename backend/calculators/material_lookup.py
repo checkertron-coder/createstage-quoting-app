@@ -98,6 +98,20 @@ PRICE_PER_FOOT = {
     # HSS (structural tube)
     "hss_4x4_0.25": 8.25,          # Extrapolated from 3×3×1/4 ($7.50) + size premium
     "hss_6x4_0.25": 12.00,         # No supplier data — keep estimate
+    # Aluminum tube — 6061-T6, ~2-3x steel
+    "al_sq_tube_1x1_0.125": 3.20,          # 1" sq tube, 1/8" wall
+    "al_sq_tube_1.5x1.5_0.125": 4.50,      # 1.5" sq tube, 1/8" wall
+    "al_sq_tube_2x2_0.125": 6.00,          # 2" sq tube, 1/8" wall
+    "al_rect_tube_1x2_0.125": 4.80,        # 1x2 rect tube, 1/8" wall
+    # Aluminum angle — 6061-T6
+    "al_angle_1.5x1.5x0.125": 2.80,        # 1.5" angle, 1/8" leg
+    "al_angle_2x2x0.125": 3.60,            # 2" angle, 1/8" leg
+    # Aluminum flat bar — 6061-T6
+    "al_flat_bar_1x0.125": 1.80,            # 1" wide, 1/8" thick
+    "al_flat_bar_1.5x0.125": 2.40,          # 1.5" wide, 1/8" thick
+    "al_flat_bar_2x0.25": 5.20,             # 2" wide, 1/4" thick
+    # Aluminum round tube — 6061-T6
+    "al_round_tube_1.5_0.125": 4.20,        # 1.5" OD, 1/8" wall
 }
 
 # Prices per square foot
@@ -108,6 +122,12 @@ PRICE_PER_SQFT = {
     "sheet_11ga": 2.65,             # ~$85/sheet for 4x8
     "sheet_14ga": 2.03,             # ~$65/sheet for 4x8
     "sheet_16ga": 1.56,             # ~$50/sheet for 4x8
+    # Aluminum sheet — 5052-H32 / 6061-T6, standard 4'x8' or 4'x10'
+    "al_sheet_0.040": 4.50,         # 0.040" (~18ga equiv)
+    "al_sheet_0.063": 5.80,         # 0.063" (~16ga equiv)
+    "al_sheet_0.080": 7.00,         # 0.080" (~14ga equiv)
+    "al_sheet_0.125": 10.50,        # 1/8" sheet
+    "al_sheet_0.190": 15.00,        # 3/16" plate
 }
 
 # Per-unit prices for misc items
@@ -429,6 +449,8 @@ class MaterialLookup:
             return ""
         # Known multi-word shape prefixes (order matters — longest first)
         prefixes = [
+            "al_sq_tube", "al_rect_tube", "al_round_tube",
+            "al_flat_bar", "al_angle", "al_sheet",
             "sq_tube", "rect_tube", "round_tube",
             "sq_bar", "round_bar", "flat_bar",
             "dom_tube", "angle", "channel", "pipe", "hss",
@@ -450,6 +472,12 @@ class MaterialLookup:
         if not profile:
             return ""
         shape_names = {
+            "al_sq_tube": "Aluminum Square Tube",
+            "al_rect_tube": "Aluminum Rectangular Tube",
+            "al_round_tube": "Aluminum Round Tube",
+            "al_flat_bar": "Aluminum Flat Bar",
+            "al_angle": "Aluminum Angle",
+            "al_sheet": "Aluminum Sheet",
             "sq_tube": "Square Tube",
             "rect_tube": "Rectangular Tube",
             "round_tube": "Round Tube",
@@ -463,6 +491,8 @@ class MaterialLookup:
             "hss": "HSS",
         }
         prefixes = [
+            "al_sq_tube", "al_rect_tube", "al_round_tube",
+            "al_flat_bar", "al_angle", "al_sheet",
             "sq_tube", "rect_tube", "round_tube",
             "sq_bar", "round_bar", "flat_bar",
             "dom_tube", "angle", "channel", "pipe", "hss",

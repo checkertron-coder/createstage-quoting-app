@@ -796,8 +796,14 @@ const QuoteFlow = {
 
     _renderFinishing(pq) {
         const f = pq.finishing || {};
-        const method = (f.method || 'raw').replace(/_/g, ' ');
-        if (f.method === 'raw') {
+        const FINISH_DISPLAY = {
+            clearcoat: 'Clear Coat', clear_coat: 'Clear Coat',
+            powder_coat: 'Powder Coat', paint: 'Paint',
+            galvanized: 'Galvanized', raw: 'Raw Steel',
+        };
+        const methodRaw = f.method || 'raw';
+        const method = FINISH_DISPLAY[methodRaw] || methodRaw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        if (methodRaw === 'raw') {
             return `<p>Method: <strong>Raw Steel</strong> — no finish applied.</p>`;
         }
         const isOutsourced = (f.outsource_cost || 0) > 0;

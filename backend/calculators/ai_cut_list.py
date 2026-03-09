@@ -100,6 +100,13 @@ _PROFILE_GROUPS = {
     "dom_tube": "  DOM tube: dom_tube_1.75x0.120",
     "hss": "  HSS (structural tube): hss_4x4_0.25, hss_6x4_0.25",
     "punched_channel": "  Punched channel: punched_channel_1.25x0.5x14ga, punched_channel_1.5x0.75x14ga",
+    # Aluminum profiles
+    "al_sq_tube": "  Aluminum square tube: al_sq_tube_1x1_0.125, al_sq_tube_1.5x1.5_0.125, al_sq_tube_2x2_0.125",
+    "al_rect_tube": "  Aluminum rectangular tube: al_rect_tube_1x2_0.125",
+    "al_flat_bar": "  Aluminum flat bar: al_flat_bar_1x0.125, al_flat_bar_1.5x0.125, al_flat_bar_2x0.25",
+    "al_angle": "  Aluminum angle: al_angle_1.5x1.5x0.125, al_angle_2x2x0.125",
+    "al_round_tube": "  Aluminum round tube: al_round_tube_1.5_0.125",
+    "al_sheet": "  Aluminum sheet: al_sheet_0.040, al_sheet_0.063, al_sheet_0.080, al_sheet_0.125, al_sheet_0.190",
 }
 
 # Which profile groups each job type needs
@@ -125,8 +132,8 @@ _JOB_TYPE_PROFILES = {
     "exhaust_custom": ["round_tube", "pipe"],
     "trailer_fab": ["channel", "rect_tube", "sq_tube", "angle", "sheet_plate"],
     "structural_frame": ["channel", "sq_tube", "rect_tube", "angle", "sheet_plate", "pipe"],
-    "sign_frame": ["sq_tube", "flat_bar", "angle", "sheet_plate"],
-    "led_sign_custom": ["sq_tube", "flat_bar", "angle", "sheet_plate"],
+    "sign_frame": ["sq_tube", "flat_bar", "angle", "sheet_plate", "al_sq_tube", "al_flat_bar", "al_angle", "al_sheet"],
+    "led_sign_custom": ["sq_tube", "flat_bar", "angle", "sheet_plate", "al_sq_tube", "al_flat_bar", "al_angle", "al_sheet", "al_rect_tube"],
     "product_firetable": ["sq_tube", "flat_bar", "sheet_plate"],
 }
 
@@ -394,6 +401,15 @@ class AICutListGenerator:
 
         profiles_text = self._get_profiles_for_job_type(job_type)
 
+        # Inject aluminum profiles for any job type when material is aluminum
+        if is_aluminum:
+            al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
+                         "al_angle", "al_round_tube", "al_sheet"]
+            for ag in al_groups:
+                line = _PROFILE_GROUPS.get(ag)
+                if line and line not in profiles_text:
+                    profiles_text += "\n" + line
+
         # Inject relevant fabrication knowledge
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
         description = str(fields.get("description", "") or "")
@@ -412,10 +428,23 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
         # Build structured context blocks for compound/complex jobs
         context_blocks = self._build_field_context(job_type, fields)
 
+        # Material context — aluminum requires al_* profile keys
+        material_context = ""
+        if is_aluminum:
+            material_context = """
+MATERIAL CONTEXT — ALUMINUM:
+This project uses ALUMINUM, not steel. You MUST:
+1. Use al_* profile keys (e.g., al_sq_tube_2x2_0.125, al_sheet_0.125) — NOT steel keys.
+2. Set material_type to "aluminum_6061" for all items.
+3. For sheet/panel coverage, specify al_sheet_* profiles with area dimensions in notes.
+4. Weld process: use "tig" for all joints (aluminum requires TIG or specialized pulsed MIG).
+5. Do NOT use steel profiles (sq_tube_*, flat_bar_*, etc.) for aluminum projects.
+"""
+
         prompt = """You are an expert metal fabricator generating a cut list for a fabrication project.
 
 JOB TYPE: %s
-%s
+%s%s
 PROJECT INFO:
 %s
 %s
@@ -455,8 +484,8 @@ Return ONLY valid JSON — an array of objects:
         "weld_type": "fillet",
         "notes": "4 legs at 30 inches for 30-inch table height. Miter bottom for leveling feet."
     }
-]""" % (job_type, knowledge_block, fields_text, context_blocks,
-        weld_guidance, profiles_text)
+]""" % (job_type, knowledge_block, material_context, fields_text,
+        context_blocks, weld_guidance, profiles_text)
 
         return prompt
 

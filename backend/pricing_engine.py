@@ -59,8 +59,19 @@ class PricingEngine:
         weld_inches = material_list.get("weld_linear_inches", 0)
         total_sq_ft = material_list.get("total_sq_ft", 0)
         finish_type = fields.get("finish", "raw")
+
+        # Detect material type from description for correct consumables
+        desc_lower = str(job_description).lower()
+        if any(k in desc_lower for k in ("aluminum", "6061", "5052")):
+            detected_material = "aluminum_6061"
+        elif any(k in desc_lower for k in ("stainless", "304", "316")):
+            detected_material = "stainless_304"
+        else:
+            detected_material = "mild_steel"
+
         consumables = self.hardware_sourcer.estimate_consumables(
             weld_inches, total_sq_ft, finish_type,
+            material_type=detected_material,
         )
 
         # --- Calculate subtotals ---
