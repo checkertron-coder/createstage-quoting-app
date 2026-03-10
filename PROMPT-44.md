@@ -58,18 +58,40 @@ Update `suggest_additional_questions` prompt in `engine.py` with explicit knowle
 PREFERENCES — ALWAYS ASK when not specified in description:
 * Sheet gauge/thickness — NEVER use different gauges for different panels without asking
   Options: 0.063" (1/16"), 0.080" (5/64"), 0.125" (1/8") for aluminum; 11ga, 14ga, 16ga for steel
-* Number of tabs/spacers per letter/component AND tab spacing
+* Number of tabs/spacers per letter/component AND tab spacing (typically 2-3 per letter, NOT 54)
 * Internal framing — does the assembly need stiffeners, or does the geometry provide rigidity?
+  (A 6" deep box may be rigid enough with just a couple 90° gusset brackets)
 * Number of finish coats (1 coat, 2 coats, etc.)
 * Picket/baluster spacing on fences
 * Weld finish quality (production/industrial vs furniture grade)
 * Fastening method for non-obvious joints
 
+SIGN-SPECIFIC PREFERENCES (for LED/illuminated sign jobs):
+* Letter construction method:
+  (A) Open-back letters with spacer tabs — letters pushed into box by tabs, LEDs visible through
+      cutouts from behind, light reflects off back panel and spills through gaps. Simpler build.
+  (B) Channel letters with formed sidewalls — bent sheet wraps around each letter perimeter creating
+      enclosed 3D letter forms. LEDs hidden inside each letter channel. More complex, higher cost.
+  This DRAMATICALLY changes the build — different materials, different fab steps, different look.
+* If channel letters (option B): what gauge for formed sidewalls? (14ga bends easier around curves,
+  1/8" resists TIG heat warping better on tight radii — fabricator preference)
+* If channel letters (option B): weld coverage — full perimeter weld or tack/spot weld?
+  (Full weld only needed if sidewalls are visible up close)
+* Waterproof scope — what needs to be waterproof?
+  (A) Entire sign assembly sealed (all seams welded shut)
+  (B) Only the electronics enclosure (ESP32, PSU) — sign body and LEDs are already IP67 rated
+  This changes whether side panels get welded shut or left accessible.
+* Back panel access method:
+  (A) Sealed/welded shut
+  (B) Removable panel with screws (for electronics access/maintenance)
+  (C) Hinged access panel
+  (D) Underlapping panels with gap for wiring access
+
 KNOWLEDGE — NEVER ASK (just execute):
 * Miter angle for square frames (45°)
 * Weld process by material (TIG for aluminum, MIG for steel in shop)
 * Deburring after cuts
-* Waterproof assemblies = welded seams, not riveted/screwed
+* Waterproof assemblies where specified = welded seams, not riveted/screwed
 ```
 
 ### AC-4: Shop Stock section in quote output
