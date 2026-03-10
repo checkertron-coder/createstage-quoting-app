@@ -542,11 +542,39 @@ def estimate_labor(
 
     estimator = LaborEstimator()
     fields = quote_params.get("fields", {})
-    finish_type = fields.get("finish", "raw")
+    finish_type = fields.get("finish", fields.get("finish_type", ""))
+    finish_source = "user_answer" if finish_type else "default"
+
+    # Fallback: extract finish from description if field is missing
+    if not finish_type:
+        desc_lower = str(fields.get("description", "")).lower()
+        if "powder" in desc_lower and "coat" in desc_lower:
+            finish_type = "powder_coat"
+            finish_source = "description_extraction"
+        elif "clear coat" in desc_lower or "clearcoat" in desc_lower:
+            finish_type = "clearcoat"
+            finish_source = "description_extraction"
+        elif "paint" in desc_lower and "powder" not in desc_lower:
+            finish_type = "paint"
+            finish_source = "description_extraction"
+        elif "galvaniz" in desc_lower:
+            finish_type = "galvanized"
+            finish_source = "description_extraction"
+        elif "anodiz" in desc_lower:
+            finish_type = "anodized"
+            finish_source = "description_extraction"
+        elif "patina" in desc_lower or "blacken" in desc_lower:
+            finish_type = "patina"
+            finish_source = "description_extraction"
+        elif "brush" in desc_lower or "polish" in desc_lower:
+            finish_type = "brushed"
+            finish_source = "description_extraction"
+        else:
+            finish_type = "raw"
+
     logger.info(
         "ESTIMATE: job_type=%s, finish=%s, finish_source=%s",
-        session.job_type, finish_type,
-        "user_answer" if fields.get("finish") else "default_raw",
+        session.job_type, finish_type, finish_source,
     )
 
     try:

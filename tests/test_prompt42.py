@@ -191,10 +191,10 @@ def test_preference_prompt_has_knowledge_vs_pref():
 # ---- AC-5: Hardware Install Calibration ----
 
 def test_labor_calibration_electronics_hw_install():
-    """Calibration notes must mention 4-6 hours MINIMUM for electronics."""
+    """Calibration notes must mention electronics install hours and scaling rules."""
     from backend.calculators.labor_calculator import LABOR_CALIBRATION_NOTES
-    assert "4-6 hours MINIMUM" in LABOR_CALIBRATION_NOTES
-    assert "HARDWARE INSTALL CALIBRATION" in LABOR_CALIBRATION_NOTES
+    assert "ALWAYS 4+ hrs" in LABOR_CALIBRATION_NOTES
+    assert "SCALING" in LABOR_CALIBRATION_NOTES
 
 
 def test_electronics_fallback_still_works():

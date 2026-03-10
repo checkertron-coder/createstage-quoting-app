@@ -133,25 +133,36 @@ def calculate_labor_hours(job_type, cut_list, fields):
     return _fallback_calculate_labor_hours(job_type, cut_list, fields)
 
 
-# Shop owner calibration benchmarks — injected into Opus prompt as reference data
+# Shop owner calibration benchmarks — injected into Opus prompt as SCALING reference
 LABOR_CALIBRATION_NOTES = """
-LABOR CALIBRATION (from shop owner testing):
-- Fence/Gate (12' cantilever + 28' of fence sections, 128 pickets):
-  Fit & Tack: ~6 hrs | Full Weld: ~6-8 hrs | Grind & Clean: ~4 hrs
-- LED Sign (138"x28"x6" aluminum box with laser-cut letters):
-  Fit & Tack: ~6 hrs | Full Weld: ~6 hrs | Grind & Clean: ~4 hrs | Hardware Install: ~4-6 hrs
-- End Table (simple steel frame, 4 legs + rails):
-  Fit & Tack: ~1-2 hrs | Full Weld: ~1-2 hrs | Grind & Clean: ~1-2 hrs
-- These are REFERENCE POINTS, not hard limits. Scale proportionally for larger/smaller jobs.
-- When in doubt, estimate LOWER — the shop owner consistently reports AI overestimates welding time.
-- Batch cutting identical pieces is fast: set the stop once, then feed-and-cut.
-- Picket/baluster positioning: ~2-3 min per picket with a jig, not 5-8 min.
+LABOR CALIBRATION — SCALING REFERENCES (from shop owner testing):
 
-HARDWARE INSTALL CALIBRATION:
-- Structural hardware (bolts, brackets, hinges, latches): 0.5-2 hours typical
-- Electronics hardware (ESP32, LED strips, power supply, wiring, waterproofing, testing): 4-6 hours MINIMUM
-- If the project includes ANY electronics/controllers/LED/wiring, hardware_install is ALWAYS 4+ hours, never 0.4
-- Gate operators (LiftMaster, US Automatic): 2-3 hours for mount + setup + test
+These are BENCHMARKS for specific scopes. You MUST scale proportionally by piece
+count and weld inches — NEVER copy these numbers for a different-sized job.
+
+BENCHMARK A — Large Gate + Fence Combo
+  Scope: 12' cantilever gate + 28' fence, 128 pickets, mild steel MIG welded.
+  Pieces: ~160 | Weld: ~300 linear inches | Result: ~20 total labor hours.
+  A 6' gate with 0 pickets is ~4-5 hours, NOT 20. Scale by piece count.
+
+BENCHMARK B — Large LED Box Sign
+  Scope: 138"x28"x6" aluminum cabinet, laser-cut face letters, TIG welded.
+  Pieces: ~40 | Weld: ~100 linear inches TIG | Result: ~22 total labor hours.
+  A 48"x24" sign is ~40-50% of this scope. Scale by surface area and piece count.
+
+BENCHMARK C — Simple End Table
+  Scope: 4-leg steel frame with cross rails, MIG welded, clear coat finish.
+  Pieces: ~8 | Weld: ~20 linear inches | Result: ~5 total labor hours.
+  This is the baseline for small furniture. More complex = multiply from here.
+
+SCALING RULES:
+- Double the pieces ≈ 1.7x the hours (batch efficiency saves ~15%).
+- TIG (aluminum, stainless) = 2.5-3x slower per inch than MIG (mild steel).
+- Pickets with jig: 2-3 min/picket to position + tack, not 5-8 min.
+- Batch cutting: set stop once, feed-and-cut. 50 identical cuts ≈ 25 min total.
+- Electronics (ESP32, LED, power supply, wiring): ALWAYS 4+ hrs install, never 0.4.
+- Gate operators (LiftMaster, US Automatic): 2-3 hrs mount + setup + test.
+- When in doubt, estimate LOWER — shop owner consistently reports AI overestimates.
 """
 
 

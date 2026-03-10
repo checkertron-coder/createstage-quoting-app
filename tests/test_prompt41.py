@@ -22,10 +22,9 @@ def test_labor_calibration_in_prompt():
     # Constant has content
     assert len(LABOR_CALIBRATION_NOTES) > 100
 
-    # Contains shop-owner reference points
-    assert "Fence/Gate" in LABOR_CALIBRATION_NOTES
-    assert "LED Sign" in LABOR_CALIBRATION_NOTES
-    assert "End Table" in LABOR_CALIBRATION_NOTES
+    # Contains benchmark reference points with scaling context
+    assert "BENCHMARK" in LABOR_CALIBRATION_NOTES
+    assert "SCALING" in LABOR_CALIBRATION_NOTES
     assert "estimate LOWER" in LABOR_CALIBRATION_NOTES
 
 
