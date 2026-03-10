@@ -8,10 +8,14 @@ Input: MaterialList + LaborEstimate + FinishingSection + hardware pricing
 Output: PricedQuote (per CLAUDE.md contract)
 """
 
+import logging
 from datetime import datetime
 
 from .claude_client import get_model_name
+from .finishing import FinishingBuilder
 from .hardware_sourcer import HardwareSourcer
+
+logger = logging.getLogger(__name__)
 
 
 class PricingEngine:
@@ -46,10 +50,44 @@ class PricingEngine:
         """
         material_list = session_data.get("material_list", {})
         labor_estimate = session_data.get("labor_estimate", {})
-        finishing = session_data.get("finishing", {})
+        upstream_finishing = session_data.get("finishing", {})
         fields = session_data.get("fields", {})
         job_type = session_data.get("job_type", "custom_fab")
         job_description = fields.get("description", "")
+
+        # --- Rebuild finishing from current fields (AC-1 fix) ---
+        # The upstream finishing from /estimate may be stale or incorrectly
+        # built as "raw". Rebuild here so finishing and consumables always
+        # derive from the same field values at the same time.
+        finish_field = fields.get("finish", fields.get("finish_type", ""))
+        if not finish_field:
+            # Fallback: extract finish from description keywords
+            desc_lower = str(job_description).lower()
+            if "powder" in desc_lower and "coat" in desc_lower:
+                finish_field = "powder_coat"
+            elif "clear coat" in desc_lower or "clearcoat" in desc_lower:
+                finish_field = "clearcoat"
+            elif "paint" in desc_lower and "powder" not in desc_lower:
+                finish_field = "paint"
+            elif "galvaniz" in desc_lower:
+                finish_field = "galvanized"
+            elif "anodiz" in desc_lower:
+                finish_field = "anodized"
+            elif "patina" in desc_lower or "blacken" in desc_lower:
+                finish_field = "patina"
+            elif "brush" in desc_lower or "polish" in desc_lower:
+                finish_field = "brushed"
+            else:
+                finish_field = "raw"
+
+        labor_processes = labor_estimate.get("processes", [])
+        total_sq_ft = material_list.get("total_sq_ft", 0)
+        finishing_builder = FinishingBuilder()
+        finishing = finishing_builder.build(
+            finish_type=finish_field,
+            total_sq_ft=total_sq_ft,
+            labor_processes=labor_processes,
+        )
 
         # --- Price hardware ---
         raw_hardware = material_list.get("hardware", [])
@@ -63,7 +101,7 @@ class PricingEngine:
         # --- Estimate consumables ---
         weld_inches = material_list.get("weld_linear_inches", 0)
         total_sq_ft = material_list.get("total_sq_ft", 0)
-        finish_type = fields.get("finish", "raw")
+        finish_type = finish_field  # Use same corrected finish for consumables
 
         # Detect material type from description for correct consumables
         desc_lower = str(job_description).lower()
@@ -96,6 +134,25 @@ class PricingEngine:
         except Exception:
             pass  # Opus BOM failure never blocks quoting — fallback already populated
 
+        # --- BOM validation: orphan check against build instructions ---
+        build_instructions = session_data.get("build_instructions", [])
+        if build_instructions and priced_hardware:
+            from .bom_validator import validate_bom_against_build
+            bom_result = validate_bom_against_build(priced_hardware, build_instructions)
+            priced_hardware = bom_result["kept"]
+            orphaned_hw = bom_result["orphaned"]
+            orphan_reasons = bom_result["orphan_reasons"]
+        else:
+            orphaned_hw = []
+            orphan_reasons = []
+
+        # --- Dedup + tiering ---
+        priced_hardware = self._dedup_hardware(priced_hardware)
+        tier_result = self._tier_items(priced_hardware, consumables)
+        priced_hardware = tier_result["hardware"]
+        consumables = tier_result["consumables"]
+        shop_stock = tier_result["shop_stock"]
+
         # --- Calculate subtotals ---
         materials = material_list.get("items", [])
         labor_processes = labor_estimate.get("processes", [])
@@ -105,10 +162,11 @@ class PricingEngine:
         consumable_subtotal = self._calculate_consumable_subtotal(consumables)
         labor_subtotal = self._calculate_labor_subtotal(labor_processes)
         finishing_subtotal = self._calculate_finishing_subtotal(finishing)
+        shop_stock_subtotal = self._calculate_shop_stock_subtotal(shop_stock)
 
         subtotal = round(
             material_subtotal + hardware_subtotal + consumable_subtotal +
-            labor_subtotal + finishing_subtotal,
+            labor_subtotal + finishing_subtotal + shop_stock_subtotal,
             2,
         )
 
@@ -165,11 +223,13 @@ class PricingEngine:
             "materials": materials,
             "hardware": priced_hardware,
             "consumables": consumables,
+            "shop_stock": shop_stock,
             "labor": labor_processes,
             "finishing": finishing,
             "material_subtotal": material_subtotal,
             "hardware_subtotal": hardware_subtotal,
             "consumable_subtotal": consumable_subtotal,
+            "shop_stock_subtotal": shop_stock_subtotal,
             "labor_subtotal": labor_subtotal,
             "finishing_subtotal": finishing_subtotal,
             "subtotal": subtotal,
@@ -185,6 +245,18 @@ class PricingEngine:
             result["detailed_cut_list"] = detailed_cut_list
         if build_instructions:
             result["build_instructions"] = build_instructions
+
+        # Orphaned hardware from BOM validation
+        if orphaned_hw:
+            result["orphaned_hardware"] = orphaned_hw
+            validation_warnings = result.get("validation_warnings", [])
+            validation_warnings.append(
+                "%d hardware item(s) removed — no matching fabrication step: %s"
+                % (len(orphaned_hw), ", ".join(
+                    o.get("description", "?") for o in orphaned_hw
+                ))
+            )
+            result["validation_warnings"] = validation_warnings
 
         # Materials summary — aggregated by profile for steel ordering
         result["materials_summary"] = self._aggregate_materials(materials)
@@ -366,7 +438,12 @@ class PricingEngine:
                 continue
 
             stock_ft = get_stock_length(profile)
-            is_area_sold = stock_ft is None  # sheet/plate
+            # Also try stripped key for al_/ss_ prefixed profiles
+            if stock_ft == 20 and (profile.startswith("al_") or profile.startswith("ss_")):
+                stock_ft = get_stock_length(profile[3:] if profile.startswith("al_") else profile[3:])
+            # Detect area-sold: get_stock_length returns None for sheet/plate,
+            # or infer from profile name if lookup missed
+            is_area_sold = stock_ft is None or "sheet" in profile or "plate" in profile
 
             if profile not in groups:
                 groups[profile] = {
@@ -414,6 +491,24 @@ class PricingEngine:
                     weight_per_ft = round(steel_weight * 0.344, 2)
             weight_lbs = round(weight_per_ft * total_ft, 1) if weight_per_ft > 0 else 0
 
+            # Sheet/plate weight — STOCK_WEIGHTS has no sheet entries,
+            # so use knowledge/materials.py weight_per_foot (lb/sq ft for area-sold)
+            if weight_lbs == 0 and info["is_area_sold"]:
+                try:
+                    from .knowledge.materials import PROFILES
+                    # Try exact key, then strip al_ prefix
+                    lookup_key = profile[3:] if profile.startswith("al_") else profile
+                    mat_data = PROFILES.get(lookup_key, {})
+                    w_per_sqft = mat_data.get("weight_per_foot", 0)
+                    if w_per_sqft > 0:
+                        if profile.startswith("al_"):
+                            w_per_sqft = round(w_per_sqft * 0.344, 2)
+                        # total_ft for area-sold items is (length_in * qty) / 12
+                        # Treat as approximate sq ft (conservative)
+                        weight_lbs = round(w_per_sqft * total_ft, 1)
+                except Exception:
+                    pass  # non-critical weight enrichment
+
             result.append({
                 "profile": profile,
                 "description": info["description"],
@@ -446,6 +541,117 @@ class PricingEngine:
             })
 
         return result
+
+    # --- Shop stock keywords for tiering ---
+    _SHOP_STOCK_KEYWORDS = (
+        "wire", "disc", "gas", "tape", "sandpaper", "solvent",
+        "primer", "spray", "welding", "grinding", "flap",
+        "shielding", "clear coat", "clearcoat", "denatured",
+        "alcohol", "acetone", "spool",
+    )
+
+    def _dedup_hardware(self, hardware_list):
+        # type: (list) -> list
+        """
+        Deduplicate hardware items by normalized description.
+
+        If duplicates found, keep the one with most pricing options; sum quantities.
+        """
+        if not hardware_list:
+            return []
+
+        import re
+        groups = {}  # type: dict
+        for item in hardware_list:
+            desc = str(item.get("description", ""))
+            # Normalize: lowercase, strip adjectives/qty words
+            norm = re.sub(r'[^a-z0-9\s]', '', desc.lower()).strip()
+            norm = re.sub(r'\b(heavy|duty|standard|estimated|est|qty|pack|of)\b', '', norm).strip()
+            norm = re.sub(r'\s+', ' ', norm)
+
+            if norm in groups:
+                existing = groups[norm]
+                # Sum quantities
+                existing["quantity"] = existing.get("quantity", 1) + item.get("quantity", 1)
+                # Keep the one with more pricing options
+                if len(item.get("options", [])) > len(existing.get("options", [])):
+                    qty = existing["quantity"]
+                    groups[norm] = dict(item)
+                    groups[norm]["quantity"] = qty
+            else:
+                groups[norm] = dict(item)
+
+        result = list(groups.values())
+        if len(result) < len(hardware_list):
+            logger.info("Deduped hardware: %d -> %d items", len(hardware_list), len(result))
+        return result
+
+    def _tier_items(self, hardware, consumables):
+        # type: (list, list) -> dict
+        """
+        Separate items into tiers:
+        - Tier 1 (hardware): Project-specific items stay in hardware list
+        - Tier 2 (shop_stock): Consumables/supplies every fab shop has
+
+        Consumables from the consumables list that match shop stock keywords
+        are moved to shop_stock with allocation_pct.
+
+        Returns: {"hardware": [...], "consumables": [...], "shop_stock": [...]}
+        """
+        shop_stock = []
+
+        # Move consumables that are shop stock items
+        remaining_consumables = []
+        for item in (consumables or []):
+            desc = str(item.get("description", "")).lower()
+            cat = str(item.get("category", "")).lower()
+            if cat == "consumable" or any(kw in desc for kw in self._SHOP_STOCK_KEYWORDS):
+                stock_item = dict(item)
+                stock_item["allocation_pct"] = 100  # full allocation for this job
+                shop_stock.append(stock_item)
+            else:
+                remaining_consumables.append(item)
+
+        # Hardware items that look like consumables -> shop stock
+        remaining_hw = []
+        for item in (hardware or []):
+            desc = str(item.get("description", "")).lower()
+            if any(kw in desc for kw in self._SHOP_STOCK_KEYWORDS):
+                # Convert to shop stock format
+                price, _ = self.hardware_sourcer.select_cheapest_option(item)
+                qty = item.get("quantity", 1)
+                stock_item = {
+                    "description": item.get("description", ""),
+                    "quantity": qty,
+                    "unit_price": price,
+                    "line_total": round(price * qty, 2),
+                    "allocation_pct": 100,
+                    "category": "consumable",
+                }
+                shop_stock.append(stock_item)
+            else:
+                remaining_hw.append(item)
+
+        return {
+            "hardware": remaining_hw,
+            "consumables": remaining_consumables,
+            "shop_stock": shop_stock,
+        }
+
+    def _calculate_shop_stock_subtotal(self, shop_stock):
+        # type: (list) -> float
+        """Sum of allocated shop stock costs."""
+        if not shop_stock:
+            return 0.0
+        return round(
+            sum(
+                round(
+                    s.get("line_total", 0) * s.get("allocation_pct", 100) / 100, 2
+                )
+                for s in shop_stock
+            ),
+            2,
+        )
 
     def recalculate_with_markup(self, priced_quote: dict, markup_pct: int) -> dict:
         """

@@ -208,7 +208,7 @@ def test_pricing_engine_returns_all_required_fields():
 
 
 def test_pricing_engine_subtotal_is_sum_of_parts():
-    """Subtotal = material + hardware + consumable + labor + finishing."""
+    """Subtotal = material + hardware + consumable + shop_stock + labor + finishing."""
     engine = PricingEngine()
     session_data = _sample_session_data()
     user = _sample_user()
@@ -218,6 +218,7 @@ def test_pricing_engine_subtotal_is_sum_of_parts():
         result["material_subtotal"] +
         result["hardware_subtotal"] +
         result["consumable_subtotal"] +
+        result.get("shop_stock_subtotal", 0) +
         result["labor_subtotal"] +
         result["finishing_subtotal"],
         2,

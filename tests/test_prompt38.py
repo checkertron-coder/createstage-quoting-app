@@ -183,6 +183,8 @@ class TestPricingMaterialType:
         }
         user = {"id": 1, "shop_name": "Test Shop", "markup_default": 15}
         result = engine.build_priced_quote(session_data, user)
-        wire_descs = [c["description"] for c in result.get("consumables", [])]
+        # Wire may be in consumables or shop_stock after tiering
+        all_items = result.get("consumables", []) + result.get("shop_stock", [])
+        wire_descs = [c["description"] for c in all_items]
         assert any("4043" in d or "ER4043" in d for d in wire_descs), \
-            "Expected ER4043 wire in consumables for aluminum job"
+            "Expected ER4043 wire in consumables/shop_stock for aluminum job"

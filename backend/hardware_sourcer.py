@@ -883,13 +883,18 @@ RULES:
 - For electronics (ESP32, LED strips, power supplies, controllers): include EACH component separately
 - Do NOT include raw steel/aluminum — that's already in the cut list
 
+TIER RULES:
+- Tier 1: Project-specific hardware (hinges, operators, controllers, mounting hardware)
+- Tier 2: Shop stock consumed during fabrication (wire, discs, gas, tape, paint)
+- Do NOT include items that are obviously wrong or unrelated to this job
+
 Return ONLY valid JSON:
 {
     "hardware": [
-        {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
+        {"description": "Item name", "quantity": 1, "estimated_price": 25.00, "tier": 1}
     ],
     "consumables": [
-        {"description": "Item name", "quantity": 1, "unit_price": 5.00}
+        {"description": "Item name", "quantity": 1, "unit_price": 5.00, "tier": 2}
     ]
 }""" % (
             job_type,

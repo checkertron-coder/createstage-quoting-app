@@ -768,6 +768,29 @@ def generate_quote_pdf(
         cons_sub = priced_quote.get("consumable_subtotal", 0)
         pdf.subtotal_row("Consumable Subtotal", cons_sub)
 
+    # ── SECTION 4B: Shop Stock (Tier 2 items) ──
+    shop_stock = priced_quote.get("shop_stock", [])
+    if shop_stock:
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.cell(0, 6, "Shop Stock (Partial Allocation)", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "I", 7)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 4, "Items your shop likely stocks - allocated proportionally to this job",
+                 new_x="LMARGIN", new_y="NEXT")
+        pdf.set_text_color(0, 0, 0)
+        for item in shop_stock:
+            pdf.set_font("Helvetica", "", 8)
+            desc = _safe(str(item.get("description", ""))[:50])
+            alloc = item.get("allocation_pct", 100)
+            line_total = item.get("line_total", 0)
+            allocated_cost = round(line_total * alloc / 100, 2)
+            pdf.cell(100, 5, "  %s" % desc, align="L")
+            pdf.cell(40, 5, "%d%% of %s" % (alloc, _fmt(line_total)), align="R")
+            pdf.cell(50, 5, _fmt(allocated_cost), align="R")
+            pdf.ln()
+        shop_sub = priced_quote.get("shop_stock_subtotal", 0)
+        pdf.subtotal_row("Shop Stock Subtotal", shop_sub)
+
     # ── SECTION 5: Labor ──
     labor = priced_quote.get("labor", [])
     pdf.section_header("LABOR")
@@ -877,6 +900,7 @@ def generate_quote_pdf(
         ("Materials", priced_quote.get("material_subtotal", 0)),
         ("Hardware & Parts", priced_quote.get("hardware_subtotal", 0)),
         ("Consumables", priced_quote.get("consumable_subtotal", 0)),
+        ("Shop Stock", priced_quote.get("shop_stock_subtotal", 0)),
         ("Labor", priced_quote.get("labor_subtotal", 0)),
         ("Finishing", priced_quote.get("finishing_subtotal", 0)),
     ]
@@ -1089,7 +1113,8 @@ def generate_client_pdf(
     mat_hw_sub = round(
         (priced_quote.get("material_subtotal", 0)
          + priced_quote.get("hardware_subtotal", 0)
-         + priced_quote.get("consumable_subtotal", 0)) * multiplier, 2
+         + priced_quote.get("consumable_subtotal", 0)
+         + priced_quote.get("shop_stock_subtotal", 0)) * multiplier, 2
     )
     labor_sub = round(priced_quote.get("labor_subtotal", 0) * multiplier, 2)
     fin_sub = round(priced_quote.get("finishing_subtotal", 0) * multiplier, 2)
