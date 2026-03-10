@@ -1,101 +1,58 @@
-# PROMPT 43 — "No Orphans, No Assumptions"
+# PROMPT 43 — "Fix the Foundation"
 
 *Nate B. Jones — 5 Spec Engineering Primitives*
 
-P42 delivered the Opus-driven BOM, electronics sourcing, and consumables depth. P43 tames the beast — cuts the fat, asks the right questions, and enforces consistency between what we list and what we build.
+P42 added powerful features. P43 fixes what's broken BEFORE adding anything new. Three bugs, one prompt. No new features — just make the existing ones work correctly.
 
 ---
 
 ## 1. Problem Statement
 
-CS-2026-0064 (P42 output) revealed five systemic issues:
+Three bugs have persisted across multiple prompts (CS-2026-0059 through CS-2026-0064). They keep getting bundled with new features and never get the focused attention needed to actually fix them. This prompt does NOTHING but fix these three issues.
 
-**A. BOM and fabrication sequence are disconnected.**
-The quote lists 200 blind rivets, rivet drill bits, DIN rail, piano hinges, prototype PCBs — none of which appear in the 44-step fabrication sequence. Meanwhile, the fab sequence references "Apply Clear Coat" (Step 42) but the FINISHING section says "Raw Aluminum — $0." If an item isn't used in a fab step, it shouldn't be in the BOM. If a fab step uses something, it must be in the BOM. These are two views of the SAME build.
+**A. Finish pipeline is broken — user answers go in, nothing comes out.**
+The user answers the finish question (e.g., "1 coat of clear coat") but the FINISHING section in the quote output says "Raw Aluminum — No finish applied — $0." This has persisted across SIX consecutive quotes. Here's the smoking gun:
+- ✅ The fab sequence generator HAS the finish data — Step 42 says "Apply Clear Coat to All Exterior Surfaces"
+- ✅ The consumables estimator HAS the finish data — lists clear coat spray ($28.50), primer ($36), paint ($51)
+- ❌ The FINISHING section does NOT have the finish data — shows "Raw Aluminum — $0"
+- ❌ The labor table does NOT have finish labor — no clear coat application hours
+- ✅ The end table (CS-2026-0061) DID get finish correct — so the pipeline WORKS for some job types
 
-**B. BOM is over-engineered — Opus lists everything it can think of, not what the job needs.**
-Hardware hit $1,045 because Opus itemized 100 screws at $0.12, 200 rivets at $0.06, 80 flat washers at $0.07. It listed 3 Mean Well power supplies (one generic + 2 specific) and triple-counted wire (kit + red spool + black spool + green spool). A waterproof welded sign box doesn't need rivets. The BOM needs TIERED output and deduplication.
+The finish answer reaches two downstream consumers but not the third. This is a data flow bug at a specific handoff point.
 
-**C. The system makes design decisions without asking.**
-CS-2026-0064 used two different sheet gauges (0.080" face, 0.063" back) without asking. It assumed internal rect tube framing without asking if the 6" box depth provides sufficient rigidity. It generated 54 spacer tabs when the answer is 9-18 (1-2 per letter). These are all PREFERENCES — multiple valid approaches exist, and the choice affects cost and fabrication. The system should ASK, not decide.
+**B. Section subtotals don't update when adjusting quantities in the UI.**
+When the user changes labor hours or material quantities in the adjustable fields, the GRAND TOTAL at the bottom updates correctly, but the section subtotals (Labor Subtotal, Material Subtotal, Hardware Subtotal, Consumable Subtotal) stay stale. The user has to scroll all the way to the bottom to see their change reflected. This matters when nudging a price — you need to see the subtotal react immediately next to the line items you're editing.
 
-**D. Finish pipeline is STILL broken.**
-The user answered "1 coat clear coat" to the finish question. The fab sequence includes Step 42: "Apply Clear Coat to All Exterior Surfaces — ~90 min." The consumables include clear coat spray ($28.50), primer ($36), and paint ($51). But the FINISHING section shows "Raw Aluminum — No finish applied — $0." The finish answer reaches the fab sequence generator and consumables estimator but NOT the pricing engine's finish calculator. This has persisted across CS-2026-0059 through CS-2026-0064.
-
-**E. Labor calibration notes are parroted, not used as scaling references.**
-Every LED sign quote gets exactly Fit & Tack: 6 hrs, Full Weld: 6 hrs, Grind & Clean: 4 hrs — regardless of size. Those numbers came from a specific 138"×28" sign with 9 letters. A 48"×24" sign with 3 letters should get proportionally less. Also, Hardware Install is still 0.4 hrs for a project with ESP32, LED strips, power supply, and waterproofing — should be 4-6 hours.
-
-**F. No "Shop Stock" distinction for bulk inventory items.**
-Heat shrink comes in kits. Wire comes in spools. Sandpaper comes in 50-packs. Nitrile gloves come in boxes of 100. You don't buy these FOR one job — you STOCK them. The quote should distinguish project-specific purchases from shop inventory, allocating only a portion to the job cost.
+**C. Labor calibration notes are being copied verbatim instead of used as scaling references.**
+The `LABOR_CALIBRATION_NOTES` in `labor_calculator.py` give specific hour counts (Fit & Tack: 6, Full Weld: 6, Grind & Clean: 4) and Opus copies them word-for-word for every LED sign quote regardless of actual scope. A 48"×24" sign with 3 letters gets the same 6/6/4 as a 138"×28" sign with 9 letters. Also, Hardware Install is still 0.4 hrs on electronics projects — should be 4-6 hours minimum.
 
 ---
 
 ## 2. Acceptance Criteria
 
-### AC-1: BOM ↔ Fab sequence mirror rule
-- After generating the BOM and fabrication sequence, run a VALIDATION pass (in code, not in the AI prompt):
-  - Scan each hardware/consumable item — if NO fab step text references that item or its category, FLAG it for removal
-  - Scan each fab step — if it references a material/tool/component not in the BOM, FLAG it for addition
-  - Log warnings for mismatches but auto-remove obvious orphans (rivets with no rivet step, drill bits for unused fasteners)
-- The validation pass runs AFTER both BOM and fab sequence are generated, BEFORE PDF output
+### AC-1: Finish answer flows from user input to FINISHING section in PDF output
+- When a user answers a finish question (clear coat, paint, anodize, powder coat, raw), that EXACT answer must appear in the FINISHING section of the quote
+- The FINISHING section must show: method name, material cost (if applicable), labor hours for application
+- Finish labor must appear as a line item in the LABOR table (e.g., "Clear Coat Application: 1.5 hrs")
+- If finish consumables are already in the consumables list, that's correct — keep them there too
+- **Verification test:** Run the LED sign quote, answer "1 coat clear coat" to the finish question → FINISHING section MUST show "Clear Coat (in-house)" with a non-zero cost. If it shows "Raw Aluminum" or "No finish applied," the fix failed.
 
-### AC-2: Tiered BOM output
-The Opus BOM prompt must produce THREE tiers:
+### AC-2: Section subtotals refresh immediately on quantity adjustment
+- In `quote-flow.js`: when ANY editable input changes (labor hours, material quantities, hardware quantities, consumable quantities), recalculate and update the corresponding SECTION subtotal element immediately
+- The same `input`/`change` event handler that recalculates the grand total must ALSO recalculate: Labor Subtotal, Material Subtotal, Hardware Subtotal, Consumable Subtotal
+- Each section subtotal element must be targetable (has an id or class that JS can select)
+- Verify: change a labor hour value → Labor Subtotal updates immediately without scrolling
 
-**Tier 1 — Project-Specific Purchases (itemize each):**
-Components you would actually GO BUY for this specific job. Things not in a typical metal fab shop.
-Examples: ESP32, LED strips, specific power supplies, specialty connectors, polycarbonate sheets, laser cutting services.
-Format: description, qty, estimated unit price, total.
-
-**Tier 2 — Shop Stock (list with partial allocation):**
-Bulk items that go into shop inventory. Wire spools, heat shrink kits, sandpaper packs, solder rolls, gloves, rags.
-List the full purchase price AND the percentage allocated to this job.
-Format: "Heat shrink tubing assortment kit — $12.00 (shop stock, 10% allocated = $1.20)"
-Only the allocated amount adds to the quote total.
-
-**Tier 3 — Do Not Include:**
-Over-engineered items not described or implied by the customer. Items that don't match the fastening method required by the job (no rivets on welded assemblies, no screws on waterproof seams). Items with no corresponding fab step.
-
-**Deduplication rule:** If the same component appears in both the old P41 catalog output AND the Opus BOM, keep ONE entry only. No duplicate power supplies, no duplicate wire listings.
-
-### AC-3: Design preferences are ASKED, not assumed
-Update `suggest_additional_questions` in `engine.py`:
-
-```
-PREFERENCES — ALWAYS ASK (do not assume):
-* Sheet gauge/thickness — NEVER use different gauges for different panels without asking.
-  Offer common options: 0.063" (1/16"), 0.080" (5/64"), 0.125" (1/8") for aluminum;
-  11ga, 14ga, 16ga for steel.
-* Number of tabs/spacers per letter/component AND spacing between them
-* Internal framing — does the assembly need internal stiffeners, or does the box/enclosure
-  geometry provide sufficient rigidity on its own?
-* Fastening method for non-obvious joints (weld vs mechanical vs adhesive)
-* Number of finish coats
-* Picket/baluster spacing on fences
-* Weld finish quality (production/industrial vs furniture grade)
-
-KNOWLEDGE — NEVER ASK (just do it):
-* Miter angle for square frames (45°)
-* Weld process by material (TIG for aluminum, MIG for steel in shop)
-* Deburring after cuts
-* Waterproof assemblies = welded seams, not riveted/screwed
-```
-
-### AC-4: Finish pipeline fix — TRACE AND FIX THE BREAK
-- The finish answer reaches: ✅ fab sequence generator (Step 42: "Apply Clear Coat"), ✅ consumables estimator (clear coat spray $28.50)
-- The finish answer does NOT reach: ❌ FINISHING section (shows "Raw Aluminum — $0"), ❌ labor table (no finish labor line)
-- TRACE the data flow:
-  1. Where does the fab sequence generator get the finish info? (What variable/field?)
-  2. Where does the consumables estimator get the finish info? (What variable/field?)
-  3. Where does the FINISHING section / pricing engine get the finish info? (What variable/field?)
-  4. Find the DIFFERENCE — why do #1 and #2 have the data but #3 doesn't?
-- The end table (CS-2026-0061) finish worked correctly — compare that code path to the LED sign code path
-
-### AC-5: Labor calibration rewritten as scaling references
-REWRITE `LABOR_CALIBRATION_NOTES` in `labor_calculator.py`:
+### AC-3: Labor calibration notes rewritten as scaling references
+REPLACE the entire `LABOR_CALIBRATION_NOTES` string in `labor_calculator.py` with:
 
 ```
 LABOR CALIBRATION — SCALING REFERENCES (do NOT copy these numbers — SCALE them):
+
+These are real-world benchmarks from specific jobs tested by the shop owner.
+Use them to SCALE your estimate proportionally to the actual job scope.
+Count the weld joints, component count, and surface area in the current job's cut list,
+then scale hours up or down relative to the closest benchmark.
 
 BENCHMARK A — LED Sign, 138"x28"x6" aluminum box, 9 laser-cut letters, ~54 weld joints:
   Fit & Tack: 6 hrs | Full Weld: 6 hrs | Grind & Clean: 4 hrs | Hardware Install (electronics): 5 hrs
@@ -110,118 +67,101 @@ BENCHMARK C — End Table, simple steel frame, 4 legs + top rails + shelf, ~16 w
   Total: ~4 shop hours
 
 HOW TO SCALE:
-1. Count weld joints in YOUR cut list — scale proportionally to the benchmark
-2. A sign half the size with 4 letters ≈ half the joints → ~60% of benchmark hours
-3. A fence twice as long → ~180% of benchmark hours (setup is fixed, repetitive work scales linearly)
-4. Electronics hardware install is ALWAYS 4-6 hours when ESP32/LED/wiring/waterproofing involved
-5. Structural hardware install (bolts, brackets, hinges): 0.5-2 hours
-6. The shop owner consistently reports AI OVERESTIMATES — when in doubt, go LOWER
-
-NEVER copy benchmark hours directly. Always count joints and scale.
+1. Count weld joints in the current cut list
+2. A job with half the joints of a benchmark → roughly 50-60% of benchmark hours
+3. A job with double the joints → roughly 170-180% (setup is fixed, repetitive work scales linearly)
+4. Electronics hardware install (ESP32, LED strips, power supply, wiring, waterproofing, testing): ALWAYS 4-6 hours minimum
+5. Structural hardware install (bolts, brackets, hinges, latches): 0.5-2 hours
+6. The shop owner consistently reports AI OVERESTIMATES — when in doubt, estimate LOWER
+7. NEVER copy benchmark hours directly — always count joints and scale
 ```
-
-### AC-6: Section subtotals refresh on quantity adjustment
-- In `quote-flow.js`: When any editable quantity changes, recalculate the corresponding SECTION subtotal immediately
-- The same event handler that updates the grand total must also update: Labor Subtotal, Material Subtotal, Hardware Subtotal, Consumable Subtotal
-- User should see the subtotal change without scrolling to the bottom
-
-### AC-7: Aluminum weight calculation working
-- Sheet stock weights must be calculated (currently showing "-" for sheets, only tube/bar have weights)
-- Aluminum density: 0.098 lb/in³ (169 lb/ft³) for 6061-T6
-- Sheet weight = length × width × thickness × density
-- Tube/bar weight = cross-section area × length × density (already working for some profiles — verify all)
 
 ---
 
 ## 3. Constraint Architecture
 
-- **DO NOT remove `_opus_estimate_labor()`** — only rewrite the calibration notes
-- **DO NOT modify question tree JSON files** — preference questions come from `suggest_additional_questions`
+- **This prompt adds ZERO new features** — fix only, no new capabilities
+- **DO NOT modify question tree JSON files**
 - **DO NOT modify `FAB_KNOWLEDGE.md`**
-- **The finish pipeline fix is a DATA FLOW bug** — trace it, don't rewrite the pipeline
-- **BOM validation pass should be deterministic Python code**, not another AI call
-- **Keep the P41 electronics catalog as FALLBACK** — Opus BOM is primary, catalog catches failures
+- **DO NOT remove `_opus_estimate_labor()`** — only rewrite the calibration notes string
+- **DO NOT touch the BOM/hardware sourcer** — that's P44's job
+- **The finish fix is a DATA FLOW bug** — trace it methodically. Do NOT rewrite the finish system. Find the one place where the data drops and connect it.
+- **Compare the end table path (works) vs LED sign path (broken)** — the difference between these two code paths IS the bug
 - **All 893+ existing tests must pass**
 
 ---
 
 ## 4. Decomposition
 
-### Task A: Finish pipeline trace and fix (AC-4) — DO THIS FIRST
-1. Add debug logging at EVERY handoff point in the finish data flow
-2. Compare the end table path (works) vs LED sign path (broken)
-3. Fix the break — likely a missing field in the session params → pricing engine handoff
+### Task A: Trace and fix finish pipeline (AC-1) — DO THIS FIRST, SPEND THE MOST TIME HERE
+This is the CRITICAL fix. Methodical approach:
 
-### Task B: BOM tiering + deduplication (AC-2)
-**Files:** `backend/hardware_sourcer.py`, `backend/pricing_engine.py`, `backend/pdf_generator.py`
-1. Update the Opus BOM prompt with tiered output instructions
-2. Parse Opus response into Tier 1 (itemized) and Tier 2 (shop stock with allocation)
-3. Add deduplication pass — if same component appears twice, merge quantities and keep one line
-4. Update PDF generator to show separate "Shop Stock" section
+1. **Find where the fab sequence gets finish info.** Search for where Step 42 ("Apply Clear Coat") text is generated. What variable holds the finish type? Where does it come from?
 
-### Task C: BOM ↔ Fab sequence validation (AC-1)
-**Files:** `backend/pricing_engine.py` or new `backend/bom_validator.py`
-1. After BOM and fab sequence are both generated, cross-reference them
-2. Remove BOM items with no fab step reference
-3. Flag fab steps that reference items not in BOM (log warning, don't block)
+2. **Find where the consumables estimator gets finish info.** Search for where "Clear Coat Spray" consumable is added. What variable/field triggers it?
 
-### Task D: Preference questions (AC-3)
-**File:** `backend/question_trees/engine.py`
-Update `suggest_additional_questions` with knowledge vs preference distinction + new preference types (gauge, framing, tabs, fastening method).
+3. **Find where the FINISHING section gets finish info.** This is in `backend/finishing.py` and/or `backend/pricing_engine.py`. What variable does it read? Where does that variable come from?
 
-### Task E: Labor calibration rewrite (AC-5)
-**File:** `backend/calculators/labor_calculator.py`
-Replace `LABOR_CALIBRATION_NOTES` with the scaling reference version. Include joint-counting guidance.
+4. **Compare #1 and #2 (which work) with #3 (which doesn't).** The difference is the bug. Maybe the fab sequence reads from `session.description` while the pricing engine reads from `session.fields.finish_type` and that field is never set. Maybe it's a different key name. Maybe it's a conditional that skips certain job types.
 
-### Task F: Subtotal refresh (AC-6)
+5. **Compare the end table code path (CS-2026-0061, finish works) with the LED sign code path (CS-2026-0064, finish broken).** What's different? Different job type? Different calculator? Different field mapping?
+
+6. **Fix the break point.** Should be a small change — connecting the field that has the data to the function that needs it.
+
+7. **Add a test** that creates a session with finish="clear_coat", runs it through pricing, and verifies the FINISHING section output is non-zero.
+
+### Task B: Subtotal refresh (AC-2)
 **File:** `frontend/js/quote-flow.js`
-Wire section subtotal elements into the existing quantity change handler.
 
-### Task G: Weight fix (AC-7)
-**File:** `backend/pdf_generator.py`
-Ensure weight calculation runs for ALL profile types including sheets.
+1. Find the existing `input` or `change` event handler that updates the grand total when quantities are adjusted
+2. In that SAME handler, also recalculate each section subtotal:
+   - Sum all labor line item costs → update Labor Subtotal element
+   - Sum all material line item costs → update Material Subtotal element
+   - Sum all hardware line item costs → update Hardware Subtotal element
+   - Sum all consumable line item costs → update Consumable Subtotal element
+3. If the subtotal elements don't have selectable IDs, add them (e.g., `id="labor-subtotal"`, `id="material-subtotal"`)
+
+### Task C: Labor calibration rewrite (AC-3)
+**File:** `backend/calculators/labor_calculator.py`
+
+1. Find the `LABOR_CALIBRATION_NOTES` string constant
+2. Replace it entirely with the scaling reference version from AC-3
+3. Do NOT change anything else in the labor calculator — same function signature, same Opus call, just different context text
 
 ---
 
 ## 5. Evaluation Design
 
-### Test Quotes:
+### Test Quotes (run ALL three after changes):
 
 **Test 1: LED Sign (same description as CS-2026-0064)**
-- [ ] Finish section shows "Clear Coat" with cost and labor hours (NOT "Raw Aluminum")
-- [ ] No orphaned BOM items (everything in BOM has a fab step)
-- [ ] No duplicate hardware (one PSU listing, not three)
-- [ ] Shop stock items listed separately with partial allocation
-- [ ] Gauge question was ASKED (not assumed 0.080/0.063 split)
-- [ ] Tab count question was ASKED (not assumed 54)
-- [ ] Framing question was ASKED (not assumed rect tube frame)
-- [ ] Hardware Install: 4+ hours for electronics
-- [ ] Sheet weights calculated
-- [ ] Section subtotals refresh when adjusting quantities
-- [ ] Hardware total < $600 (was $1,045 — most of the fat should be cut)
+Answer "1 coat clear coat" to finish question, "aluminum" to material question.
+- [ ] FINISHING section shows "Clear Coat" with non-zero cost — NOT "Raw Aluminum"
+- [ ] Labor table includes a finish application line item
+- [ ] Section subtotals update when adjusting quantities
+- [ ] Labor hours are NOT identical to previous quote (should be scaled based on joint count)
+- [ ] Hardware Install ≥ 4 hours for electronics
 
-**Test 2: Fence/Gate**
-- [ ] Picket spacing question asked
-- [ ] Material = steel (all profiles, no al_*)
-- [ ] Finish section shows paint method with labor
-- [ ] No rivets in BOM (welded fence)
+**Test 2: Fence/Gate (same description as CS-2026-0062)**
+Answer "paint" to finish question.
+- [ ] FINISHING section shows "Paint" with labor and material cost
+- [ ] Labor scales proportionally (not copy of benchmark)
 
-**Test 3: End Table**
-- [ ] Clear coat still works (regression)
-- [ ] Labor scales DOWN from benchmarks (fewer joints than benchmark)
+**Test 3: End Table (same description as CS-2026-0061)**
+- [ ] Clear coat STILL works (regression — this was the one that worked before)
 
 ### Automated Tests (`tests/test_prompt43.py`):
-1. `test_bom_fab_sequence_no_orphans` — every BOM item has a fab step reference
-2. `test_bom_deduplication` — no duplicate components
-3. `test_preference_questions_gauge` — description without gauge specified → question fires
-4. `test_preference_questions_tabs` — sign with letters → tab count question fires
-5. `test_finish_flows_to_output` — finish answer → FINISHING section shows it
-6. `test_labor_scales_with_size` — smaller sign → fewer hours than benchmark
-7. `test_hardware_install_electronics` — electronics project → 4+ hours
-8. `test_sheet_weight_calculated` — al_sheet profile → weight > 0
-9. `test_shop_stock_allocation` — bulk items show partial allocation
+1. `test_finish_clear_coat_flows_to_output` — session with finish="clear_coat" → FINISHING section shows clear coat
+2. `test_finish_paint_flows_to_output` — session with finish="paint" → FINISHING section shows paint
+3. `test_finish_raw_is_explicit` — finish="raw" → FINISHING shows "Raw" (intentional, not default)
+4. `test_labor_scales_with_joint_count` — 20 joints vs 50 joints → different labor hours
+5. `test_hardware_install_electronics_minimum` — electronics project → hardware install ≥ 4 hrs
+6. `test_labor_not_exact_benchmark_copy` — labor hours for a different-sized sign ≠ exact benchmark numbers
+
+### Existing tests:
+`pytest tests/` — ALL must pass.
 
 ### Commit:
 ```
-git add . && git commit -m "P43: No Orphans No Assumptions — BOM validation, tiering, preferences, finish fix, labor scaling" && git push
+git add . && git commit -m "P43: Fix the Foundation — finish pipeline, subtotal refresh, labor scaling" && git push
 ```
