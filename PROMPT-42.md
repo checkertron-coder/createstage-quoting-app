@@ -13,8 +13,11 @@ Three categories of defects remain after P41:
 **A. Finish pipeline is broken — answers go in, nothing comes out.**
 The user answers the finish question (e.g., "1 coat of clear coat") but the quote output still says "Raw Aluminum — No finish applied, $0." The finish answer is being collected by the frontend but is NOT flowing through to the pricing engine and PDF generator. This has persisted across CS-2026-0059 through CS-2026-0063. The end table (CS-2026-0061) DID get finish correct — so the pipeline works for SOME job types but fails for others. Trace the full path: user answer → session params → pricing engine → finish calculation → PDF output. Find where it drops.
 
-**B. Hardware/consumables use keyword matching instead of Opus reasoning.**
-P41 added an electronics keyword catalog. Result: LED strips and PSU found, but ESP32 missed (because description says "ESP 32" with a space). Solder, flux, gasket material, silicone sealant, cable ties, mounting screws — all missing. This is the same anti-pattern we've been eliminating: hardcoded logic instead of AI reasoning. The hardware sourcer and consumables estimator should use Opus to generate a COMPLETE bill of materials from the project description — every component you'd physically touch during the build.
+**B. Hardware/consumables BOM is untamed — Opus over-lists everything.**
+After P41/Claude Code extras, the Opus-driven BOM swung from missing ESP32 to listing 200 blind rivets, 100 screws at $0.12 each, DIN rail, prototype PCBs, piano hinges — over-engineering for NASA when we're building a sign. CS-2026-0064 hardware hit $1,045 because Opus itemized every possible fastener. The BOM needs TIERED guidance:
+- **Tier 1 (itemize):** Project-specific purchases you'd actually go BUY for this job — ESP32, LED strips, PSU, specialty connectors, polycarbonate diffuser
+- **Tier 2 (lump sum):** Shop stock fasteners/small hardware — screws, nuts, washers, rivets, cable ties, heat shrink. ONE line item: "Fastener & small hardware kit: $XX" — every shop has bins of #8 screws, you're not ordering 100 for one job
+- **Tier 3 (don't include):** Over-engineered additions not in the description — DIN rail when standoffs work, piano hinge when screws work, prototype PCBs when you're direct-soldering. Match the complexity the customer described, don't add engineering they didn't ask for.
 
 **C. The system doesn't distinguish between fabrication knowledge and design preferences.**
 Opus knows how to miter at 45° for a square frame (knowledge — don't ask). But it GUESSES on tab count per letter (72 tabs when the answer is ~9-18) instead of ASKING (preference — always ask). The question generation needs to surface design preferences where multiple valid approaches exist and the choice affects cost, labor, or appearance.
@@ -24,6 +27,9 @@ When the user adjusts labor hours or material quantities in the UI, the grand to
 
 **E. Hardware Install labor still 0.4 hours for electronics.**
 The labor calibration notes mention 4-6 hours for electronics install but Opus is still outputting 0.4 hours. The calibration context needs to be more explicit about electronics hardware install vs structural hardware install.
+
+**G. Labor calibration notes are being parroted, not used as reference points.**
+The `LABOR_CALIBRATION_NOTES` in `labor_calculator.py` give specific hour counts (Fit & Tack: 6, Full Weld: 6, etc.) and Opus just copies them verbatim for every LED sign quote regardless of actual scope. A 48"×24" sign with 3 letters gets the same 6/6/4 as a 138"×28" sign with 9 letters. The calibration notes need to be rewritten as SCALING REFERENCES, not answers — give Opus a benchmark WITH the job size that produced it, then tell it to reason proportionally.
 
 **F. Aluminum weights still empty.**
 P41 was supposed to calculate weights but all aluminum items still show "-" in the Weight column.
@@ -39,15 +45,33 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
 - Consumables must include finish materials (clear coat spray, primer, paint, etc.)
 - Test: Run LED sign quote, answer "1 coat clear coat" → output shows "Clear Coat (in-house)", includes clear coat materials in consumables, includes clear coat labor
 
-### AC-2: Opus-driven hardware & consumables BOM
+### AC-2: Opus-driven hardware & consumables BOM with TIERED output
 - REMOVE the keyword-matching electronics catalog approach
 - INSTEAD: After the cut list is generated, send a SECOND Opus call that receives the full project description + the generated cut list and asks:
   ```
-  Based on this project description and cut list, generate a COMPLETE bill of materials for:
-  1. HARDWARE: Every non-stock item needed (electronics, fasteners, purchased components). Include estimated prices.
-  2. CONSUMABLES: Every consumable you would physically use during this build — welding consumables, grinding/cutting consumables, finish materials, adhesives, sealants, tape, solder, flux, cable ties, cleaning supplies. Miss nothing.
-  For electronics projects: list every electronic component (controllers, power supplies, LED modules, strips, sensors, connectors, wire, solder, heat shrink, mounting hardware).
-  Format each item with: description, estimated quantity, estimated unit price, supplier suggestion.
+  Based on this project description and cut list, generate a bill of materials using these tiers:
+
+  TIER 1 — PROJECT-SPECIFIC PURCHASES (itemize each):
+  Components you would actually GO BUY for this specific job. Things not already in a typical metal fab shop.
+  Examples: ESP32, LED strips, specific power supplies, specialty connectors, polycarbonate sheets, custom brackets.
+  Format: description, qty, estimated unit price, supplier suggestion.
+
+  TIER 2 — SHOP STOCK & FASTENERS (ONE lump-sum line):
+  Common fasteners, small hardware, and minor consumables that any metal fab shop keeps in bins.
+  Screws, nuts, washers, rivets, cable ties, heat shrink, solder, tape — lump these into a single line item
+  with a flat dollar estimate. Do NOT itemize 100 screws at $0.12 each.
+  Format: "Fastener & small hardware kit — $XX"
+
+  TIER 3 — DO NOT INCLUDE:
+  Over-engineered items not described or implied by the customer. Don't add DIN rail when standoffs work.
+  Don't add piano hinges when screws work. Don't add prototype PCBs when direct-soldering works.
+  Match the complexity the customer described — don't engineer beyond their spec.
+
+  CONSUMABLES (itemize categories, not individual pieces):
+  Welding consumables (filler rod type + qty, gas type + volume, tungsten electrodes)
+  Grinding/cutting (disc types + qty — group by type, not individual discs)
+  Finish materials (clear coat, primer, paint — based on the specified finish)
+  Cleaning supplies (acetone/alcohol, rags — one line each)
   ```
 - This replaces the static catalog with dynamic AI reasoning
 - The existing catalog can remain as a FALLBACK if the Opus call fails
@@ -81,6 +105,26 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
   - If the project includes electronics/controllers/LED/wiring, hardware install is ALWAYS 4+ hours, never 0.4
   ```
 
+### AC-7: Labor calibration notes rewritten as scaling references
+- REWRITE the `LABOR_CALIBRATION_NOTES` in `labor_calculator.py` from fixed answers to scaling benchmarks:
+  ```
+  LABOR CALIBRATION — SCALING REFERENCES (do NOT copy these numbers directly):
+  These are real-world benchmarks from a specific job. Use them to SCALE your estimate proportionally to the actual job scope.
+
+  BENCHMARK: LED Sign, 138"x28"x6" aluminum box, 9 laser-cut letters, 54 weld joints, electronics install:
+    Fit & Tack: 6 hrs | Full Weld: 6 hrs | Grind & Clean: 4 hrs | Hardware Install (electronics): 5 hrs
+
+  BENCHMARK: Fence/Gate, 12' cantilever gate + 28' fence, 128 pickets, 10' tall:
+    Fit & Tack: 6 hrs | Full Weld: 6-8 hrs | Grind & Clean: 4 hrs | Hardware Install: 2 hrs
+
+  BENCHMARK: End Table, simple steel frame, 4 legs + top rails + shelf:
+    Fit & Tack: 1-2 hrs | Full Weld: 1-2 hrs | Grind & Clean: 1-2 hrs
+
+  HOW TO USE: Count joints, component count, and surface area. A sign half the size with 4 letters has roughly
+  half the joints → scale labor down ~40-50%. A fence twice as long → scale up proportionally.
+  The shop owner consistently reports AI OVERESTIMATES — when in doubt, estimate LOWER.
+  ```
+
 ### AC-6: Aluminum weight calculation working
 - Verify that the weight calculation code added in P41 is actually being called for aluminum profiles
 - Standard aluminum density: 0.098 lb/in³ (169 lb/ft³) for 6061-T6
@@ -92,7 +136,8 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
 ## 3. Constraint Architecture
 
 - **DO NOT remove `_opus_estimate_labor()`** — only update the calibration notes (AC-5)
-- **DO NOT remove the electronics catalog entirely** — keep it as fallback, but make Opus-driven BOM the primary path (AC-2)
+- **DO NOT remove the electronics catalog entirely** — keep it as fallback, but make Opus-driven tiered BOM the primary path (AC-2)
+- **BOM tiering is critical** — Tier 1 itemized, Tier 2 lump sum, Tier 3 excluded. Do NOT let Opus itemize common fasteners individually.
 - **DO NOT modify question tree JSON files** — preference questions come from `suggest_additional_questions`, not the static tree
 - **The finish pipeline fix (AC-1) is likely a data flow bug** — trace the exact path, don't rewrite the pipeline. The end table (CS-2026-0061) proved the pipeline CAN work.
 - **Opus BOM call (AC-2) should use `call_deep`** (same model as labor estimation) with a reasonable timeout (60s)
@@ -123,9 +168,11 @@ Update the `suggest_additional_questions` prompt to include the knowledge vs pre
 **File:** `frontend/js/quote-flow.js`
 Find the input change handler that updates the grand total. Add section subtotal recalculation to the same handler.
 
-### Task E: Hardware Install calibration (AC-5)
+### Task E: Hardware Install calibration + labor scaling rewrite (AC-5, AC-7)
 **File:** `backend/calculators/labor_calculator.py`
-Update `LABOR_CALIBRATION_NOTES` with explicit electronics vs structural hardware distinction.
+1. REWRITE `LABOR_CALIBRATION_NOTES` entirely — replace fixed numbers with scaling benchmarks per AC-7
+2. Add explicit electronics vs structural hardware distinction per AC-5
+3. Include the "HOW TO USE" scaling guidance so Opus reasons proportionally
 
 ### Task F: Aluminum weight fix (AC-6)
 **Files:** `backend/pdf_generator.py` or wherever weight calculation lives
