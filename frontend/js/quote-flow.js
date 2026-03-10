@@ -570,9 +570,9 @@ const QuoteFlow = {
                     </div>
 
                     <div class="totals-grid">
-                        <div class="total-row"><span>Materials</span><span>${this._fmt(pq.material_subtotal)}</span></div>
-                        <div class="total-row"><span>Hardware</span><span>${this._fmt(pq.hardware_subtotal)}</span></div>
-                        <div class="total-row"><span>Consumables</span><span>${this._fmt(pq.consumable_subtotal)}</span></div>
+                        <div class="total-row"><span>Materials</span><span id="material-subtotal-amount">${this._fmt(pq.material_subtotal)}</span></div>
+                        <div class="total-row"><span>Hardware</span><span id="hardware-subtotal-amount">${this._fmt(pq.hardware_subtotal)}</span></div>
+                        <div class="total-row"><span>Consumables</span><span id="consumable-subtotal-amount">${this._fmt(pq.consumable_subtotal)}</span></div>
                         <div class="total-row"><span>Labor</span><span id="labor-subtotal-amount">${this._fmt(pq.labor_subtotal)}</span></div>
                         <div class="total-row"><span>Finishing</span><span>${this._fmt(pq.finishing_subtotal)}</span></div>
                         <div class="total-row subtotal"><span>Subtotal</span><span id="subtotal-amount">${this._fmt(pq.subtotal)}</span></div>
@@ -1062,10 +1062,16 @@ const QuoteFlow = {
         const markupPct = pq.selected_markup_pct || 0;
         pq.total = Math.round(pq.subtotal * (1 + markupPct / 100) * 100) / 100;
 
-        // Update display
+        // Update display — all section subtotals + grand total
+        const matEl = document.getElementById('material-subtotal-amount');
+        const hwEl = document.getElementById('hardware-subtotal-amount');
+        const conEl = document.getElementById('consumable-subtotal-amount');
         const laborEl = document.getElementById('labor-subtotal-amount');
         const subEl = document.getElementById('subtotal-amount');
         const totalEl = document.getElementById('grand-total-amount');
+        if (matEl) matEl.textContent = this._fmt(pq.material_subtotal);
+        if (hwEl) hwEl.textContent = this._fmt(pq.hardware_subtotal);
+        if (conEl) conEl.textContent = this._fmt(pq.consumable_subtotal);
         if (laborEl) laborEl.textContent = this._fmt(pq.labor_subtotal);
         if (subEl) subEl.textContent = this._fmt(pq.subtotal);
         if (totalEl) totalEl.textContent = this._fmt(pq.total);

@@ -13,10 +13,14 @@ v2: Uses hardcoded catalog with realistic pricing.
 Phase 3: McMaster-Carr eProcurement API + web search for live prices.
 """
 
+import json
+import logging
 import math
 import urllib.parse
 
 from .calculators.material_lookup import HARDWARE_CATALOG
+
+logger = logging.getLogger(__name__)
 
 
 # --- Upgraded hardware pricing catalog ---
@@ -833,3 +837,133 @@ class HardwareSourcer:
             })
 
         return items
+
+    def opus_estimate_bom(self, description, cut_list, material_type, job_type):
+        # type: (str, list, str, str) -> dict
+        """
+        Use Opus AI to estimate a complete BOM (hardware + consumables).
+
+        Sends description + cut list summary to Opus and asks for hardware items
+        and consumables as JSON. Falls back to None on failure.
+
+        Returns {"hardware": [...], "consumables": [...]} or None.
+        """
+        from .claude_client import call_deep, is_configured
+
+        if not is_configured():
+            return None
+
+        if not description:
+            return None
+
+        # Build cut list summary for the prompt
+        cut_summary = []
+        for item in (cut_list or [])[:25]:
+            desc = item.get("description", item.get("profile", "unknown"))
+            qty = item.get("quantity", 1)
+            cut_summary.append("  - %s (qty %d)" % (desc, qty))
+
+        prompt = """You are an expert metal fabrication hardware estimator.
+
+JOB TYPE: %s
+MATERIAL: %s
+
+DESCRIPTION:
+%s
+
+CUT LIST SUMMARY:
+%s
+
+List ALL hardware and consumables needed to complete this project.
+
+RULES:
+- Hardware = items purchased from suppliers (bolts, hinges, latches, operators, electronics, etc.)
+- Consumables = items consumed during fabrication (welding wire, grinding discs, gas, paint, etc.)
+- Be specific: include quantities, realistic prices
+- For electronics (ESP32, LED strips, power supplies, controllers): include EACH component separately
+- Do NOT include raw steel/aluminum — that's already in the cut list
+
+Return ONLY valid JSON:
+{
+    "hardware": [
+        {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
+    ],
+    "consumables": [
+        {"description": "Item name", "quantity": 1, "unit_price": 5.00}
+    ]
+}""" % (
+            job_type,
+            material_type,
+            description[:600],
+            "\n".join(cut_summary) if cut_summary else "  (no cut list)",
+        )
+
+        try:
+            text = call_deep(prompt, temperature=0.1, timeout=60)
+            if text is None:
+                return None
+
+            # Strip markdown code fences
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict):
+                return None
+
+            # Validate and normalize hardware items
+            hardware = []
+            for item in parsed.get("hardware", []):
+                if not isinstance(item, dict) or not item.get("description"):
+                    continue
+                price = float(item.get("estimated_price", item.get("price", 0)))
+                if price <= 0:
+                    continue
+                qty = int(item.get("quantity", 1))
+                hardware.append({
+                    "description": str(item["description"]),
+                    "quantity": qty,
+                    "options": [
+                        {"supplier": "Estimated", "price": round(price, 2),
+                         "part_number": None, "url": "", "lead_days": 5},
+                        {"supplier": "Premium (Est.)", "price": round(price * 1.2, 2),
+                         "part_number": None, "url": "", "lead_days": 3},
+                    ],
+                })
+
+            # Validate and normalize consumables
+            consumables = []
+            for item in parsed.get("consumables", []):
+                if not isinstance(item, dict) or not item.get("description"):
+                    continue
+                unit_price = float(item.get("unit_price", item.get("price", 0)))
+                if unit_price <= 0:
+                    continue
+                qty = float(item.get("quantity", 1))
+                consumables.append({
+                    "description": str(item["description"]),
+                    "quantity": qty,
+                    "unit_price": round(unit_price, 2),
+                    "line_total": round(unit_price * qty, 2),
+                    "category": "consumable",
+                })
+
+            if not hardware and not consumables:
+                return None
+
+            logger.info(
+                "Opus BOM for %s: %d hardware, %d consumables",
+                job_type, len(hardware), len(consumables),
+            )
+            return {"hardware": hardware, "consumables": consumables}
+
+        except (json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.warning("Opus BOM parse failed: %s", e)
+            return None
+        except Exception as e:
+            logger.warning("Opus BOM call failed: %s", e)
+            return None

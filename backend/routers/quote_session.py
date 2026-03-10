@@ -190,6 +190,34 @@ def start_session(
             })
             logger.info("Injected required material question — not specified in description")
 
+        # Finish question — ALWAYS ask if not extracted from description
+        _finish_field_names = ("finish", "finish_type")
+        has_finish = any(merged_fields.get(f) for f in _finish_field_names)
+        all_qids = {q.get("id", "") for q in next_questions}
+        has_finish_q = any(f in all_qids for f in _finish_field_names)
+        if not has_finish and not has_finish_q:
+            # Insert after material question if it was injected, else at position 0
+            insert_pos = 1 if not has_material and not has_material_q else 0
+            next_questions.insert(insert_pos, {
+                "id": "finish",
+                "text": "What finish do you want on this project?",
+                "type": "choice",
+                "options": [
+                    "Powder coat",
+                    "Paint",
+                    "Clear coat",
+                    "Galvanized",
+                    "Anodized",
+                    "Brushed / polished",
+                    "Patina / blackened",
+                    "Raw (no finish)",
+                ],
+                "required": True,
+                "hint": "Finish affects both appearance and durability — powder coat is most popular for outdoor projects",
+                "source": "finish_always_required",
+            })
+            logger.info("Injected required finish question — not specified in description")
+
     # Create session record
     session_id = str(uuid.uuid4())
     merged_for_storage = dict(extracted_fields)
@@ -515,6 +543,11 @@ def estimate_labor(
     estimator = LaborEstimator()
     fields = quote_params.get("fields", {})
     finish_type = fields.get("finish", "raw")
+    logger.info(
+        "ESTIMATE: job_type=%s, finish=%s, finish_source=%s",
+        session.job_type, finish_type,
+        "user_answer" if fields.get("finish") else "default_raw",
+    )
 
     try:
         labor_estimate = estimator.estimate(material_list, quote_params, user_rates)

@@ -79,6 +79,23 @@ class PricingEngine:
             material_type=detected_material,
         )
 
+        # --- Opus BOM estimation (AI-driven hardware + consumables) ---
+        try:
+            opus_bom = self.hardware_sourcer.opus_estimate_bom(
+                job_description,
+                material_list.get("items", []),
+                detected_material,
+                job_type,
+            )
+            if opus_bom:
+                if opus_bom.get("hardware"):
+                    priced_hardware.extend(opus_bom["hardware"])
+                if opus_bom.get("consumables"):
+                    # Opus consumables REPLACE deterministic estimation
+                    consumables = opus_bom["consumables"]
+        except Exception:
+            pass  # Opus BOM failure never blocks quoting — fallback already populated
+
         # --- Calculate subtotals ---
         materials = material_list.get("items", [])
         labor_processes = labor_estimate.get("processes", [])
@@ -377,13 +394,24 @@ class PricingEngine:
                 sticks = 0
                 remainder = 0
 
-            # Weight lookup — try exact key, then prefix match
+            # Weight lookup — try exact key, then prefix match, then aluminum density ratio
             weight_per_ft = STOCK_WEIGHTS.get(profile, 0)
             if weight_per_ft == 0:
                 for key, val in STOCK_WEIGHTS.items():
                     if profile.startswith(key) or key.startswith(profile.split("_")[0] + "_" + profile.split("_")[1] if "_" in profile else profile):
                         weight_per_ft = val
                         break
+            # Aluminum fallback: strip al_ prefix and scale steel weight by 0.344
+            if weight_per_ft == 0 and profile.startswith("al_"):
+                steel_key = profile[3:]  # strip "al_" prefix
+                steel_weight = STOCK_WEIGHTS.get(steel_key, 0)
+                if steel_weight == 0:
+                    for key, val in STOCK_WEIGHTS.items():
+                        if steel_key.startswith(key):
+                            steel_weight = val
+                            break
+                if steel_weight > 0:
+                    weight_per_ft = round(steel_weight * 0.344, 2)
             weight_lbs = round(weight_per_ft * total_ft, 1) if weight_per_ft > 0 else 0
 
             result.append({

@@ -79,6 +79,17 @@ STOCK_WEIGHTS = {
     "punched_channel_1.5x0.5_fits_0.625": 1.12,
     "punched_channel_1.5x0.5_fits_0.75": 1.12,
     "punched_channel_2x1_fits_0.75": 1.78,
+    # Aluminum 6061-T6 — lb/ft (density 0.0975 lb/in³)
+    "al_sq_tube_1x1_0.125": 0.43,
+    "al_sq_tube_1.5x1.5_0.125": 0.80,
+    "al_sq_tube_2x2_0.125": 1.10,
+    "al_rect_tube_1x2_0.125": 0.66,
+    "al_angle_1.5x1.5x0.125": 0.42,
+    "al_angle_2x2x0.125": 0.57,
+    "al_flat_bar_1x0.125": 0.15,
+    "al_flat_bar_1.5x0.125": 0.22,
+    "al_flat_bar_2x0.25": 0.59,
+    "al_round_tube_1.5_0.125": 0.63,
 }
 
 # Gauge to thickness conversion (inches)

@@ -144,9 +144,14 @@ LABOR CALIBRATION (from shop owner testing):
   Fit & Tack: ~1-2 hrs | Full Weld: ~1-2 hrs | Grind & Clean: ~1-2 hrs
 - These are REFERENCE POINTS, not hard limits. Scale proportionally for larger/smaller jobs.
 - When in doubt, estimate LOWER — the shop owner consistently reports AI overestimates welding time.
-- Hardware install for electronics (ESP32, LED strips, wiring, waterproofing): 4-6 hours minimum, NOT 0.4 hours.
 - Batch cutting identical pieces is fast: set the stop once, then feed-and-cut.
 - Picket/baluster positioning: ~2-3 min per picket with a jig, not 5-8 min.
+
+HARDWARE INSTALL CALIBRATION:
+- Structural hardware (bolts, brackets, hinges, latches): 0.5-2 hours typical
+- Electronics hardware (ESP32, LED strips, power supply, wiring, waterproofing, testing): 4-6 hours MINIMUM
+- If the project includes ANY electronics/controllers/LED/wiring, hardware_install is ALWAYS 4+ hours, never 0.4
+- Gate operators (LiftMaster, US Automatic): 2-3 hours for mount + setup + test
 """
 
 

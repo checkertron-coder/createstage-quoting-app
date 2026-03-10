@@ -204,16 +204,27 @@ class QuestionTreeEngine:
 
         return next_qs
 
+    # Fields that every quote needs regardless of whether the tree lists them
+    _ALWAYS_REQUIRED = ("finish",)
+
     def is_complete(self, job_type: str, answered_fields: dict) -> bool:
         """Are all required fields answered?
 
         Branch-dependent fields that are NOT activated by the user's answers
         are treated as satisfied — e.g. picket_material is only required
         when infill_type = "Pickets (vertical bars)", not when "Expanded metal".
+
+        finish is always required (even if not in tree's required_fields)
+        because every quote needs a finishing section.
         """
         tree = self.load_tree(job_type)
         questions = tree.get("questions", [])
-        required = tree.get("required_fields", [])
+        required = list(tree.get("required_fields", []))
+
+        # Ensure always-required fields are in the list
+        for f in self._ALWAYS_REQUIRED:
+            if f not in required:
+                required.append(f)
 
         # Build set of branch-activated question IDs
         branch_activated = set()
@@ -243,10 +254,17 @@ class QuestionTreeEngine:
 
         Branch-dependent fields that are NOT activated by the user's answers
         are excluded from the 'missing' count.
+
+        finish is always required (even if not in tree's required_fields).
         """
         tree = self.load_tree(job_type)
         questions = tree.get("questions", [])
-        required = tree.get("required_fields", [])
+        required = list(tree.get("required_fields", []))
+
+        # Ensure always-required fields are in the list
+        for f in self._ALWAYS_REQUIRED:
+            if f not in required:
+                required.append(f)
 
         # Build set of branch-activated question IDs
         branch_activated = set()
@@ -341,6 +359,13 @@ class QuestionTreeEngine:
                 "2. Do NOT repeat questions already covered by the existing topics.\n"
                 "3. Each question must have a clear impact on materials, labor, or price.\n"
                 "4. Max 3 questions. Fewer is better. Return [] if none needed.\n\n"
+                "KNOWLEDGE vs PREFERENCE:\n"
+                "- KNOWLEDGE: Standard fabrication practices with one correct approach. Do NOT ask.\n"
+                "  Examples: miter angle for square joints (45 deg), weld process for aluminum (TIG), deburring cuts.\n"
+                "- PREFERENCES: Design choices where multiple valid approaches exist and affect cost/labor/appearance.\n"
+                "  ALWAYS ask. Examples: tab count/spacing per component, number of finish coats, weld finish quality\n"
+                "  (industrial vs furniture grade), hardware quality level, color choices.\n"
+                "Ask 1-3 PREFERENCE questions with biggest impact on quote accuracy.\n\n"
                 "Return ONLY valid JSON — an array of question objects:\n"
                 "[\n"
                 "  {\n"
