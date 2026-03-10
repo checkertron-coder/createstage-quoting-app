@@ -19,6 +19,9 @@ class FinishingBuilder:
     POWDER_COAT_PER_SQFT = 3.50     # Mid-range, varies $2.50-5.00
     GALVANIZE_PER_SQFT = 2.00       # Hot-dip galvanizing
     ZINC_SPRAY_PER_SQFT = 1.50      # Cold galvanizing spray
+    ANODIZE_PER_SQFT = 5.00         # Type II anodizing (aluminum)
+    CERAMIC_COAT_PER_SQFT = 6.00    # High-temp ceramic / bedliner
+    PATINA_MATERIAL_PER_SQFT = 0.40  # Hot oil, chemical patina agents
 
     # In-house material costs per sq ft
     CLEARCOAT_MATERIAL_PER_SQFT = 0.35
@@ -111,7 +114,52 @@ class FinishingBuilder:
                 "total": round(outsource_cost, 2),
             }
 
-        # Fallback — treat unknown as paint
+        if method == "anodized":
+            outsource_cost = round(area * self.ANODIZE_PER_SQFT, 2)
+            prep_hours = self._extract_prep_hours(labor_processes)
+            return {
+                "method": "anodized",
+                "area_sq_ft": round(area, 1),
+                "hours": round(prep_hours, 2),
+                "materials_cost": 0.0,
+                "outsource_cost": outsource_cost,
+                "total": round(outsource_cost, 2),
+            }
+
+        if method == "ceramic_coat":
+            outsource_cost = round(area * self.CERAMIC_COAT_PER_SQFT, 2)
+            return {
+                "method": "ceramic_coat",
+                "area_sq_ft": round(area, 1),
+                "hours": 0.0,
+                "materials_cost": 0.0,
+                "outsource_cost": outsource_cost,
+                "total": round(outsource_cost, 2),
+            }
+
+        if method == "patina":
+            materials_cost = round(area * self.PATINA_MATERIAL_PER_SQFT, 2)
+            return {
+                "method": "patina",
+                "area_sq_ft": round(area, 1),
+                "hours": round(finish_hours, 2),
+                "materials_cost": materials_cost,
+                "outsource_cost": 0.0,
+                "total": round(materials_cost, 2),
+            }
+
+        if method == "brushed":
+            # Brushed/polished — labor-only, no material cost
+            return {
+                "method": "brushed",
+                "area_sq_ft": round(area, 1),
+                "hours": round(finish_hours, 2),
+                "materials_cost": 0.0,
+                "outsource_cost": 0.0,
+                "total": 0.0,
+            }
+
+        # Fallback — treat unknown as paint (has material cost)
         materials_cost = round(area * self.PAINT_MATERIAL_PER_SQFT, 2)
         return {
             "method": method,
@@ -123,30 +171,84 @@ class FinishingBuilder:
         }
 
     def _normalize_finish_type(self, finish_type: str) -> str:
-        """Normalize free-text finish answer to one of the 5 standard types."""
+        """Normalize free-text finish answer to a standard type.
+
+        Standard types: raw, clearcoat, paint, powder_coat, galvanized,
+        anodized, ceramic_coat, patina, brushed.
+
+        Every question tree option must map to one of these. If you add a
+        new option to a question tree, add its keywords here.
+        """
         f = str(finish_type).lower().strip()
-        if not f or "raw" in f or "none" in f or "no finish" in f or "bare" in f:
+        if not f:
             return "raw"
+
+        # --- Explicit raw / no-finish / by-others ---
+        # "Raw steel", "No finish", "Bare metal", "Thermal wrap (by others)",
+        # "Bollard cover/sleeve (plastic — by others)", "Mill finish",
+        # "Not sure — recommend based on use", "No coating"
+        if any(k in f for k in ("raw", "no finish", "bare", "mill finish",
+                                 "by others", "not sure", "no coating",
+                                 "thermal wrap")):
+            return "raw"
+
+        # --- Clear coat (in-house) ---
         if any(k in f for k in ("clear", "urethane", "permalac", "lacquer", "wax")):
             return "clearcoat"
+
+        # --- Powder coat (outsourced) ---
         if "powder" in f:
             return "powder_coat"
+
+        # --- Galvanized (outsourced) ---
         if "galv" in f or "hot dip" in f or "hot-dip" in f:
             return "galvanized"
-        if "paint" in f or "primer" in f:
+
+        # --- Anodized (outsourced, aluminum) ---
+        if "anodiz" in f:
+            return "anodized"
+
+        # --- Ceramic coat / bedliner (outsourced) ---
+        if any(k in f for k in ("ceramic", "bedliner", "bed liner", "line-x",
+                                 "rhino", "cerakote")):
+            return "ceramic_coat"
+
+        # --- Patina / blackened / aged (in-house) ---
+        if any(k in f for k in ("patina", "blacken", "aged", "corten",
+                                 "hot oil", "rust finish")):
+            return "patina"
+
+        # --- Brushed / polished / mirror (in-house labor) ---
+        if any(k in f for k in ("brush", "polish", "mirror", "satin",
+                                 "scotch-brite")):
+            return "brushed"
+
+        # --- Paint / primer / match existing / refinish (in-house) ---
+        if any(k in f for k in ("paint", "primer", "prime only", "match existing",
+                                 "refinish", "recoat", "fireproof", "intumescent")):
             return "paint"
-        # Default: unrecognized finish string → raw (not paint)
-        return "raw"
+
+        # --- None of the above — "none" check last (avoid "none" matching "no" inside words) ---
+        if f in ("none",):
+            return "raw"
+
+        # Unknown — fall through to the build() fallback which prices as paint
+        # rather than silently discarding as "raw"
+        return f
 
     def _extract_finish_hours(self, method: str, labor_processes: list) -> float:
         """Sum hours for finish-related processes."""
         finish_process_names = set()
         if method == "clearcoat":
-            finish_process_names = {"finish_prep", "clearcoat"}
-        elif method == "paint":
-            finish_process_names = {"finish_prep", "paint"}
-        elif method == "powder_coat":
+            finish_process_names = {"finish_prep", "clearcoat",
+                                    "coating_application"}
+        elif method in ("paint", "patina"):
+            finish_process_names = {"finish_prep", "paint",
+                                    "coating_application"}
+        elif method in ("powder_coat", "anodized", "ceramic_coat"):
             finish_process_names = {"finish_prep"}
+        elif method == "brushed":
+            finish_process_names = {"finish_prep", "grind_clean"}
         # raw and galvanized have 0 in-house hours
 
         total = 0.0

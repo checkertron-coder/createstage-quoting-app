@@ -171,10 +171,14 @@ class TestFinishDefaults:
         fb = FinishingBuilder()
         assert fb._normalize_finish_type("") == "raw"
 
-    def test_unknown_string_returns_raw(self):
+    def test_unknown_string_passes_through(self):
+        """Unknown strings pass through (build() treats as paint fallback, not silent raw)."""
         from backend.finishing import FinishingBuilder
         fb = FinishingBuilder()
-        assert fb._normalize_finish_type("something_unknown") == "raw"
+        # Unknown strings are no longer silently forced to "raw" —
+        # they pass through so build() prices them as paint (non-zero cost)
+        result = fb._normalize_finish_type("something_unknown")
+        assert result == "something_unknown"
 
     def test_none_returns_raw(self):
         from backend.finishing import FinishingBuilder

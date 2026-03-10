@@ -812,7 +812,9 @@ const QuoteFlow = {
         const FINISH_DISPLAY = {
             clearcoat: 'Clear Coat', clear_coat: 'Clear Coat',
             powder_coat: 'Powder Coat', paint: 'Paint',
-            galvanized: 'Galvanized', raw: 'Raw ' + matLabel,
+            galvanized: 'Galvanized', anodized: 'Anodized',
+            ceramic_coat: 'Ceramic Coat', patina: 'Patina / Blackened',
+            brushed: 'Brushed / Polished', raw: 'Raw ' + matLabel,
         };
         const methodRaw = f.method || 'raw';
         const method = FINISH_DISPLAY[methodRaw] || methodRaw.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

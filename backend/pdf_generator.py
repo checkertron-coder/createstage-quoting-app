@@ -323,6 +323,9 @@ def _finish_display_name(method: str, material_label: str = "") -> str:
         "paint": "Paint",
         "galvanized": "Galvanized",
         "anodized": "Anodized",
+        "ceramic_coat": "Ceramic Coat",
+        "patina": "Patina / Blackened",
+        "brushed": "Brushed / Polished",
         "raw": "Raw %s" % mat,
     }
     name = _DISPLAY.get(method, method.replace("_", " ").title())
