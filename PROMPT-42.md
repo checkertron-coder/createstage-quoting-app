@@ -28,7 +28,16 @@ When the user adjusts labor hours or material quantities in the UI, the grand to
 **E. Hardware Install labor still 0.4 hours for electronics.**
 The labor calibration notes mention 4-6 hours for electronics install but Opus is still outputting 0.4 hours. The calibration context needs to be more explicit about electronics hardware install vs structural hardware install.
 
-**G. Labor calibration notes are being parroted, not used as reference points.**
+**G. BOM and fab sequence are disconnected — orphaned items in both directions.**
+CS-2026-0064 has 200 blind rivets, rivet drill bits, and dozens of fasteners in the BOM that appear NOWHERE in the 44-step fabrication sequence. If an item isn't used in a fab step, it shouldn't be in the BOM. If a fab step uses something, it must be in the BOM. These are two views of the SAME build — they must be mirrors.
+
+**H. Material gauge/thickness never asked — system assumes different gauges.**
+CS-2026-0064 used 0.080" for the face/skins and 0.063" for the back panel without asking. The user wanted ONE gauge for everything. Sheet gauge is a PREFERENCE that must be asked, not a design decision the AI makes unilaterally. Same for internal framing — the system assumed rect tube framing without asking if the box depth alone provides sufficient rigidity.
+
+**I. No "Shop Stock" category for bulk inventory items.**
+Heat shrink comes in kits of 10 sizes. Wire comes in spools. Sandpaper comes in 50-packs. You don't buy these FOR one job — you STOCK them. The quote should distinguish between project-specific purchases and shop inventory restocking, with only a partial allocation charged to the job.
+
+**J. Labor calibration notes are being parroted, not used as reference points.**
 The `LABOR_CALIBRATION_NOTES` in `labor_calculator.py` give specific hour counts (Fit & Tack: 6, Full Weld: 6, etc.) and Opus just copies them verbatim for every LED sign quote regardless of actual scope. A 48"×24" sign with 3 letters gets the same 6/6/4 as a 138"×28" sign with 9 letters. The calibration notes need to be rewritten as SCALING REFERENCES, not answers — give Opus a benchmark WITH the job size that produced it, then tell it to reason proportionally.
 
 **F. Aluminum weights still empty.**
@@ -62,10 +71,20 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
   with a flat dollar estimate. Do NOT itemize 100 screws at $0.12 each.
   Format: "Fastener & small hardware kit — $XX"
 
+  TIER 2B — SHOP STOCK (separate section, partially allocated):
+  Bulk items that go into shop inventory, not consumed entirely by one job.
+  Wire spools, heat shrink kits, sandpaper packs, solder rolls, gloves, rags.
+  List the full purchase with a note: "Shop stock — XX% allocated to this job."
+  Example: "Heat shrink tubing assortment kit — $12.00 (shop stock, 10% to job = $1.20)"
+
   TIER 3 — DO NOT INCLUDE:
   Over-engineered items not described or implied by the customer. Don't add DIN rail when standoffs work.
   Don't add piano hinges when screws work. Don't add prototype PCBs when direct-soldering works.
   Match the complexity the customer described — don't engineer beyond their spec.
+
+  CRITICAL RULE: Every item in the BOM MUST have a corresponding fabrication step that USES it.
+  If no fab step references it, DELETE IT from the BOM. The BOM and fab sequence are mirrors of the
+  same build — no orphaned items in either direction.
 
   CONSUMABLES (itemize categories, not individual pieces):
   Welding consumables (filler rod type + qty, gas type + volume, tungsten electrodes)
@@ -88,6 +107,9 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
     * Weld finish quality (industrial vs furniture grade)
     * Hardware quality level (budget vs premium)
     * Color choices when multiple options exist
+    * Sheet gauge/thickness — NEVER assume different gauges for different panels without asking
+    * Internal framing/stiffeners — ask if needed, don't assume (box depth alone may suffice)
+    * Fastening method on non-obvious joints (weld vs rivet vs screw — waterproof = always weld)
   Ask 1-3 preference questions that would have the biggest impact on the quote accuracy.
   ```
 
@@ -105,7 +127,26 @@ P41 was supposed to calculate weights but all aluminum items still show "-" in t
   - If the project includes electronics/controllers/LED/wiring, hardware install is ALWAYS 4+ hours, never 0.4
   ```
 
-### AC-7: Labor calibration notes rewritten as scaling references
+### AC-7: BOM ↔ Fab sequence must be mirrors
+- After generating both the BOM (hardware + consumables) and the fabrication sequence, run a VALIDATION pass:
+  - Every hardware/consumable item must be referenced by at least one fab step
+  - Every fab step that uses a tool/material/component must have that item in the BOM
+  - If an item has no fab step → REMOVE it from the BOM
+  - If a fab step references something not in the BOM → ADD it to the BOM
+- This can be a post-processing check in Python (compare BOM items against fab step text) or an instruction in the Opus prompt
+
+### AC-8: Sheet gauge is a preference question, not an AI decision
+- The system must NEVER use different sheet gauges for different panels of the same assembly without asking
+- Add "sheet gauge/thickness" to the preference questions list
+- If only one gauge is specified or answered, ALL sheet panels use that gauge
+
+### AC-9: Shop Stock category for bulk inventory items
+- Add a "Shop Stock" section to the quote output (separate from project-specific hardware)
+- Items like wire spools, heat shrink kits, sandpaper packs, solder, gloves get listed here
+- Each shows full purchase price + percentage allocated to this job
+- Only the allocated percentage adds to the quote total
+
+### AC-10: Labor calibration notes rewritten as scaling references
 - REWRITE the `LABOR_CALIBRATION_NOTES` in `labor_calculator.py` from fixed answers to scaling benchmarks:
   ```
   LABOR CALIBRATION — SCALING REFERENCES (do NOT copy these numbers directly):
