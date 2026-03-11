@@ -183,16 +183,15 @@ class FinishingBuilder:
         if not f:
             return "raw"
 
-        # --- Explicit raw / no-finish / by-others ---
-        # "Raw steel", "No finish", "Bare metal", "Thermal wrap (by others)",
-        # "Bollard cover/sleeve (plastic — by others)", "Mill finish",
-        # "Not sure — recommend based on use", "No coating"
-        if any(k in f for k in ("raw", "no finish", "bare", "mill finish",
-                                 "by others", "not sure", "no coating",
-                                 "thermal wrap")):
-            return "raw"
+        # --- Brushed / polished / mirror (in-house labor) ---
+        # MUST come before raw check: "Brushed stainless (no coating)" contains
+        # "no coating" which would match the raw block if checked first.
+        if any(k in f for k in ("brush", "polish", "mirror", "satin",
+                                 "scotch-brite")):
+            return "brushed"
 
         # --- Clear coat (in-house) ---
+        # MUST come before raw: "clear" is unambiguous and never means raw.
         if any(k in f for k in ("clear", "urethane", "permalac", "lacquer", "wax")):
             return "clearcoat"
 
@@ -218,15 +217,20 @@ class FinishingBuilder:
                                  "hot oil", "rust finish")):
             return "patina"
 
-        # --- Brushed / polished / mirror (in-house labor) ---
-        if any(k in f for k in ("brush", "polish", "mirror", "satin",
-                                 "scotch-brite")):
-            return "brushed"
-
         # --- Paint / primer / match existing / refinish (in-house) ---
         if any(k in f for k in ("paint", "primer", "prime only", "match existing",
                                  "refinish", "recoat", "fireproof", "intumescent")):
             return "paint"
+
+        # --- Explicit raw / no-finish / by-others ---
+        # Now safe as a late check: all specific finishes already matched above.
+        # "Raw steel", "No finish", "Bare metal", "Thermal wrap (by others)",
+        # "Bollard cover/sleeve (plastic — by others)", "Mill finish",
+        # "Not sure — recommend based on use", "No coating"
+        if any(k in f for k in ("raw", "no finish", "bare", "mill finish",
+                                 "by others", "not sure", "no coating",
+                                 "thermal wrap")):
+            return "raw"
 
         # --- None of the above — "none" check last (avoid "none" matching "no" inside words) ---
         if f in ("none",):

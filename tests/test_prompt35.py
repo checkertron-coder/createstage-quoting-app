@@ -159,20 +159,24 @@ class TestNormalizeExtractedFields:
         assert result["has_motor"] == "Yes"
 
     def test_choice_paint_normalized(self):
-        """'paint' -> 'Paint (in-house)'."""
+        """'paint' kept as-is for finish (bypass fuzzy match)."""
         from backend.question_trees.engine import _normalize_extracted_fields
         questions = self._get_cantilever_questions()
         extracted = {"finish": "paint"}
         result = _normalize_extracted_fields(extracted, questions)
-        assert result["finish"] == "Paint (in-house)"
+        # P45: finish fields bypass fuzzy matching — raw value preserved.
+        # _normalize_finish_type() handles "paint" → "paint" downstream.
+        assert result["finish"] == "paint"
 
     def test_choice_powder_coat_normalized(self):
-        """'powder coat' -> 'Powder coat (most durable, outsourced)'."""
+        """'powder coat' kept as-is for finish (bypass fuzzy match)."""
         from backend.question_trees.engine import _normalize_extracted_fields
         questions = self._get_cantilever_questions()
         extracted = {"finish": "powder coat"}
         result = _normalize_extracted_fields(extracted, questions)
-        assert result["finish"] == "Powder coat (most durable, outsourced)"
+        # P45: finish fields bypass fuzzy matching — raw value preserved.
+        # _normalize_finish_type() handles "powder coat" → "powder_coat" downstream.
+        assert result["finish"] == "powder coat"
 
     def test_unknown_field_dropped(self):
         """Field not in question tree is dropped."""
@@ -210,7 +214,7 @@ class TestNormalizeExtractedFields:
         assert result["clear_width"] == "12"
         assert result["height"] == "6"
         assert result["has_motor"] == "Yes"
-        assert result["finish"] == "Paint (in-house)"
+        assert result["finish"] == "paint"  # P45: finish bypasses fuzzy match
         assert "installation" in result  # should match Full installation option
         assert result["infill_type"] == "Pickets (vertical bars)"
 

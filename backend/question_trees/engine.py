@@ -588,14 +588,20 @@ def _normalize_extracted_fields(extracted: dict, questions: list) -> dict:
         options = q.get("options", [])
 
         if field_type in ("choice", "multi_choice") and options:
-            normalized = _match_option(str(value), options)
-            if normalized is not None:
-                result[field_id] = normalized
+            # Finish fields bypass fuzzy matching — _normalize_finish_type()
+            # handles all variants.  Fuzzy matching causes "clear coat" to
+            # match "Powder coat (most common)" via substring "coat".
+            if field_id == "finish":
+                result[field_id] = str(value)
             else:
-                logger.warning(
-                    "Dropping field %s: value '%s' matched no option in %s",
-                    field_id, value, options,
-                )
+                normalized = _match_option(str(value), options)
+                if normalized is not None:
+                    result[field_id] = normalized
+                else:
+                    logger.warning(
+                        "Dropping field %s: value '%s' matched no option in %s",
+                        field_id, value, options,
+                    )
         else:
             # Measurement, text, number, boolean, photo — pass through
             result[field_id] = value

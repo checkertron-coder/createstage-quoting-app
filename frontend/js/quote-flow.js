@@ -573,6 +573,7 @@ const QuoteFlow = {
                         <div class="total-row"><span>Materials</span><span id="material-subtotal-amount">${this._fmt(pq.material_subtotal)}</span></div>
                         <div class="total-row"><span>Hardware</span><span id="hardware-subtotal-amount">${this._fmt(pq.hardware_subtotal)}</span></div>
                         <div class="total-row"><span>Consumables</span><span id="consumable-subtotal-amount">${this._fmt(pq.consumable_subtotal)}</span></div>
+                        ${(pq.shop_stock_subtotal || 0) > 0 ? `<div class="total-row"><span>Shop Stock</span><span id="shop-stock-subtotal-amount">${this._fmt(pq.shop_stock_subtotal)}</span></div>` : ''}
                         <div class="total-row"><span>Labor</span><span id="labor-subtotal-amount">${this._fmt(pq.labor_subtotal)}</span></div>
                         <div class="total-row"><span>Finishing</span><span id="finishing-subtotal-amount">${this._fmt(pq.finishing_subtotal)}</span></div>
                         <div class="total-row subtotal"><span>Subtotal</span><span id="subtotal-amount">${this._fmt(pq.subtotal)}</span></div>
@@ -673,7 +674,7 @@ const QuoteFlow = {
                         </tr>`).join('')}
                         <tr class="subtotal-row">
                             <td colspan="6">Material Subtotal</td>
-                            <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
+                            <td class="r" id="mat-table-subtotal"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                         </tr>
                     </tbody>
                 </table>
@@ -695,7 +696,7 @@ const QuoteFlow = {
                     `).join('')}
                     <tr class="subtotal-row">
                         <td colspan="3">Material Subtotal</td>
-                        <td class="r"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
+                        <td class="r" id="mat-table-subtotal"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
@@ -733,7 +734,7 @@ const QuoteFlow = {
                     }).join('')}
                     <tr class="subtotal-row">
                         <td colspan="4">Hardware Subtotal</td>
-                        <td class="r"><strong>${this._fmt(pq.hardware_subtotal)}</strong></td>
+                        <td class="r" id="hw-table-subtotal"><strong>${this._fmt(pq.hardware_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
@@ -760,7 +761,7 @@ const QuoteFlow = {
                     `).join('')}
                     <tr class="subtotal-row">
                         <td colspan="3">Consumable Subtotal</td>
-                        <td class="r"><strong>${this._fmt(pq.consumable_subtotal)}</strong></td>
+                        <td class="r" id="con-table-subtotal"><strong>${this._fmt(pq.consumable_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
@@ -789,7 +790,7 @@ const QuoteFlow = {
                     `).join('')}
                     <tr class="subtotal-row">
                         <td colspan="3">Labor Subtotal</td>
-                        <td class="r"><strong>${this._fmt(pq.labor_subtotal)}</strong></td>
+                        <td class="r" id="labor-table-subtotal"><strong>${this._fmt(pq.labor_subtotal)}</strong></td>
                     </tr>
                 </tbody>
             </table>
@@ -1055,6 +1056,7 @@ const QuoteFlow = {
             (pq.material_subtotal || 0) +
             (pq.hardware_subtotal || 0) +
             (pq.consumable_subtotal || 0) +
+            (pq.shop_stock_subtotal || 0) +
             pq.labor_subtotal +
             (pq.finishing_subtotal || 0)
         ) * 100) / 100;
@@ -1062,10 +1064,11 @@ const QuoteFlow = {
         const markupPct = pq.selected_markup_pct || 0;
         pq.total = Math.round(pq.subtotal * (1 + markupPct / 100) * 100) / 100;
 
-        // Update display — all section subtotals + grand total
+        // Update totals grid in sidebar
         const matEl = document.getElementById('material-subtotal-amount');
         const hwEl = document.getElementById('hardware-subtotal-amount');
         const conEl = document.getElementById('consumable-subtotal-amount');
+        const ssEl = document.getElementById('shop-stock-subtotal-amount');
         const laborEl = document.getElementById('labor-subtotal-amount');
         const finEl = document.getElementById('finishing-subtotal-amount');
         const subEl = document.getElementById('subtotal-amount');
@@ -1073,10 +1076,21 @@ const QuoteFlow = {
         if (matEl) matEl.textContent = this._fmt(pq.material_subtotal);
         if (hwEl) hwEl.textContent = this._fmt(pq.hardware_subtotal);
         if (conEl) conEl.textContent = this._fmt(pq.consumable_subtotal);
+        if (ssEl) ssEl.textContent = this._fmt(pq.shop_stock_subtotal);
         if (laborEl) laborEl.textContent = this._fmt(pq.labor_subtotal);
         if (finEl) finEl.textContent = this._fmt(pq.finishing_subtotal);
         if (subEl) subEl.textContent = this._fmt(pq.subtotal);
         if (totalEl) totalEl.textContent = this._fmt(pq.total);
+
+        // Update in-table subtotal cells
+        const matTbl = document.getElementById('mat-table-subtotal');
+        const hwTbl = document.getElementById('hw-table-subtotal');
+        const conTbl = document.getElementById('con-table-subtotal');
+        const laborTbl = document.getElementById('labor-table-subtotal');
+        if (matTbl) matTbl.innerHTML = '<strong>' + this._fmt(pq.material_subtotal) + '</strong>';
+        if (hwTbl) hwTbl.innerHTML = '<strong>' + this._fmt(pq.hardware_subtotal) + '</strong>';
+        if (conTbl) conTbl.innerHTML = '<strong>' + this._fmt(pq.consumable_subtotal) + '</strong>';
+        if (laborTbl) laborTbl.innerHTML = '<strong>' + this._fmt(pq.labor_subtotal) + '</strong>';
     },
 
     _adjustTimers: {},
