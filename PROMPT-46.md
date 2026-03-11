@@ -15,8 +15,7 @@ The result: a 24×120" sign costs MORE than a 28×138" sign. Completely backward
 ### 1. Inputs
 - AI cut list items with `profile` containing "sheet" or "plate"
 - Each sheet piece has `length_inches` (existing) and needs `width_inches` (NEW)
-- Standard sheet sizes: `[(48, 96), (48, 120), (60, 120)]` — that's 4'×8', 4'×10', 5'×10'
-- For aluminum, also available: `(36, 96)` — 3'×8'
+- Standard sheet sizes (steel AND aluminum): `[(48, 96), (48, 120), (48, 144), (60, 120), (60, 144)]` — 4'×8', 4'×10', 4'×12', 5'×10', 5'×12'
 
 ### 2. Outputs
 - Each sheet material line in `materials_summary` must show:
@@ -67,18 +66,19 @@ The result: a 24×120" sign costs MORE than a 28×138" sign. Completely backward
 ## Standard Sheet Sizes Reference
 ```python
 STANDARD_SHEET_SIZES = [
-    (36, 96),    # 3'×8' (aluminum common)
     (48, 96),    # 4'×8' (most common)
     (48, 120),   # 4'×10'
+    (48, 144),   # 4'×12'
     (60, 120),   # 5'×10'
+    (60, 144),   # 5'×12'
 ]
 ```
 
 ## Example
 A 28×138" LED sign box needs:
-- Face panel: 28" × 138" → NO standard sheet fits (138 > 120). `seaming_required = True`. Closest: 60×120" (needs seam at 120" mark).
-- Back panel: 28" × 138" → same, seaming required
-- Side strips: 6" × 138" → fits on 48×120" (rotate: 138 > 120... also needs seaming or cut from 2 pieces)
+- Face panel: 28" × 138" → fits on 48×144" (4'×12') ✓
+- Back panel: 28" × 138" → fits on 48×144" ✓
+- Side strips: 6" × 138" → fits on 48×144" ✓
 - End caps: 6" × 28" → fits on ANY standard sheet
 
 A 24×120" LED sign box needs:
