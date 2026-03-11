@@ -290,10 +290,13 @@ class BaseCalculator(ABC):
                 }
             profile_totals[profile]["total_ft"] += piece_total_ft
 
-            # Accumulate sheet data from Opus
+            # Accumulate sheet data from Opus — keep the LARGEST sheet size
             if is_sheet:
-                if cut.get("sheet_stock_size"):
-                    profile_totals[profile]["sheet_stock_size"] = cut["sheet_stock_size"]
+                new_size = cut.get("sheet_stock_size")
+                if new_size:
+                    existing = profile_totals[profile]["sheet_stock_size"]
+                    if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
+                        profile_totals[profile]["sheet_stock_size"] = new_size
                 profile_totals[profile]["sheets_needed"] += cut.get("sheets_needed", 0) * quantity
                 if cut.get("seaming_required"):
                     profile_totals[profile]["seaming_required"] = True

@@ -4,14 +4,23 @@
     "display_name": "Custom LED / Illuminated Sign",
     "category": "signage",
     "required_fields": [
-        "sign_type", "dimensions", "letter_height", "material"
+        "sign_type",
+        "dimensions",
+        "letter_height",
+        "material"
     ],
     "questions": [
         {
             "id": "sign_type",
             "text": "What type of illuminated sign?",
             "type": "choice",
-            "options": ["Channel letters (individual 3D letters)", "Cabinet / box sign (illuminated panel)", "Halo-lit / reverse-lit letters", "Light box (backlit panel)", "Custom LED artwork / sculpture"],
+            "options": [
+                "Channel letters (individual 3D letters)",
+                "Cabinet / box sign (illuminated panel)",
+                "Halo-lit / reverse-lit letters",
+                "Light box (backlit panel)",
+                "Custom LED artwork / sculpture"
+            ],
             "required": true,
             "hint": "Channel letters are the most common commercial illuminated sign. Cabinet signs are simpler fabrication.",
             "depends_on": null,
@@ -19,10 +28,10 @@
         },
         {
             "id": "dimensions",
-            "text": "Overall sign dimensions (width × height)?",
+            "text": "Overall sign dimensions (width \u00d7 height)?",
             "type": "text",
             "required": true,
-            "hint": "Example: '8 ft × 2 ft', '48\" × 24\"'. For channel letters, this is the overall layout footprint.",
+            "hint": "Example: '8 ft \u00d7 2 ft', '48\" \u00d7 24\"'. For channel letters, this is the overall layout footprint.",
             "depends_on": null,
             "branches": null
         },
@@ -48,7 +57,12 @@
             "id": "material",
             "text": "Sign material?",
             "type": "choice",
-            "options": ["Aluminum (standard for sign fabrication)", "Stainless steel (premium — brushed or mirror)", "Mild steel (industrial / rustic look)", "Combination (aluminum returns + stainless faces)"],
+            "options": [
+                "Aluminum (standard for sign fabrication)",
+                "Stainless steel (premium \u2014 brushed or mirror)",
+                "Mild steel (industrial / rustic look)",
+                "Combination (aluminum returns + stainless faces)"
+            ],
             "required": true,
             "hint": "Aluminum is standard for channel letters (lightweight, corrosion resistant). Stainless for premium look.",
             "depends_on": null,
@@ -58,7 +72,13 @@
             "id": "lighting_type",
             "text": "Lighting type?",
             "type": "choice",
-            "options": ["Front-lit LED (standard — illuminated face)", "Halo / reverse-lit (glow behind letters)", "Front + halo combination", "Edge-lit", "Customer will supply LED modules"],
+            "options": [
+                "Front-lit LED (standard \u2014 illuminated face)",
+                "Halo / reverse-lit (glow behind letters)",
+                "Front + halo combination",
+                "Edge-lit",
+                "Customer will supply LED modules"
+            ],
             "required": false,
             "hint": "We fabricate the metal components. LED modules and power supplies are sourced separately.",
             "depends_on": null,
@@ -68,7 +88,12 @@
             "id": "mounting_location",
             "text": "Where will this sign be mounted?",
             "type": "choice",
-            "options": ["Building facade (raceway mount)", "Monument / ground sign structure", "Interior wall", "Freestanding / hanging"],
+            "options": [
+                "Building facade (raceway mount)",
+                "Monument / ground sign structure",
+                "Interior wall",
+                "Freestanding / hanging"
+            ],
             "required": false,
             "hint": "Raceway mount is most common for building signage. We fabricate the raceway (aluminum box that letters mount to).",
             "depends_on": null,
@@ -78,7 +103,14 @@
             "id": "finish",
             "text": "Metal finish?",
             "type": "choice",
-            "options": ["Powder coat (most common)", "Painted (custom colors)", "Brushed stainless (no coating)", "Mirror polished stainless", "Patina / rust finish"],
+            "options": [
+                "Powder coat (most common)",
+                "Painted (custom colors)",
+                "Clear coat / clearcoat (aluminum or stainless)",
+                "Brushed stainless (no coating)",
+                "Mirror polished stainless",
+                "Patina / rust finish"
+            ],
             "required": false,
             "hint": null,
             "depends_on": null,

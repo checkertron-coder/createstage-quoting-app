@@ -880,6 +880,10 @@ RULES:
 - Hardware = items purchased from suppliers (bolts, hinges, latches, operators, electronics, etc.)
 - Consumables = items consumed during fabrication (welding wire, grinding discs, gas, paint, etc.)
 - Be specific: include quantities, realistic prices
+- estimated_price MUST be the cost for ONE INDIVIDUAL piece, NOT per box/bag/pack.
+  Example: a bag of 100 rivets costs $8 → estimated_price = 0.08 (per rivet).
+  Example: a box of 50 screws costs $6 → estimated_price = 0.12 (per screw).
+  Example: one ESP32 board costs $12 → estimated_price = 12.00.
 - For electronics (ESP32, LED strips, power supplies, controllers): include EACH component separately
 - Do NOT include raw steel/aluminum — that's already in the cut list
 

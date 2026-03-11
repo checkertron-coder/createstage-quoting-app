@@ -464,9 +464,13 @@ class PricingEngine:
             groups[profile]["total_cost"] += line_total
 
             # Accumulate sheet data from material items (set by _build_from_ai_cuts)
+            # Take the LARGEST sheet size needed (not the last one seen)
             if is_area_sold:
-                if item.get("sheet_stock_size"):
-                    groups[profile]["sheet_stock_size"] = item["sheet_stock_size"]
+                new_size = item.get("sheet_stock_size")
+                if new_size:
+                    existing = groups[profile]["sheet_stock_size"]
+                    if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
+                        groups[profile]["sheet_stock_size"] = new_size
                 groups[profile]["sheets_needed"] += item.get("sheets_needed", 0)
                 if item.get("seaming_required"):
                     groups[profile]["seaming_required"] = True
