@@ -351,15 +351,29 @@ def _detect_material_label(priced_quote: dict) -> str:
     return ""
 
 
-def _fmt_sheet_dims(stock_length_ft: float) -> str:
-    """Format sheet stock dimensions from stock length."""
-    if stock_length_ft >= 10:
-        return "4'x10'"
-    elif stock_length_ft >= 8:
-        return "4'x8'"
-    elif stock_length_ft >= 5:
-        return "5'x10'"
-    return "%d' sheet" % int(stock_length_ft)
+def _fmt_sheet_dims(ms):
+    """Format sheet stock dimensions from material summary entry.
+
+    Reads ``sheet_size`` [W, H] from Opus if available, else falls back
+    to a rough guess from ``stock_length_ft``.
+    """
+    sheet_size = ms.get("sheet_size") if isinstance(ms, dict) else None
+    if sheet_size and isinstance(sheet_size, list) and len(sheet_size) == 2:
+        w_ft = sheet_size[0] / 12.0
+        h_ft = sheet_size[1] / 12.0
+        seam = " SEAM" if ms.get("seaming_required") else ""
+        return "%g'x%g'%s" % (w_ft, h_ft, seam)
+    # Legacy fallback — guess from stock_length_ft
+    stk = ms.get("stock_length_ft", 0) if isinstance(ms, dict) else ms
+    if isinstance(stk, (int, float)):
+        if stk >= 10:
+            return "4'x10'"
+        elif stk >= 8:
+            return "4'x8'"
+        elif stk >= 5:
+            return "5'x10'"
+        return "%d' sheet" % int(stk)
+    return "-"
 
 
 def _fmt_hrs(hours) -> str:
@@ -618,11 +632,12 @@ def generate_quote_pdf(
             prof_key = str(ms.get("profile", "")).lower()
             is_sheet = "sheet" in prof_key or "plate" in prof_key
             if is_area or is_sheet:
-                pcs = ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
-                stk_len = ms.get("stock_length_ft", 20)
-                if is_sheet and stk_len >= 8:
-                    total_col = "%d pcs" % pcs
-                    sticks_col = _fmt_sheet_dims(stk_len)
+                sheets = ms.get("sheets_needed", 0)
+                pcs = sheets or ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
+                has_sheet_size = ms.get("sheet_size") is not None
+                if is_sheet and (has_sheet_size or ms.get("stock_length_ft", 0) >= 8):
+                    total_col = "%d x" % pcs if pcs else "-"
+                    sticks_col = _fmt_sheet_dims(ms)
                 else:
                     total_col = "%d pcs" % pcs
                     sticks_col = "-"
@@ -1388,11 +1403,12 @@ def generate_materials_pdf(priced_quote, user_profile):
             prof_key = str(ms.get("profile", "")).lower()
             is_sheet = "sheet" in prof_key or "plate" in prof_key
             if is_area or is_sheet:
-                pcs = ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
-                stk_len = ms.get("stock_length_ft", 20)
-                if is_sheet and stk_len >= 8:
-                    total_col = "%d pcs" % pcs
-                    sticks_col = _fmt_sheet_dims(stk_len)
+                sheets = ms.get("sheets_needed", 0)
+                pcs = sheets or ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
+                has_sheet_size = ms.get("sheet_size") is not None
+                if is_sheet and (has_sheet_size or ms.get("stock_length_ft", 0) >= 8):
+                    total_col = "%d x" % pcs if pcs else "-"
+                    sticks_col = _fmt_sheet_dims(ms)
                 else:
                     total_col = "%d pcs" % pcs
                     sticks_col = "-"

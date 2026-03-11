@@ -649,10 +649,22 @@ const QuoteFlow = {
                         ${steelRows.map((s, idx) => {
                             const profile = (s.profile || '').replace(/_/g, ' ');
                             const isArea = s.is_area_sold;
-                            const totalCol = isArea ? (s.piece_count + ' pcs') : (s.total_length_ft.toFixed(1) + "'");
-                            const sticks = s.sticks_needed || 0;
-                            const stockLen = s.stock_length_ft || 20;
-                            const sticksInput = isArea ? '-' : `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))"> x ${stockLen}'`;
+                            const isSheet = (s.profile || '').includes('sheet') || (s.profile || '').includes('plate');
+                            let totalCol, sticksInput;
+                            if (isArea && isSheet && s.sheet_size) {
+                                const sw = s.sheet_size[0] / 12, sh = s.sheet_size[1] / 12;
+                                const sheets = s.sheets_needed || s.piece_count || 0;
+                                totalCol = sheets + ' x';
+                                sticksInput = sw + "'×" + sh + "'" + (s.seaming_required ? ' ⚠️SEAM' : '');
+                            } else if (isArea) {
+                                totalCol = (s.piece_count || 0) + ' pcs';
+                                sticksInput = '-';
+                            } else {
+                                totalCol = s.total_length_ft.toFixed(1) + "'";
+                                const sticks = s.sticks_needed || 0;
+                                const stockLen = s.stock_length_ft || 20;
+                                sticksInput = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))"> x ${stockLen}'`;
+                            }
                             const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "' left") : '-';
                             const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
                             return `<tr>

@@ -454,17 +454,39 @@ class PricingEngine:
                     "total_cost": 0.0,
                     "stock_length_ft": stock_ft or 0,
                     "is_area_sold": is_area_sold,
+                    # Sheet fields from Opus (accumulated across items)
+                    "sheet_stock_size": None,
+                    "sheets_needed": 0,
+                    "seaming_required": False,
                 }
             groups[profile]["total_length_ft"] += (length_in * qty) / 12.0
             groups[profile]["piece_count"] += qty
             groups[profile]["total_cost"] += line_total
+
+            # Accumulate sheet data from material items (set by _build_from_ai_cuts)
+            if is_area_sold:
+                if item.get("sheet_stock_size"):
+                    groups[profile]["sheet_stock_size"] = item["sheet_stock_size"]
+                groups[profile]["sheets_needed"] += item.get("sheets_needed", 0)
+                if item.get("seaming_required"):
+                    groups[profile]["seaming_required"] = True
 
         result = []
         for profile, info in sorted(groups.items()):
             total_ft = round(info["total_length_ft"], 1)
             stock_ft = info["stock_length_ft"]
 
-            if not info["is_area_sold"] and stock_ft > 0:
+            # Sheet items: use Opus's sheet data if available
+            sheet_size = info.get("sheet_stock_size")
+            sheets_needed = info.get("sheets_needed", 0)
+            seaming = info.get("seaming_required", False)
+
+            if info["is_area_sold"] and sheet_size and sheets_needed > 0:
+                # Opus told us the stock size — use it
+                stock_ft = sheet_size[1] / 12.0  # sheet length in feet
+                sticks = sheets_needed
+                remainder = 0
+            elif not info["is_area_sold"] and stock_ft > 0:
                 sticks = int(math.ceil(total_ft / stock_ft))
                 remainder = round(sticks * stock_ft - total_ft, 1)
             else:
@@ -509,7 +531,7 @@ class PricingEngine:
                 except Exception:
                     pass  # non-critical weight enrichment
 
-            result.append({
+            entry = {
                 "profile": profile,
                 "description": info["description"],
                 "total_length_ft": total_ft,
@@ -520,7 +542,15 @@ class PricingEngine:
                 "weight_lbs": weight_lbs,
                 "total_cost": round(info["total_cost"], 2),
                 "is_area_sold": info["is_area_sold"],
-            })
+            }
+            # Attach sheet metadata for PDF display
+            if sheet_size:
+                entry["sheet_size"] = sheet_size
+            if sheets_needed > 0:
+                entry["sheets_needed"] = sheets_needed
+            if seaming:
+                entry["seaming_required"] = True
+            result.append(entry)
 
         # Add concrete as separate entry
         if concrete_items:

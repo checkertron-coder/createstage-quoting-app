@@ -245,7 +245,7 @@ class BaseCalculator(ABC):
             piece_total_ft = length_ft * quantity
 
             # Per-piece entry for the cut list
-            cut_list_items.append({
+            cut_entry = {
                 "description": cut.get("description", "Cut piece"),
                 "piece_name": cut.get("piece_name", ""),
                 "group": cut.get("group", "general"),
@@ -258,19 +258,45 @@ class BaseCalculator(ABC):
                 "weld_process": cut.get("weld_process", "mig"),
                 "weld_type": cut.get("weld_type", "fillet"),
                 "notes": cut.get("notes", ""),
-            })
+            }
+            # Sheet/plate fields — pass through from Opus
+            if cut.get("width_inches"):
+                cut_entry["width_inches"] = cut["width_inches"]
+            if cut.get("sheet_stock_size"):
+                cut_entry["sheet_stock_size"] = cut["sheet_stock_size"]
+            if cut.get("sheets_needed"):
+                cut_entry["sheets_needed"] = cut["sheets_needed"]
+            if cut.get("seaming_required"):
+                cut_entry["seaming_required"] = cut["seaming_required"]
+            cut_list_items.append(cut_entry)
 
             # Accumulate footage by profile
+            is_sheet = "sheet" in profile.lower() or "plate" in profile.lower()
             if profile not in profile_totals:
-                price_ft = _lookup.get_price_per_foot(profile)
+                if is_sheet:
+                    price_ft = _lookup.get_price_per_sqft(profile)
+                else:
+                    price_ft = _lookup.get_price_per_foot(profile)
                 if price_ft == 0.0:
                     price_ft = 3.50
                 profile_totals[profile] = {
                     "total_ft": 0.0,
                     "material_type": cut.get("material_type", "mild_steel"),
                     "price_ft": price_ft,
+                    "is_sheet": is_sheet,
+                    "sheet_stock_size": None,
+                    "sheets_needed": 0,
+                    "seaming_required": False,
                 }
             profile_totals[profile]["total_ft"] += piece_total_ft
+
+            # Accumulate sheet data from Opus
+            if is_sheet:
+                if cut.get("sheet_stock_size"):
+                    profile_totals[profile]["sheet_stock_size"] = cut["sheet_stock_size"]
+                profile_totals[profile]["sheets_needed"] += cut.get("sheets_needed", 0) * quantity
+                if cut.get("seaming_required"):
+                    profile_totals[profile]["seaming_required"] = True
 
             total_weld_inches += quantity * 6  # Estimate 6" weld per piece
 
@@ -278,16 +304,29 @@ class BaseCalculator(ABC):
         items = []
         for profile, info in profile_totals.items():
             raw_ft = info["total_ft"]
-            wasted_ft = round(raw_ft * (1 + self.WASTE_TUBE), 1)
-            price_ft = info["price_ft"]
-            line_total = round(wasted_ft * price_ft, 2)
+            is_sheet = info.get("is_sheet", False)
+
+            if is_sheet and info["sheets_needed"] > 0:
+                # Sheet pricing: use Opus's sheet count × sheet area × price/sqft
+                stock = info["sheet_stock_size"]
+                if stock:
+                    sheet_sqft = (stock[0] * stock[1]) / 144.0
+                else:
+                    sheet_sqft = 32.0  # fallback 4x8
+                line_total = round(info["sheets_needed"] * sheet_sqft * info["price_ft"], 2)
+                wasted_ft = raw_ft  # no separate waste for sheets
+                waste_factor = 0.0
+            else:
+                wasted_ft = round(raw_ft * (1 + self.WASTE_TUBE), 1)
+                line_total = round(wasted_ft * info["price_ft"], 2)
+                waste_factor = self.WASTE_TUBE
 
             weight = self.get_weight_lbs(profile, wasted_ft)
             if weight == 0.0:
                 weight = wasted_ft * 2.0
             total_weight += weight
 
-            items.append(self.make_material_item(
+            mat_item = self.make_material_item(
                 description="%s — %.1f ft" % (profile, wasted_ft),
                 material_type=info["material_type"],
                 profile=profile,
@@ -295,8 +334,17 @@ class BaseCalculator(ABC):
                 quantity=1,
                 unit_price=line_total,
                 cut_type="square",
-                waste_factor=self.WASTE_TUBE,
-            ))
+                waste_factor=waste_factor,
+            )
+            # Attach sheet metadata for downstream (pricing_engine, PDF)
+            if is_sheet:
+                if info["sheet_stock_size"]:
+                    mat_item["sheet_stock_size"] = info["sheet_stock_size"]
+                if info["sheets_needed"] > 0:
+                    mat_item["sheets_needed"] = info["sheets_needed"]
+                if info["seaming_required"]:
+                    mat_item["seaming_required"] = True
+            items.append(mat_item)
 
         # Estimate surface area
         total_length_ft = sum(info["total_ft"] for info in profile_totals.values())
@@ -309,14 +357,20 @@ class BaseCalculator(ABC):
         needs_laser = is_aluminum or "laser" in description or "cnc" in description
 
         if needs_laser:
-            # Sum perimeter cut inches from sheet profile items
+            # Sum perimeter from sheet items using actual geometry
             sheet_perim_inches = 0.0
             for cut in ai_cuts:
-                profile = cut.get("profile", "")
-                if "sheet" in profile or "plate" in profile:
+                prof = cut.get("profile", "")
+                if "sheet" in prof or "plate" in prof:
                     length_in = cut.get("length_inches", 0)
+                    width_in = cut.get("width_inches", 0)
                     qty = cut.get("quantity", 1)
-                    sheet_perim_inches += length_in * qty * 2  # rough perimeter
+                    if width_in > 0:
+                        # Real perimeter from Opus dimensions
+                        sheet_perim_inches += 2 * (length_in + width_in) * qty
+                    else:
+                        # Fallback: assume square-ish piece
+                        sheet_perim_inches += length_in * qty * 4
 
             if sheet_perim_inches > 0:
                 laser_cost = max(round(sheet_perim_inches * 0.15, 2), 75.00)

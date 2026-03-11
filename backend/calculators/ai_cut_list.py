@@ -468,6 +468,14 @@ RULES:
 6. Include piece_name for what the part IS (e.g., "leg", "top_rail", "picket").
 7. Each line = one cuttable piece, max 240 inches. Use quantity for identical pieces.
 
+SHEET/PLATE RULES:
+For any sheet or plate item (profile contains "sheet" or "plate"), you MUST also include:
+- "width_inches": the WIDTH of the piece (length_inches is the longer dimension)
+- "sheet_stock_size": [W, H] — the standard stock sheet to order. Options: [48,96], [48,120], [48,144], [60,120], [60,144]
+  Pick the SMALLEST standard sheet where BOTH piece dimensions fit (piece can be rotated).
+  If NO standard sheet fits, use [60,144] and set "seaming_required": true
+- "sheets_needed": how many stock sheets this line item requires (usually 1 per piece, but if cutting multiple small pieces from one sheet, group them)
+
 Return ONLY valid JSON — an array of objects:
 [
     {
@@ -483,6 +491,23 @@ Return ONLY valid JSON — an array of objects:
         "weld_process": "tig",
         "weld_type": "fillet",
         "notes": "4 legs at 30 inches for 30-inch table height. Miter bottom for leveling feet."
+    },
+    {
+        "description": "Sign cabinet back panel - al sheet",
+        "piece_name": "back_panel",
+        "group": "cabinet",
+        "material_type": "aluminum_6061",
+        "profile": "al_sheet_0.063",
+        "length_inches": 138.0,
+        "width_inches": 28.0,
+        "quantity": 1,
+        "cut_type": "square",
+        "cut_angle": 90.0,
+        "weld_process": "tig",
+        "weld_type": "butt",
+        "sheet_stock_size": [48, 144],
+        "sheets_needed": 1,
+        "notes": "Back panel 138x28, fits on 4'x12' sheet."
     }
 ]""" % (job_type, knowledge_block, material_context, fields_text,
         context_blocks, weld_guidance, profiles_text)
@@ -1021,6 +1046,36 @@ Return ONLY valid JSON — an array of step objects:
                 "weld_type": weld_type,
                 "notes": str(item.get("notes", "")),
             }
+
+            # Sheet/plate fields — pass through from Opus
+            profile_lower = cut["profile"].lower()
+            is_sheet_item = "sheet" in profile_lower or "plate" in profile_lower
+            width_raw = item.get("width_inches", 0)
+            try:
+                cut["width_inches"] = float(width_raw) if width_raw else 0.0
+            except (ValueError, TypeError):
+                cut["width_inches"] = 0.0
+
+            stock_size = item.get("sheet_stock_size")
+            valid_stock_sizes = ([48, 96], [48, 120], [48, 144], [60, 120], [60, 144])
+            if isinstance(stock_size, list) and len(stock_size) == 2:
+                try:
+                    stock_size = [int(stock_size[0]), int(stock_size[1])]
+                    if stock_size not in valid_stock_sizes:
+                        stock_size = None
+                except (ValueError, TypeError):
+                    stock_size = None
+            else:
+                stock_size = None
+            cut["sheet_stock_size"] = stock_size
+
+            sheets_raw = item.get("sheets_needed", 1 if is_sheet_item else 0)
+            try:
+                cut["sheets_needed"] = max(int(sheets_raw), 0)
+            except (ValueError, TypeError):
+                cut["sheets_needed"] = 1 if is_sheet_item else 0
+
+            cut["seaming_required"] = bool(item.get("seaming_required", False))
 
             # Sanity checks
             if cut["length_inches"] <= 0:
