@@ -177,7 +177,9 @@ class TestOutdoorGrindCleanup:
 
 class TestMaterialsAggregation:
     def test_aggregate_includes_weight(self):
-        """Aggregated materials include weight_lbs from STOCK_WEIGHTS."""
+        """Aggregated materials include weight_lbs from STOCK_WEIGHTS.
+        Weight is based on stock ordered (sticks × stock_length × lb/ft),
+        not just material used, so a distributor sees the ordering weight."""
         from backend.pricing_engine import PricingEngine
         engine = PricingEngine()
         materials = [
@@ -189,8 +191,9 @@ class TestMaterialsAggregation:
         steel = [s for s in summary if not s.get("is_concrete")]
         assert len(steel) == 1
         assert steel[0]["weight_lbs"] > 0
-        # sq_tube_2x2_11ga is 1.951 lb/ft × 40 ft = 78.0 lbs
-        assert abs(steel[0]["weight_lbs"] - 78.0) < 2.0
+        # sq_tube_2x2_11ga is 1.951 lb/ft, 40 ft needs 2 sticks @ 24ft = 48ft
+        # Weight of stock ordered: 2 × 24 × 1.951 = 93.6 lbs
+        assert abs(steel[0]["weight_lbs"] - 93.6) < 2.0
 
     def test_aggregate_includes_total_cost(self):
         """Aggregated materials include total_cost summed from line_totals."""
@@ -231,7 +234,7 @@ class TestMaterialsAggregation:
             "Aggregated total %.2f != material subtotal %.2f" % (agg_total, material_subtotal))
 
     def test_plates_show_piece_count(self):
-        """Plates/sheets are area-sold — show piece_count, not sticks."""
+        """Plates/sheets are area-sold — show piece_count and sheets_needed."""
         from backend.pricing_engine import PricingEngine
         engine = PricingEngine()
         materials = [
@@ -244,7 +247,9 @@ class TestMaterialsAggregation:
         assert len(plate) == 1
         assert plate[0]["is_area_sold"] is True
         assert plate[0]["piece_count"] == 4
-        assert plate[0]["sticks_needed"] == 0
+        # Plates now calculate sheets_needed (at least 1 sheet to order)
+        assert plate[0]["sticks_needed"] >= 1
+        assert plate[0].get("sheets_needed", 0) >= 1
 
     def test_concrete_separate_entry(self):
         """Concrete gets its own summary entry with is_concrete flag."""

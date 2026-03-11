@@ -288,7 +288,9 @@ class PricingEngine:
             result["validation_warnings"] = validation_warnings
 
         # Materials summary — aggregated by profile for steel ordering
-        result["materials_summary"] = self._aggregate_materials(materials)
+        result["materials_summary"] = self._aggregate_materials(
+            materials, detailed_cut_list
+        )
 
         return result
 
@@ -525,7 +527,31 @@ class PricingEngine:
             )
         return ""
 
-    def _aggregate_materials(self, materials: list) -> list:
+    @staticmethod
+    def _bin_pack_sticks(piece_lengths_ft, stock_ft):
+        """First-fit decreasing bin packing — how many sticks to order."""
+        import math
+        if not piece_lengths_ft or stock_ft <= 0:
+            total = sum(piece_lengths_ft) if piece_lengths_ft else 0
+            return int(math.ceil(total / stock_ft)) if stock_ft > 0 else 0
+        sorted_pieces = sorted(piece_lengths_ft, reverse=True)
+        bins = []  # remaining space in each bin (stick)
+        for piece in sorted_pieces:
+            if piece > stock_ft:
+                # Piece longer than stock — needs its own stick (will splice)
+                bins.append(0)
+                continue
+            placed = False
+            for i, remaining in enumerate(bins):
+                if remaining >= piece:
+                    bins[i] -= piece
+                    placed = True
+                    break
+            if not placed:
+                bins.append(stock_ft - piece)
+        return len(bins)
+
+    def _aggregate_materials(self, materials, cut_list=None):
         """
         Group materials by profile for steel ordering summary.
 
@@ -533,6 +559,11 @@ class PricingEngine:
         stock_length_ft, sticks_needed, remainder_ft, weight_lbs, total_cost,
         piece_count, is_area_sold.
         Concrete items tracked separately with is_concrete flag.
+
+        Uses cut_list (detailed_cut_list) when available to:
+        - Count actual pieces per profile (not consolidated qty=1)
+        - Bin-pack pieces into sticks for accurate stick count
+        - Calculate plate/sheet area from piece dimensions for sheet count
         """
         import math
         try:
@@ -543,6 +574,31 @@ class PricingEngine:
             from .weights import STOCK_WEIGHTS
         except Exception:
             STOCK_WEIGHTS = {}
+
+        # --- Build per-profile piece data from cut list ---
+        # piece_lengths[profile] = [length_ft, length_ft, ...]  (one per piece)
+        # piece_areas[profile] = total area in sq inches (for plate/sheet)
+        profile_piece_lengths = {}  # type: dict
+        profile_piece_counts = {}   # type: dict
+        profile_piece_areas = {}    # type: dict
+        if cut_list:
+            for piece in (cut_list or []):
+                profile = piece.get("profile", "")
+                length_in = piece.get("length_inches", 0)
+                width_in = piece.get("width_inches", 0)
+                qty = int(piece.get("quantity", 1))
+                if not profile:
+                    continue
+                if profile not in profile_piece_lengths:
+                    profile_piece_lengths[profile] = []
+                    profile_piece_counts[profile] = 0
+                    profile_piece_areas[profile] = 0.0
+                for _ in range(qty):
+                    profile_piece_lengths[profile].append(length_in / 12.0)
+                profile_piece_counts[profile] += qty
+                # Accumulate plate/sheet area
+                if width_in > 0:
+                    profile_piece_areas[profile] += length_in * width_in * qty
 
         groups = {}  # type: dict
         concrete_items = []  # type: list
@@ -596,6 +652,11 @@ class PricingEngine:
                 if item.get("seaming_required"):
                     groups[profile]["seaming_required"] = True
 
+        # Override piece_count from cut list (consolidated items always have qty=1)
+        for profile in groups:
+            if profile in profile_piece_counts:
+                groups[profile]["piece_count"] = profile_piece_counts[profile]
+
         result = []
         for profile, info in sorted(groups.items()):
             total_ft = round(info["total_length_ft"], 1)
@@ -606,55 +667,87 @@ class PricingEngine:
             sheets_needed = info.get("sheets_needed", 0)
             seaming = info.get("seaming_required", False)
 
-            if info["is_area_sold"] and sheet_size and sheets_needed > 0:
-                # Opus told us the stock size — use it
-                stock_ft = sheet_size[1] / 12.0  # sheet length in feet
-                sticks = sheets_needed
+            if info["is_area_sold"]:
+                # Default sheet size if Opus didn't specify
+                if not sheet_size:
+                    sheet_size = [48, 96]  # standard 4'x8'
+                sheet_area_sqin = sheet_size[0] * sheet_size[1]
+
+                if sheets_needed > 0:
+                    # Opus told us the sheet count — use it
+                    sticks = sheets_needed
+                elif profile in profile_piece_areas and profile_piece_areas[profile] > 0:
+                    # Calculate sheets from actual piece areas (cut list)
+                    sheets_needed = max(1, int(math.ceil(
+                        profile_piece_areas[profile] / sheet_area_sqin
+                    )))
+                    sticks = sheets_needed
+                else:
+                    # Fallback: estimate from total linear ft
+                    # Assume average 12" width for plate pieces
+                    est_area = total_ft * 12 * 12  # total_ft * 12in width * 12in/ft
+                    sheets_needed = max(1, int(math.ceil(est_area / sheet_area_sqin)))
+                    sticks = sheets_needed
+
+                stock_ft = sheet_size[1] / 12.0
                 remainder = 0
-            elif not info["is_area_sold"] and stock_ft > 0:
-                sticks = int(math.ceil(total_ft / stock_ft))
+            elif stock_ft > 0:
+                # Use bin-packing if we have individual piece lengths
+                if profile in profile_piece_lengths:
+                    sticks = self._bin_pack_sticks(
+                        profile_piece_lengths[profile], stock_ft
+                    )
+                else:
+                    sticks = int(math.ceil(total_ft / stock_ft))
                 remainder = round(sticks * stock_ft - total_ft, 1)
             else:
                 sticks = 0
                 remainder = 0
 
-            # Weight lookup — try exact key, then prefix match, then aluminum density ratio
-            weight_per_ft = STOCK_WEIGHTS.get(profile, 0)
-            if weight_per_ft == 0:
-                for key, val in STOCK_WEIGHTS.items():
-                    if profile.startswith(key) or key.startswith(profile.split("_")[0] + "_" + profile.split("_")[1] if "_" in profile else profile):
-                        weight_per_ft = val
-                        break
-            # Aluminum fallback: strip al_ prefix and scale steel weight by 0.344
-            if weight_per_ft == 0 and profile.startswith("al_"):
-                steel_key = profile[3:]  # strip "al_" prefix
-                steel_weight = STOCK_WEIGHTS.get(steel_key, 0)
-                if steel_weight == 0:
-                    for key, val in STOCK_WEIGHTS.items():
-                        if steel_key.startswith(key):
-                            steel_weight = val
-                            break
-                if steel_weight > 0:
-                    weight_per_ft = round(steel_weight * 0.344, 2)
-            weight_lbs = round(weight_per_ft * total_ft, 1) if weight_per_ft > 0 else 0
+            # --- Weight calculation ---
+            # For area-sold (plate/sheet): weight = sheets × sheet_sqft × lb/sqft
+            # For linear stock: weight = total_ft × lb/ft
+            weight_lbs = 0
 
-            # Sheet/plate weight — STOCK_WEIGHTS has no sheet entries,
-            # so use knowledge/materials.py weight_per_foot (lb/sq ft for area-sold)
-            if weight_lbs == 0 and info["is_area_sold"]:
+            if info["is_area_sold"]:
+                # Plate/sheet weight = weight of the stock being ordered
                 try:
                     from .knowledge.materials import PROFILES
-                    # Try exact key, then strip al_ prefix
                     lookup_key = profile[3:] if profile.startswith("al_") else profile
                     mat_data = PROFILES.get(lookup_key, {})
                     w_per_sqft = mat_data.get("weight_per_foot", 0)
                     if w_per_sqft > 0:
                         if profile.startswith("al_"):
                             w_per_sqft = round(w_per_sqft * 0.344, 2)
-                        # total_ft for area-sold items is (length_in * qty) / 12
-                        # Treat as approximate sq ft (conservative)
-                        weight_lbs = round(w_per_sqft * total_ft, 1)
+                        sheet_sqft = (sheet_size[0] * sheet_size[1]) / 144.0
+                        weight_lbs = round(sheets_needed * sheet_sqft * w_per_sqft, 1)
                 except Exception:
-                    pass  # non-critical weight enrichment
+                    pass
+            else:
+                # Linear stock weight
+                weight_per_ft = STOCK_WEIGHTS.get(profile, 0)
+                if weight_per_ft == 0:
+                    for key, val in STOCK_WEIGHTS.items():
+                        if profile.startswith(key) or key.startswith(
+                            profile.split("_")[0] + "_" + profile.split("_")[1]
+                            if "_" in profile else profile
+                        ):
+                            weight_per_ft = val
+                            break
+                # Aluminum fallback: strip al_ prefix and scale by 0.344
+                if weight_per_ft == 0 and profile.startswith("al_"):
+                    steel_key = profile[3:]
+                    steel_weight = STOCK_WEIGHTS.get(steel_key, 0)
+                    if steel_weight == 0:
+                        for key, val in STOCK_WEIGHTS.items():
+                            if steel_key.startswith(key):
+                                steel_weight = val
+                                break
+                    if steel_weight > 0:
+                        weight_per_ft = round(steel_weight * 0.344, 2)
+                if weight_per_ft > 0:
+                    # Weight of stock ordered = sticks × stock_length × lb/ft
+                    weight_lbs = round(sticks * stock_ft * weight_per_ft, 1) if sticks > 0 else round(weight_per_ft * total_ft, 1)
 
             entry = {
                 "profile": profile,
@@ -669,7 +762,7 @@ class PricingEngine:
                 "is_area_sold": info["is_area_sold"],
             }
             # Attach sheet metadata for PDF display
-            if sheet_size:
+            if sheet_size and info["is_area_sold"]:
                 entry["sheet_size"] = sheet_size
             if sheets_needed > 0:
                 entry["sheets_needed"] = sheets_needed

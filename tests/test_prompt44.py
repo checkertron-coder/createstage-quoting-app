@@ -278,7 +278,7 @@ def test_shop_stock_section_in_pdf():
 
 
 def test_sheet_weight_calculated():
-    """sheet_11ga item gets weight_lbs > 0 from knowledge/materials.py."""
+    """sheet_11ga item gets weight_lbs based on sheets ordered (stock weight)."""
     from backend.pricing_engine import PricingEngine
 
     pe = PricingEngine()
@@ -292,13 +292,14 @@ def test_sheet_weight_calculated():
     assert len(summary) == 1
     assert summary[0]["weight_lbs"] > 0, \
         "Sheet weight should be > 0, got %s" % summary[0]["weight_lbs"]
-    # sheet_11ga = 5.0 lb/sqft, total_ft = 96/12 = 8, weight = 5.0 * 8 = 40
-    assert summary[0]["weight_lbs"] == 40.0, \
-        "Expected 40.0 lbs, got %s" % summary[0]["weight_lbs"]
+    # sheet_11ga = 5.0 lb/sqft, 1 sheet of 4x8 = 32 sqft → 160 lbs
+    # Weight represents stock ordered (full sheet), not just material used
+    assert summary[0]["weight_lbs"] == 160.0, \
+        "Expected 160.0 lbs (1 sheet of 4x8), got %s" % summary[0]["weight_lbs"]
 
 
 def test_al_sheet_weight_uses_density_ratio():
-    """Aluminum sheet weight uses steel weight * 0.344 density ratio."""
+    """Aluminum sheet weight uses steel weight * 0.344 density ratio, per sheet ordered."""
     from backend.pricing_engine import PricingEngine
 
     pe = PricingEngine()
@@ -312,14 +313,16 @@ def test_al_sheet_weight_uses_density_ratio():
     assert len(summary) == 1
     weight = summary[0]["weight_lbs"]
     assert weight > 0, "Al sheet weight should be > 0"
-    # sheet_14ga steel = 3.125 lb/sqft * 0.344 = 1.075 lb/sqft
-    # total_ft = 48/12 = 4, weight = 1.075 * 4 = 4.3
-    assert weight < 5.0, \
+    # 1 sheet 4x8 of 14ga aluminum = 32 sqft × 3.125 lb/sqft × 0.344 = ~34.4 lbs
+    # Weight represents stock ordered (full sheet), not just cut piece
+    assert weight < 40.0, \
         "Al sheet should weigh less than steel equivalent, got %s" % weight
+    # Should be less than steel equivalent (1 sheet 14ga steel = 100 lbs)
+    assert weight < 100.0
 
 
 def test_plate_weight_calculated():
-    """1/4 inch plate gets weight from knowledge/materials.py."""
+    """1/4 inch plate weight = stock ordered (full sheets), not just cut pieces."""
     from backend.pricing_engine import PricingEngine
 
     pe = PricingEngine()
@@ -333,5 +336,6 @@ def test_plate_weight_calculated():
     assert len(summary) == 1
     weight = summary[0]["weight_lbs"]
     assert weight > 0, "Plate weight should be > 0"
-    # plate_0.25 = 10.2 lb/sqft, total_ft = (24*2)/12 = 4, weight = 10.2 * 4 = 40.8
-    assert weight == 40.8, "Expected 40.8 lbs, got %s" % weight
+    # plate_0.25 = 10.2 lb/sqft, 1 sheet 4x8 = 32 sqft → 326.4 lbs
+    # Weight represents stock ordered (full sheet weight)
+    assert weight == 326.4, "Expected 326.4 lbs (1 sheet 4x8), got %s" % weight

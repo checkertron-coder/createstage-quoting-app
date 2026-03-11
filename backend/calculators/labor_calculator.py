@@ -140,10 +140,22 @@ LABOR CALIBRATION — SCALING REFERENCES (from shop owner testing):
 These are BENCHMARKS for specific scopes. You MUST scale proportionally by piece
 count and weld inches — NEVER copy these numbers for a different-sized job.
 
-BENCHMARK A — Large Gate + Fence Combo
-  Scope: 12' cantilever gate + 28' fence, 128 pickets, mild steel MIG welded.
-  Pieces: ~160 | Weld: ~300 linear inches | Result: ~20 total labor hours.
-  A 6' gate with 0 pickets is ~4-5 hours, NOT 20. Scale by piece count.
+BENCHMARK A — Large Gate + Fence Combo (shop + site)
+  Scope: 18' cantilever gate + 28' fence, 124 pickets, 7 posts, mild steel, paint, on-site install.
+  Total pieces: ~160 | Material weight: ~3,000 lbs
+  SHOP HOURS (MIG, ~26 hrs):
+    - cut_prep: 3.5-4 hrs (124 batch pickets, 28 rails, 7 posts, beam, plates)
+    - fit_tack: 4-5 hrs (gate frame layout, checking square, tacking 46 pickets)
+    - full_weld: 6-7 hrs (46 gate pickets × 4 weld points each = 184 fillet welds, plus frame joints)
+    - grind_clean: 2.5-3 hrs (die grinder between pickets is slow — tight access)
+    - finish_prep + paint: 5-6 hrs (spray setup, 2 coats primer, 2 coats topcoat, dry time)
+    - hardware + layout: 2 hrs
+  SITE HOURS (stick E7018, ~22-24 hrs):
+    - Post holes through pavement + set + concrete: 10-12 hrs
+    - Overhead beam lift + weld + hang gate: 5-6 hrs
+    - Fence rails + 82 field pickets (stick welded): 6-8 hrs
+    - Touch-up paint + inspection: 2 hrs
+  Total: ~48-50 hrs. A 6' gate with 0 pickets is ~4-5 hours shop, NOT 26.
 
 BENCHMARK B — Large LED Box Sign
   Scope: 138"x28"x6" aluminum cabinet, laser-cut face letters, TIG welded.
@@ -158,11 +170,15 @@ BENCHMARK C — Simple End Table
 SCALING RULES:
 - Double the pieces ≈ 1.7x the hours (batch efficiency saves ~15%).
 - TIG (aluminum, stainless) = 2.5-3x slower per inch than MIG (mild steel).
-- Pickets with jig: 2-3 min/picket to position + tack, not 5-8 min.
+- Pickets with jig: 2-3 min/picket to position + tack. Each picket welds to EACH rail it crosses
+  (top, mid1, mid2, bottom = 4 weld points per picket). Count total welds, not just pickets.
 - Batch cutting: set stop once, feed-and-cut. 50 identical cuts ≈ 25 min total.
+- Grinding between pickets: die grinder access only — 2x slower than open grinding.
+- Field welding with stick (E7018) is ~1.5x slower per joint than shop MIG.
+- Paint for large jobs (100+ pieces): spray setup + 2 primer + 2 topcoat coats = 4-6 hrs minimum.
 - Electronics (ESP32, LED, power supply, wiring): ALWAYS 4+ hrs install, never 0.4.
 - Gate operators (LiftMaster, US Automatic): 2-3 hrs mount + setup + test.
-- When in doubt, estimate LOWER — shop owner consistently reports AI overestimates.
+- When in doubt, estimate LOWER — but do not undercount weld points on repetitive work like pickets.
 """
 
 

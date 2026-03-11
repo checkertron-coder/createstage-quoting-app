@@ -271,7 +271,7 @@ class TestAggregateSheets:
         assert sheet[0]["stock_length_ft"] == 12.0
 
     def test_aggregate_no_sheet_fields_fallback(self):
-        """Legacy items without sheet fields still work."""
+        """Legacy items without sheet fields still calculate sheets needed."""
         from backend.pricing_engine import PricingEngine
         pe = PricingEngine()
         materials = [{
@@ -286,8 +286,9 @@ class TestAggregateSheets:
         summary = pe._aggregate_materials(materials)
         sheet = [s for s in summary if "sheet" in s["profile"]]
         assert len(sheet) == 1
-        # No Opus data, so sticks=0 (original fallback)
-        assert sheet[0]["sticks_needed"] == 0
+        # No Opus sheet data — fallback calculates sheets needed (>= 1)
+        assert sheet[0]["sticks_needed"] >= 1
+        assert sheet[0].get("sheets_needed", 0) >= 1
 
     def test_tube_materials_unchanged(self):
         """Tube aggregation unaffected by sheet changes."""

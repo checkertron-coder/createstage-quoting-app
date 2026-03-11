@@ -744,3 +744,137 @@ def test_consumable_validation_preserves_nonzero_prices():
     result = pe._validate_consumable_prices(consumables)
     assert result[0]["unit_price"] == 12.50
     assert result[0]["line_total"] == 12.50
+
+
+# ---------------------------------------------------------------------------
+# 15. Bin-packing stick count — pieces that don't fit 2 per stick
+# ---------------------------------------------------------------------------
+
+def test_bin_pack_posts_one_per_stick():
+    """Posts at 13.67 ft each can't fit 2 per 24ft stick — need 7 sticks for 7 posts."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    materials = [
+        {"profile": "sq_tube_4x4_11ga", "material_type": "mild_steel",
+         "length_inches": 1148, "quantity": 1,
+         "description": "sq_tube_4x4_11ga — 100.4 ft",
+         "unit_price": 500.0, "line_total": 500.0},
+    ]
+    # Cut list has 7 posts at 164" each (13.67 ft), stock = 24 ft
+    # 13.67 + 13.67 = 27.3 > 24, so ONE post per stick
+    cut_list = [
+        {"profile": "sq_tube_4x4_11ga", "length_inches": 164, "quantity": 7},
+    ]
+    summary = pe._aggregate_materials(materials, cut_list)
+    post = [s for s in summary if s["profile"] == "sq_tube_4x4_11ga"]
+    assert len(post) == 1
+    assert post[0]["sticks_needed"] == 7, \
+        "Expected 7 sticks (1 post per stick), got %s" % post[0]["sticks_needed"]
+    assert post[0]["piece_count"] == 7
+
+
+def test_bin_pack_short_pieces_fit_multiple():
+    """Short pieces can be nested into fewer sticks."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    materials = [
+        {"profile": "sq_tube_2x2_11ga", "material_type": "mild_steel",
+         "length_inches": 720, "quantity": 1,
+         "description": "sq_tube_2x2_11ga — 60 ft",
+         "unit_price": 150.0, "line_total": 150.0},
+    ]
+    # 8 pieces at 90" each (7.5 ft), stock = 24 ft
+    # 3 pieces fit per stick (3 × 7.5 = 22.5, fits in 24)
+    # 8 pieces / 3 per stick = 3 sticks (2 full + 1 with 2 pieces)
+    cut_list = [
+        {"profile": "sq_tube_2x2_11ga", "length_inches": 90, "quantity": 8},
+    ]
+    summary = pe._aggregate_materials(materials, cut_list)
+    tube = [s for s in summary if s["profile"] == "sq_tube_2x2_11ga"]
+    assert len(tube) == 1
+    assert tube[0]["sticks_needed"] == 3, \
+        "Expected 3 sticks (3 per stick), got %s" % tube[0]["sticks_needed"]
+    assert tube[0]["piece_count"] == 8
+
+
+def test_plate_sheets_from_cut_list_area():
+    """Plate sheets calculated from cut list piece areas, not linear footage."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    materials = [
+        {"profile": "plate_0.25", "material_type": "mild_steel",
+         "length_inches": 132, "quantity": 1,
+         "description": "plate_0.25 — 11.0 ft",
+         "unit_price": 38.50, "line_total": 38.50},
+    ]
+    # Small plate pieces that all fit on one 4x8 sheet
+    cut_list = [
+        {"profile": "plate_0.25", "length_inches": 8, "width_inches": 8, "quantity": 7},   # post caps
+        {"profile": "plate_0.25", "length_inches": 12, "width_inches": 6, "quantity": 2},  # mount plates
+        {"profile": "plate_0.25", "length_inches": 6, "width_inches": 4, "quantity": 1},   # latch plate
+    ]
+    summary = pe._aggregate_materials(materials, cut_list)
+    plate = [s for s in summary if s["profile"] == "plate_0.25"]
+    assert len(plate) == 1
+    assert plate[0]["sheets_needed"] == 1, \
+        "All pieces fit on 1 sheet of 4x8, got %s" % plate[0]["sheets_needed"]
+    assert plate[0]["piece_count"] == 10
+    # Weight should be 1 sheet × 32 sqft × 10.2 lb/sqft = 326.4 lbs
+    assert plate[0]["weight_lbs"] == 326.4, \
+        "Expected 326.4 lbs (1 sheet), got %s" % plate[0]["weight_lbs"]
+
+
+# ---------------------------------------------------------------------------
+# 16. Laser cutting — only for aluminum, not steel plate
+# ---------------------------------------------------------------------------
+
+def test_no_laser_cutting_on_steel_plate():
+    """Steel jobs with plate do NOT get laser cutting auto-added."""
+    from backend.calculators.base import BaseCalculator
+
+    class _TestCalc(BaseCalculator):
+        def calculate(self, params):
+            pass
+
+    calc = _TestCalc()
+    cuts = [
+        {"profile": "plate_0.25", "length_inches": 12, "width_inches": 8,
+         "quantity": 4, "material_type": "mild_steel"},
+    ]
+    fields = {
+        "description": "steel fence with base plates",
+        "material_type": "Carbon steel (standard)",
+    }
+    result = calc._build_from_ai_cuts("cantilever_gate", cuts, fields, [])
+    hardware_descs = " ".join(h.get("description", "") for h in result.get("hardware", []))
+    assert "laser" not in hardware_descs.lower(), \
+        "Steel plate should NOT get laser cutting, got: %s" % hardware_descs
+    assumptions_text = " ".join(result.get("assumptions", []))
+    assert "laser" not in assumptions_text.lower().replace("laser cutting", "").strip() or \
+        "Laser cutting" not in assumptions_text
+
+
+# ---------------------------------------------------------------------------
+# 17. Labor calibration — updated benchmarks
+# ---------------------------------------------------------------------------
+
+def test_labor_calibration_has_shop_vs_site_breakdown():
+    """Calibration benchmark A includes separate shop and site hour breakdowns."""
+    from backend.calculators.labor_calculator import LABOR_CALIBRATION_NOTES
+    assert "SHOP HOURS" in LABOR_CALIBRATION_NOTES
+    assert "SITE HOURS" in LABOR_CALIBRATION_NOTES
+    assert "stick E7018" in LABOR_CALIBRATION_NOTES.lower() or "E7018" in LABOR_CALIBRATION_NOTES
+
+
+def test_labor_calibration_mentions_weld_point_counting():
+    """Calibration notes mention counting weld points per picket, not just pickets."""
+    from backend.calculators.labor_calculator import LABOR_CALIBRATION_NOTES
+    assert "weld points" in LABOR_CALIBRATION_NOTES.lower() or "4 weld points" in LABOR_CALIBRATION_NOTES
+
+
+def test_labor_calibration_mentions_field_welding_slower():
+    """Calibration notes mention field stick welding is slower than shop MIG."""
+    from backend.calculators.labor_calculator import LABOR_CALIBRATION_NOTES
+    lower = LABOR_CALIBRATION_NOTES.lower()
+    assert "field welding" in lower or "stick" in lower
+    assert "1.5x slower" in lower or "slower" in lower

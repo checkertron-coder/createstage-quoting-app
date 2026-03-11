@@ -354,9 +354,18 @@ class BaseCalculator(ABC):
         total_sq_ft = total_length_ft * 0.5  # Rough: 6" average width
 
         # --- Laser cutting detection for sheet items ---
+        # Only add laser cutting for aluminum or explicitly requested laser/CNC.
+        # Steel plate is plasma/saw cut — that's included in shop labor hours.
         description = str(fields.get("description", "") or "").lower()
         all_fields_text = " ".join(str(v) for v in fields.values()).lower()
-        is_aluminum = any(k in all_fields_text for k in ("aluminum", "6061", "5052"))
+        material_type_str = str(fields.get("material_type", "") or "").lower()
+        is_explicitly_steel = any(
+            kw in material_type_str for kw in ("carbon", "steel", "mild")
+        )
+        is_aluminum = (
+            any(k in all_fields_text for k in ("aluminum", "6061", "5052"))
+            and not is_explicitly_steel
+        )
         needs_laser = is_aluminum or "laser" in description or "cnc" in description
 
         if needs_laser:
