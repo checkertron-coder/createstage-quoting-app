@@ -35,6 +35,12 @@ class StairRailingCalculator(BaseCalculator):
             "Material prices based on market averages — update with supplier quotes for accuracy.",
         ]
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package("stair_railing", fields)
+            if package is not None:
+                return self._build_from_full_package("stair_railing", package, fields)
+
         # Try AI cut list for custom/complex designs
         if self._has_description(fields):
             ai_cuts = self._try_ai_cut_list("stair_railing", fields)

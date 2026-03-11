@@ -89,50 +89,76 @@ class PricingEngine:
             labor_processes=labor_processes,
         )
 
-        # --- Price hardware ---
-        raw_hardware = material_list.get("hardware", [])
-        priced_hardware = self.hardware_sourcer.price_hardware_list(raw_hardware)
+        # --- Check for _opus_* keys (full package path) ---
+        opus_hardware = material_list.get("_opus_hardware")
+        opus_consumables = material_list.get("_opus_consumables")
+        opus_labor = material_list.get("_opus_labor_hours")
+        opus_finishing_method = material_list.get("_opus_finishing_method")
 
-        # --- Electronics / specialty hardware ---
-        electronics = self.hardware_sourcer.estimate_electronics(job_description)
-        if electronics:
-            priced_hardware.extend(electronics)
+        if opus_hardware is not None:
+            # Full package path — Opus provided hardware directly
+            priced_hardware = list(opus_hardware)
+            consumables = list(opus_consumables or [])
 
-        # --- Estimate consumables ---
-        weld_inches = material_list.get("weld_linear_inches", 0)
-        total_sq_ft = material_list.get("total_sq_ft", 0)
-        finish_type = finish_field  # Use same corrected finish for consumables
+            # Still rebuild finishing from Opus's method recommendation
+            if opus_finishing_method:
+                finishing = finishing_builder.build(
+                    finish_type=opus_finishing_method,
+                    total_sq_ft=total_sq_ft,
+                    labor_processes=labor_processes,
+                )
 
-        # Detect material type from description for correct consumables
-        desc_lower = str(job_description).lower()
-        if any(k in desc_lower for k in ("aluminum", "6061", "5052")):
-            detected_material = "aluminum_6061"
-        elif any(k in desc_lower for k in ("stainless", "304", "316")):
-            detected_material = "stainless_304"
+            # Use Opus labor hours if available (multiply by user's shop rate)
+            if opus_labor:
+                labor_processes = self._build_labor_from_opus(
+                    opus_labor, labor_processes, user,
+                )
         else:
-            detected_material = "mild_steel"
+            # Fallback path — existing behavior (no full package)
+            # --- Price hardware ---
+            raw_hardware = material_list.get("hardware", [])
+            priced_hardware = self.hardware_sourcer.price_hardware_list(raw_hardware)
 
-        consumables = self.hardware_sourcer.estimate_consumables(
-            weld_inches, total_sq_ft, finish_type,
-            material_type=detected_material,
-        )
+            # --- Electronics / specialty hardware ---
+            electronics = self.hardware_sourcer.estimate_electronics(job_description)
+            if electronics:
+                priced_hardware.extend(electronics)
 
-        # --- Opus BOM estimation (AI-driven hardware + consumables) ---
-        try:
-            opus_bom = self.hardware_sourcer.opus_estimate_bom(
-                job_description,
-                material_list.get("items", []),
-                detected_material,
-                job_type,
+            # --- Estimate consumables ---
+            weld_inches = material_list.get("weld_linear_inches", 0)
+            total_sq_ft = material_list.get("total_sq_ft", 0)
+            finish_type = finish_field  # Use same corrected finish for consumables
+
+            # Detect material type from description for correct consumables
+            desc_lower = str(job_description).lower()
+            if any(k in desc_lower for k in ("aluminum", "6061", "5052")):
+                detected_material = "aluminum_6061"
+            elif any(k in desc_lower for k in ("stainless", "304", "316")):
+                detected_material = "stainless_304"
+            else:
+                detected_material = "mild_steel"
+
+            consumables = self.hardware_sourcer.estimate_consumables(
+                weld_inches, total_sq_ft, finish_type,
+                material_type=detected_material,
             )
-            if opus_bom:
-                if opus_bom.get("hardware"):
-                    priced_hardware.extend(opus_bom["hardware"])
-                if opus_bom.get("consumables"):
-                    # Opus consumables REPLACE deterministic estimation
-                    consumables = opus_bom["consumables"]
-        except Exception:
-            pass  # Opus BOM failure never blocks quoting — fallback already populated
+
+            # --- Opus BOM estimation (AI-driven hardware + consumables) ---
+            try:
+                opus_bom = self.hardware_sourcer.opus_estimate_bom(
+                    job_description,
+                    material_list.get("items", []),
+                    detected_material,
+                    job_type,
+                )
+                if opus_bom:
+                    if opus_bom.get("hardware"):
+                        priced_hardware.extend(opus_bom["hardware"])
+                    if opus_bom.get("consumables"):
+                        # Opus consumables REPLACE deterministic estimation
+                        consumables = opus_bom["consumables"]
+            except Exception:
+                pass  # Opus BOM failure never blocks quoting — fallback already populated
 
         # --- BOM validation: orphan check against build instructions ---
         build_instructions = session_data.get("build_instructions", [])
@@ -155,7 +181,8 @@ class PricingEngine:
 
         # --- Calculate subtotals ---
         materials = material_list.get("items", [])
-        labor_processes = labor_estimate.get("processes", [])
+        if not opus_labor:
+            labor_processes = labor_estimate.get("processes", [])
 
         material_subtotal = self._calculate_material_subtotal(materials)
         hardware_subtotal = self._calculate_hardware_subtotal(priced_hardware)
@@ -293,6 +320,27 @@ class PricingEngine:
         """finishing.total — already computed by FinishingBuilder."""
         return round(finishing.get("total", 0), 2)
 
+    def _build_labor_from_opus(self, opus_labor, existing_processes, user):
+        """Convert Opus labor_hours dict to LaborProcess list."""
+        rate_inshop = user.get("rate_inshop", 125.00)
+        rate_onsite = user.get("rate_onsite", 145.00)
+        processes = []
+        for process_name, entry in opus_labor.items():
+            if isinstance(entry, dict):
+                h = round(float(entry.get("hours", 0)), 2)
+            else:
+                h = round(float(entry or 0), 2)
+            if h <= 0:
+                continue
+            rate = rate_onsite if process_name == "site_install" else rate_inshop
+            processes.append({
+                "process": process_name,
+                "hours": h,
+                "rate": rate,
+                "notes": "Opus full package estimate",
+            })
+        return processes if processes else existing_processes
+
     def _build_markup_options(self, subtotal: float) -> dict:
         """
         Returns: {"0": subtotal, "5": subtotal*1.05, ..., "30": subtotal*1.30}
@@ -348,6 +396,11 @@ class PricingEngine:
             if a not in assumptions:
                 assumptions.append(a)
 
+        # Opus assumptions from full package
+        for a in material_list.get("_opus_assumptions", []):
+            if a not in assumptions:
+                assumptions.append(a)
+
         # Flagged estimate
         if labor.get("flagged"):
             assumptions.append(f"FLAGGED: {labor.get('flag_reason', 'Variance detected')}")
@@ -389,6 +442,12 @@ class PricingEngine:
         if "repair" in job_type:
             exclusions.append("Additional damage discovered during disassembly")
             exclusions.append("Matching existing finish — exact color match not guaranteed")
+
+        # Opus exclusions from full package
+        material_list = session_data.get("material_list", {})
+        for e in material_list.get("_opus_exclusions", []):
+            if e not in exclusions:
+                exclusions.append(e)
 
         return exclusions
 

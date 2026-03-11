@@ -25,6 +25,14 @@ class CustomFabCalculator(BaseCalculator):
             "This estimate is based on approximate dimensions only.",
         ]
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package(
+                fields.get("_job_type", "custom_fab"), fields)
+            if package is not None:
+                return self._build_from_full_package(
+                    fields.get("_job_type", "custom_fab"), package, fields)
+
         # Try AI cut list when description exists
         if self._has_description(fields):
             ai_result = self._try_ai_cut_list(

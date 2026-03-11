@@ -410,3 +410,61 @@ class BaseCalculator(ABC):
             cut_list=cut_list_items,
             fields=fields,
         )
+
+    # --- Full package integration (one AI call for everything) ---
+
+    def _try_full_package(self, job_type: str, fields: dict):
+        """
+        Try to generate a full fabrication package from the user's description.
+        Returns parsed package dict or None on failure.
+        """
+        try:
+            from .ai_cut_list import AICutListGenerator
+            generator = AICutListGenerator()
+            return generator.generate_full_package(job_type, fields)
+        except Exception as e:
+            logger.warning("Full package failed for %s: %s", job_type, e)
+            return None
+
+    def _build_from_full_package(self, job_type: str, package: dict,
+                                  fields: dict) -> dict:
+        """
+        Build a MaterialList from a full Opus package.
+
+        Prices the cut list (same as _build_from_ai_cuts), then attaches
+        _opus_* keys so downstream stages can use Opus's hardware,
+        consumables, labor, and build instructions directly.
+        """
+        ai_cuts = package.get("cut_list", [])
+        assumptions = list(package.get("assumptions", []))
+
+        # Convert Opus hardware to HardwareItem format with pricing options
+        opus_hardware = []
+        for hw in package.get("hardware", []):
+            price = hw.get("estimated_price", 0)
+            opus_hardware.append(self.make_hardware_item(
+                description=hw.get("description", ""),
+                quantity=hw.get("quantity", 1),
+                options=[
+                    self.make_pricing_option("Estimated", price),
+                    self.make_pricing_option("Premium (Est.)", round(price * 1.2, 2)),
+                ],
+            ))
+
+        # Build material list using existing _build_from_ai_cuts
+        # Pass opus hardware so laser cutting gets appended to it
+        result = self._build_from_ai_cuts(
+            job_type, ai_cuts, fields, assumptions,
+            hardware=opus_hardware if opus_hardware else None,
+        )
+
+        # Attach _opus_* keys for downstream passthrough
+        result["_opus_hardware"] = opus_hardware
+        result["_opus_consumables"] = package.get("consumables", [])
+        result["_opus_labor_hours"] = package.get("labor_hours", {})
+        result["_opus_build_instructions"] = package.get("build_instructions")
+        result["_opus_finishing_method"] = package.get("finishing_method", "raw")
+        result["_opus_assumptions"] = package.get("assumptions", [])
+        result["_opus_exclusions"] = package.get("exclusions", [])
+
+        return result

@@ -60,6 +60,12 @@ class FurnitureTableCalculator(BaseCalculator):
             ),
         ]
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package("furniture_table", fields)
+            if package is not None:
+                return self._build_from_full_package("furniture_table", package, fields)
+
         # Try AI cut list when description exists
         if self._has_description(fields):
             ai_result = self._try_ai_cut_list("furniture_table", fields)

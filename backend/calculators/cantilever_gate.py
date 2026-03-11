@@ -163,6 +163,12 @@ class CantileverGateCalculator(BaseCalculator):
         post_size = fields.get("post_size", "4\" x 4\" square tube")
         fields["_post_profile_key"] = self._lookup_post(post_size)
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package("cantilever_gate", fields)
+            if package is not None:
+                return self._build_from_full_package("cantilever_gate", package, fields)
+
         # Try AI cut list for custom/complex designs
         if self._has_description(fields):
             ai_cuts = self._try_ai_cut_list("cantilever_gate", fields)

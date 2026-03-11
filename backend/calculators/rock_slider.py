@@ -26,6 +26,12 @@ class RockSliderCalculator(BaseCalculator):
             "Rock sliders are always quoted as a pair (driver + passenger side).",
         ]
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package("rock_slider", fields)
+            if package is not None:
+                return self._build_from_full_package("rock_slider", package, fields)
+
         # Try AI cut list for custom/complex designs
         if self._has_description(fields):
             ai_cuts = self._try_ai_cut_list("rock_slider", fields)

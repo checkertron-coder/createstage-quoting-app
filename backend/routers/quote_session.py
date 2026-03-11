@@ -519,6 +519,14 @@ def estimate_labor(
             detail="No material_list found in session. Run /calculate first.",
         )
 
+    # --- Full package shortcut ---
+    # If Opus full package provided labor + build + finishing in Stage 3,
+    # use them directly and skip the separate AI calls.
+    if material_list.get("_opus_labor_hours"):
+        return _estimate_from_opus_package(
+            session, current_params, material_list, current_user, db,
+        )
+
     # Build QuoteParams for the estimator
     quote_params = engine.get_quote_params(
         job_type=session.job_type,
@@ -1098,6 +1106,91 @@ def update_customer_info(
     return {
         "session_id": session_id,
         "customer": customer_data,
+    }
+
+
+def _estimate_from_opus_package(session, current_params, material_list, current_user, db):
+    """
+    Opus full package already provided labor, build instructions, and finishing.
+    Format into standard shapes and store in session — skip separate AI calls.
+    """
+    from ..finishing import FinishingBuilder
+    from sqlalchemy.orm.attributes import flag_modified
+
+    opus_labor = material_list.get("_opus_labor_hours", {})
+    opus_build = material_list.get("_opus_build_instructions")
+    opus_finishing = material_list.get("_opus_finishing_method", "raw")
+
+    rate_inshop = current_user.rate_inshop or 125.00
+    rate_onsite = current_user.rate_onsite or 145.00
+
+    processes = []
+    for proc_name, entry in opus_labor.items():
+        if isinstance(entry, dict):
+            h = round(float(entry.get("hours", 0)), 2)
+        else:
+            h = round(float(entry or 0), 2)
+        if h <= 0:
+            continue
+        rate = rate_onsite if proc_name == "site_install" else rate_inshop
+        processes.append({
+            "process": proc_name,
+            "hours": h,
+            "rate": rate,
+            "notes": "Opus full package estimate",
+        })
+
+    labor_estimate = {
+        "processes": processes,
+        "total_hours": round(sum(p["hours"] for p in processes), 2),
+        "flagged": False,
+        "flag_reason": None,
+    }
+    total_labor_hours = labor_estimate["total_hours"]
+    total_labor_cost = round(sum(p["hours"] * p["rate"] for p in processes), 2)
+
+    # Finishing from Opus method
+    fields = {k: v for k, v in current_params.items() if not k.startswith("_")}
+    finish_field = fields.get("finish", fields.get("finish_type", ""))
+    finish_method = opus_finishing or finish_field or "raw"
+    finishing_builder = FinishingBuilder()
+    finishing = finishing_builder.build(
+        finish_type=finish_method,
+        total_sq_ft=material_list.get("total_sq_ft", 0),
+        labor_processes=processes,
+    )
+
+    # Store in session
+    current_params["_labor_estimate"] = labor_estimate
+    current_params["_finishing"] = finishing
+    if opus_build:
+        current_params["_build_instructions"] = opus_build
+        current_params.pop("_build_instructions_error", None)
+    else:
+        current_params["_build_instructions_error"] = "not provided in full package"
+    current_params["_detailed_cut_list"] = material_list.get(
+        "cut_list", material_list.get("items", []))
+    session.params_json = current_params
+    session.stage = "price"
+    session.updated_at = datetime.utcnow()
+    flag_modified(session, "params_json")
+    db.commit()
+
+    logger.info(
+        "ESTIMATE (Opus full package): job_type=%s, %d processes, %.1f total hours",
+        session.job_type, len(processes), total_labor_hours,
+    )
+
+    return {
+        "session_id": session.id,
+        "labor_estimate": labor_estimate,
+        "finishing": finishing,
+        "total_labor_hours": total_labor_hours,
+        "total_labor_cost": total_labor_cost,
+        "build_instructions_status": (
+            "ok (%d steps)" % len(opus_build) if opus_build
+            else "not provided in full package"
+        ),
     }
 
 

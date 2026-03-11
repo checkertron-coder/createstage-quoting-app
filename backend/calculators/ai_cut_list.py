@@ -1159,3 +1159,327 @@ Return ONLY valid JSON — an array of step objects:
             validated.append(step)
 
         return validated if validated else None
+
+    # ------------------------------------------------------------------
+    # FULL PACKAGE — One call, everything Opus knows
+    # ------------------------------------------------------------------
+
+    def generate_full_package(self, job_type: str, fields: dict) -> Optional[Dict]:
+        """
+        Generate a complete fabrication package in ONE AI call.
+
+        Returns dict with: cut_list, build_instructions, hardware, consumables,
+        labor_hours, finishing_method, assumptions, exclusions.
+        Or None on any failure (caller falls back to existing code).
+        """
+        if not is_configured():
+            logger.info("No AI provider configured — skipping full package")
+            return None
+
+        try:
+            prompt = self._build_full_package_prompt(job_type, fields)
+            response_text = self._call_ai(prompt)
+            package = self._parse_full_package(response_text)
+            if package and package.get("cut_list"):
+                return package
+            logger.warning("Full package returned empty cut_list — falling back")
+            return None
+        except Exception as e:
+            logger.warning("Full package generation failed: %s — falling back", e)
+            return None
+
+    def _build_full_package_prompt(self, job_type: str, fields: dict) -> str:
+        """
+        Build ONE prompt that gets Opus to return the full fabrication package.
+
+        Reuses: profile list, field context, weld guidance, fab knowledge.
+        Adds: build instructions, hardware/consumables, labor hours, finishing.
+        """
+        # --- Reuse all the context builders from _build_prompt ---
+        field_lines = []
+        for key, val in fields.items():
+            if key.startswith("_") and not key.startswith("_ai_"):
+                continue
+            if val is not None and str(val).strip():
+                field_lines.append("  - %s: %s" % (key, val))
+        fields_text = "\n".join(field_lines) if field_lines else "  (no fields provided)"
+
+        all_fields_text = " ".join(str(v) for v in fields.values()).lower()
+
+        # TIG / material detection
+        tig_indicators = [
+            "ground smooth", "blended", "furniture finish", "show quality",
+            "visible welds", "tig", "glass top", "grind flush", "grind smooth",
+            "seamless", "showroom", "polished", "mirror finish",
+            "stainless", "aluminum", "chrome", "brushed finish",
+        ]
+        needs_tig = any(ind in all_fields_text for ind in tig_indicators)
+        is_stainless = "stainless" in all_fields_text or "304" in all_fields_text or "316" in all_fields_text
+        is_aluminum = "aluminum" in all_fields_text or "6061" in all_fields_text
+
+        weld_guidance = self._build_weld_guidance(needs_tig, is_stainless, is_aluminum)
+        profiles_text = self._get_profiles_for_job_type(job_type)
+
+        if is_aluminum:
+            al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
+                         "al_angle", "al_round_tube", "al_sheet"]
+            for ag in al_groups:
+                line = _PROFILE_GROUPS.get(ag)
+                if line and line not in profiles_text:
+                    profiles_text += "\n" + line
+
+        # Fab knowledge injection
+        finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
+        description = str(fields.get("description", "") or "")
+        from .fab_knowledge import get_relevant_knowledge
+        knowledge_snippet = get_relevant_knowledge(
+            job_type, finish_type, is_stainless, description=description)
+        knowledge_block = ""
+        if knowledge_snippet:
+            knowledge_block = "\nSHOP KNOWLEDGE BASE:\n%s\n---\n" % knowledge_snippet
+
+        context_blocks = self._build_field_context(job_type, fields)
+
+        material_context = ""
+        if is_aluminum:
+            material_context = (
+                "\nMATERIAL CONTEXT — ALUMINUM:\n"
+                "Use al_* profile keys. Set material_type to \"aluminum_6061\". "
+                "Weld process: \"tig\" for all joints.\n"
+            )
+
+        prompt = """You are an expert metal fabricator. Given a job description and project details, generate a COMPLETE fabrication package: cut list, build instructions, hardware, consumables, labor hours, and finishing recommendation.
+
+Think through this like you're planning the entire job from raw material to delivery.
+
+JOB TYPE: %s
+%s%s
+PROJECT INFO:
+%s
+%s
+WELD PROCESS GUIDANCE:
+%s
+
+AVAILABLE PROFILES (use ONLY these for cut list items):
+%s
+
+MATERIAL TYPES: square_tubing, round_tubing, flat_bar, angle_iron, channel, pipe, plate, mild_steel, stainless_304, aluminum_6061, dom_tubing
+
+CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
+
+SHEET/PLATE RULES:
+For sheet/plate items include: width_inches, sheet_stock_size ([W,H] from standard sizes: [48,96], [48,120], [48,144], [60,120], [60,144]), sheets_needed.
+
+LABOR PROCESSES (use these exact names):
+layout_setup, cut_prep, fit_tack, full_weld, grind_clean, finish_prep, clearcoat, paint, hardware_install, site_install, final_inspection
+
+Return ONLY valid JSON matching this structure:
+{
+    "cut_list": [
+        {
+            "description": "Part description",
+            "piece_name": "part_id",
+            "group": "group_name",
+            "material_type": "mild_steel",
+            "profile": "sq_tube_2x2_11ga",
+            "length_inches": 30.0,
+            "width_inches": 0,
+            "quantity": 4,
+            "cut_type": "square",
+            "cut_angle": 90.0,
+            "weld_process": "mig",
+            "weld_type": "fillet",
+            "sheet_stock_size": null,
+            "sheets_needed": 0,
+            "notes": "Brief fabrication note"
+        }
+    ],
+    "build_instructions": [
+        {
+            "step": 1,
+            "title": "Step title",
+            "description": "Detailed actionable instruction for a journeyman fabricator",
+            "tools": ["tool1", "tool2"],
+            "duration_minutes": 30,
+            "safety_notes": "Safety note"
+        }
+    ],
+    "hardware": [
+        {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
+    ],
+    "consumables": [
+        {"description": "Item name", "quantity": 1, "unit_price": 5.00}
+    ],
+    "labor_hours": {
+        "layout_setup": {"hours": 1.0, "notes": "reason"},
+        "cut_prep": {"hours": 1.0, "notes": "reason"},
+        "fit_tack": {"hours": 1.0, "notes": "reason"},
+        "full_weld": {"hours": 1.0, "notes": "reason"},
+        "grind_clean": {"hours": 0.5, "notes": "reason"},
+        "finish_prep": {"hours": 0.5, "notes": "reason"},
+        "clearcoat": {"hours": 0.0, "notes": "reason"},
+        "paint": {"hours": 0.0, "notes": "reason"},
+        "hardware_install": {"hours": 0.5, "notes": "reason"},
+        "site_install": {"hours": 0.0, "notes": "reason or N/A"},
+        "final_inspection": {"hours": 0.25, "notes": "reason"}
+    },
+    "finishing_method": "paint",
+    "assumptions": ["assumption 1"],
+    "exclusions": ["exclusion 1"]
+}""" % (job_type, knowledge_block, material_context, fields_text,
+        context_blocks, weld_guidance, profiles_text)
+
+        return prompt
+
+    # 11 canonical labor processes
+    _CANONICAL_PROCESSES = (
+        "layout_setup", "cut_prep", "fit_tack", "full_weld",
+        "grind_clean", "finish_prep", "clearcoat", "paint",
+        "hardware_install", "site_install", "final_inspection",
+    )
+
+    # Valid finishing methods
+    _VALID_FINISHING = (
+        "raw", "clearcoat", "paint", "powder_coat", "galvanized",
+        "brushed", "anodized", "ceramic", "patina",
+    )
+
+    def _parse_full_package(self, response_text: str) -> Optional[Dict]:
+        """
+        Parse full package AI response. Returns dict or None.
+
+        Required: cut_list (non-empty).
+        Optional but expected: build_instructions, hardware, consumables,
+        labor_hours, finishing_method, assumptions, exclusions.
+        """
+        if not response_text:
+            return None
+
+        # Strip markdown code fences
+        cleaned = response_text.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            if lines[-1].strip() == "```":
+                lines = lines[1:-1]
+            else:
+                lines = lines[1:]
+            cleaned = "\n".join(lines)
+
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError:
+            match = re.search(r'\{[\s\S]*\}', cleaned)
+            if not match:
+                logger.warning("Full package parse: no JSON object found")
+                return None
+            try:
+                data = json.loads(match.group())
+            except json.JSONDecodeError:
+                logger.warning("Full package parse: extracted JSON failed to parse")
+                return None
+
+        if not isinstance(data, dict):
+            logger.warning("Full package parse: response is not a dict")
+            return None
+
+        # --- Cut list (required) ---
+        raw_cuts = data.get("cut_list", [])
+        if not isinstance(raw_cuts, list) or len(raw_cuts) == 0:
+            logger.warning("Full package: missing or empty cut_list")
+            return None
+
+        # Reuse existing cut list parser
+        cut_list = self._parse_response(json.dumps(raw_cuts))
+        if not cut_list:
+            return None
+
+        # --- Build instructions (optional) ---
+        raw_instructions = data.get("build_instructions", [])
+        build_instructions = None
+        if isinstance(raw_instructions, list) and raw_instructions:
+            build_instructions = self._parse_instructions_response(
+                json.dumps(raw_instructions))
+            if build_instructions:
+                _strip_banned_terms_from_steps(build_instructions)
+
+        # --- Hardware (optional) ---
+        raw_hw = data.get("hardware", [])
+        hardware = []
+        if isinstance(raw_hw, list):
+            for item in raw_hw:
+                if not isinstance(item, dict):
+                    continue
+                desc = str(item.get("description", ""))
+                if not desc:
+                    continue
+                qty = max(int(item.get("quantity", 1)), 1)
+                price = float(item.get("estimated_price", item.get("price", 0)))
+                hardware.append({
+                    "description": desc,
+                    "quantity": qty,
+                    "estimated_price": round(price, 2),
+                })
+
+        # --- Consumables (optional) ---
+        raw_cons = data.get("consumables", [])
+        consumables = []
+        if isinstance(raw_cons, list):
+            for item in raw_cons:
+                if not isinstance(item, dict):
+                    continue
+                desc = str(item.get("description", ""))
+                if not desc:
+                    continue
+                qty = max(float(item.get("quantity", 1)), 0.1)
+                unit_price = float(item.get("unit_price", item.get("price", 0)))
+                consumables.append({
+                    "description": desc,
+                    "quantity": qty,
+                    "unit_price": round(unit_price, 2),
+                    "line_total": round(qty * unit_price, 2),
+                    "category": "consumable",
+                })
+
+        # --- Labor hours (optional) ---
+        raw_labor = data.get("labor_hours", {})
+        labor_hours = {}
+        if isinstance(raw_labor, dict):
+            for process in self._CANONICAL_PROCESSES:
+                entry = raw_labor.get(process, {})
+                if isinstance(entry, dict):
+                    hours = max(float(entry.get("hours", 0)), 0)
+                    notes = str(entry.get("notes", ""))
+                elif isinstance(entry, (int, float)):
+                    hours = max(float(entry), 0)
+                    notes = ""
+                else:
+                    hours = 0.0
+                    notes = ""
+                labor_hours[process] = {"hours": round(hours, 2), "notes": notes}
+
+        # --- Finishing method (optional) ---
+        finishing_method = str(data.get("finishing_method", "raw")).lower().strip()
+        if finishing_method not in self._VALID_FINISHING:
+            finishing_method = "raw"
+
+        # --- Assumptions and exclusions (optional) ---
+        assumptions = data.get("assumptions", [])
+        if not isinstance(assumptions, list):
+            assumptions = []
+        assumptions = [str(a) for a in assumptions if a]
+
+        exclusions = data.get("exclusions", [])
+        if not isinstance(exclusions, list):
+            exclusions = []
+        exclusions = [str(e) for e in exclusions if e]
+
+        return {
+            "cut_list": cut_list,
+            "build_instructions": build_instructions,
+            "hardware": hardware,
+            "consumables": consumables,
+            "labor_hours": labor_hours,
+            "finishing_method": finishing_method,
+            "assumptions": assumptions,
+            "exclusions": exclusions,
+        }

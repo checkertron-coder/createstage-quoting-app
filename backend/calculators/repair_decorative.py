@@ -36,6 +36,12 @@ class RepairDecorativeCalculator(BaseCalculator):
             "Repair estimates are approximate — actual scope may change upon inspection.",
         ]
 
+        # Try full Opus package first (cut list + build + hardware + labor)
+        if self._has_description(fields):
+            package = self._try_full_package("repair_decorative", fields)
+            if package is not None:
+                return self._build_from_full_package("repair_decorative", package, fields)
+
         # Try AI cut list when description exists
         if self._has_description(fields):
             ai_result = self._try_ai_cut_list("repair_decorative", fields)
