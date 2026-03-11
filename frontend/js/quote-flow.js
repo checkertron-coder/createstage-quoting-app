@@ -654,7 +654,7 @@ const QuoteFlow = {
                             if (isArea && isSheet && s.sheet_size) {
                                 const sw = s.sheet_size[0] / 12, sh = s.sheet_size[1] / 12;
                                 const sheets = s.sheets_needed || s.piece_count || 0;
-                                totalCol = sheets + ' x';
+                                totalCol = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sheets}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustSheetQty(${idx}, parseInt(this.value))"> x`;
                                 sticksInput = sw + "'×" + sh + "'" + (s.seaming_required ? ' ⚠️SEAM' : '');
                             } else if (isArea) {
                                 totalCol = (s.piece_count || 0) + ' pcs';
@@ -1037,6 +1037,28 @@ const QuoteFlow = {
 
         this._recalcTotals();
         this._debouncedAdjust('material', { [idx]: newSticks });
+    },
+
+    adjustSheetQty(idx, newSheets) {
+        if (!this.pricedQuote || isNaN(newSheets) || newSheets < 1) return;
+        const pq = this.pricedQuote;
+        const summary = pq.materials_summary || [];
+        const steelRows = summary.filter(s => !s.is_concrete);
+        const item = steelRows[idx];
+        if (!item) return;
+
+        const oldSheets = item.sheets_needed || item.piece_count || 1;
+        item.sheets_needed = newSheets;
+        const ratio = newSheets / oldSheets;
+        item.total_cost = Math.round((item.total_cost || 0) * ratio * 100) / 100;
+
+        // Recalculate material subtotal
+        pq.material_subtotal = Math.round(
+            summary.reduce((s, m) => s + (m.total_cost || 0), 0) * 100
+        ) / 100;
+
+        this._recalcTotals();
+        this._debouncedAdjust('material', { [idx]: newSheets });
     },
 
     adjustConsumableQty(idx, newQty) {
