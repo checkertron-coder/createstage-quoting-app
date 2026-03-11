@@ -1,89 +1,96 @@
-# PROMPT-46: Real Sheet Sizing — Stop Hallucinating Dimensions
+# PROMPT-46: Trust Opus on Sheets — Remove Broken Aggregation
 
 ## Context
-The quoting app has no concept of real sheet sizes. Sheets are sold as 4'×8' (48×96"), 4'×10' (48×120"), or 5'×10' (60×120"). Our system:
-1. AI cut list generates sheet pieces with `length_inches` but NO WIDTH — can't determine which sheet to buy
-2. `_aggregate_materials()` returns `stock_length_ft: 0` for all sheets (knowledge/materials.py `get_stock_length` returns `None`)
-3. PDF generator can't display sheet sizes because `stk_len` is always 0
-4. LED sign calculator divides by 32 sqft (assumes 4×8) even when pieces are 138" long (won't fit on ANY 4×8)
-5. Laser perimeter is hallucinated by AI — not calculated from actual piece geometry
+Our Python `_aggregate_materials()` is BREAKING Opus's output for sheet/plate items. It:
+- Returns `stock_length_ft: 0` for all sheets (can't display sizes)
+- Divides by 32 sqft (hardcoded 4×8 assumption) regardless of actual piece dimensions
+- Results in a smaller sign costing MORE than a bigger sign — completely backwards
 
-The result: a 24×120" sign costs MORE than a 28×138" sign. Completely backwards.
+**The fix is NOT more Python math. The fix is letting Opus tell us what to order.**
+
+Opus already knows standard sheet sizes (48×96, 48×120, 48×144, 60×120, 60×144). Opus already knows a 28×138" panel needs a 4'×12' sheet. We just never asked it to output that information, then our dumb Python mangled the numbers.
 
 ## Spec (Nate B. Jones 5 Primitives)
 
 ### 1. Inputs
-- AI cut list items with `profile` containing "sheet" or "plate"
-- Each sheet piece has `length_inches` (existing) and needs `width_inches` (NEW)
-- Standard sheet sizes (steel AND aluminum): `[(48, 96), (48, 120), (48, 144), (60, 120), (60, 144)]` — 4'×8', 4'×10', 4'×12', 5'×10', 5'×12'
+- AI cut list response from Opus (already works)
+- New fields Opus will output for sheet/plate items: `sheet_stock_size`, `sheets_needed`, `width_inches`
 
 ### 2. Outputs
-- Each sheet material line in `materials_summary` must show:
-  - `sheet_size`: tuple like `(48, 120)` — the actual stock sheet to order
-  - `sheets_needed`: integer — how many of that stock sheet
-  - `stock_length_ft` populated (e.g., 10 for 4'×10') so PDF display works
-- Cut list display shows piece dimensions (W×L) not just length
-- `SEAMING_REQUIRED` flag when largest piece exceeds all standard sheet sizes
-- Laser perimeter calculated from actual piece dimensions, NOT hallucinated
+- Materials summary shows REAL sheet sizes from Opus (e.g., "2 × 4'×12'")
+- Sheet cost based on Opus's sheet count × price per sheet
+- Seaming flag when Opus says a piece exceeds all standard sheets
+- Laser perimeter calculated from `width_inches × length_inches` geometry — NOT hallucinated separately
 
 ### 3. Behavior
-- For each sheet/plate profile group, find the LARGEST piece (max of width, length)
-- Select the SMALLEST standard sheet that fits: both piece dimensions must fit within sheet dimensions (pieces can be rotated)
-- Count sheets needed by simple nesting: how many pieces fit on one sheet, divide total pieces
-- If NO standard sheet fits the largest piece → set `seaming_required: True` and use the largest available sheet + flag it
-- Laser perimeter for rectangular pieces = `2 × (width + length) × quantity` — deterministic, not AI-guessed
-- For letter cutouts in signs: AI still estimates letter perimeter, but box perimeter is calculated
 
-### 4. Constraints
-- DO NOT change the AI cut list prompt to ask for "nesting" — just add `width_inches` to the output schema
-- DO NOT create a complex 2D nesting algorithm — simple "how many fit" is fine for quoting
-- DO NOT break existing non-sheet materials (tubes, bars, angles) — they keep working as-is
-- ALL existing tests must pass
-- The `_fmt_sheet_dims` function in pdf_generator.py must use real sheet sizes, not the broken threshold logic
-
-### 5. Acceptance Criteria
-- [ ] AI cut list prompt schema includes `width_inches` for all items (sheet items MUST populate it; non-sheet can be 0 or omitted)
-- [ ] `_build_from_ai_cuts` in `base.py` tracks `width_inches` on sheet/plate items and passes it through to material items
-- [ ] New function `select_sheet_size(pieces)` in `knowledge/materials.py`:
-  - Input: list of `(width_in, length_in, qty)` tuples for one profile
-  - Output: `{"sheet_size": (W, H), "sheets_needed": int, "seaming_required": bool}`
-  - Logic: find smallest standard sheet where both dimensions fit (allow rotation), calculate count
-- [ ] `_aggregate_materials` in `pricing_engine.py` calls `select_sheet_size` for sheet/plate groups and populates `stock_length_ft`, `sheet_size`, `sheets_needed`, `seaming_required`
-- [ ] `_fmt_sheet_dims` in `pdf_generator.py` replaced with real sheet size display: shows "2 × 4'×10'" or "1 × 5'×10' ⚠️SEAM" etc.
-- [ ] Sheet material cost based on actual sheet count × price per sheet (from sqft price × sheet sqft), not abstract area division
-- [ ] Laser perimeter for box/panel pieces calculated as `2*(W+L)*qty` in `_build_from_ai_cuts`, stored as `laser_perimeter_inches` on the material item — used by laser cost calculation instead of AI-hallucinated perimeter
-- [ ] Running the same LED sign at 24×120" vs 28×138" produces: smaller sign costs LESS in materials (not more)
-- [ ] Materials table in PDF/UI shows actual sheet size (e.g., "al sheet 0.125 | 1 pcs | 5'×10' | ...")
-- [ ] All existing tests pass
-
-## Files to Modify
-1. **`backend/calculators/ai_cut_list.py`** — Add `width_inches` to cut list prompt schema and JSON output format. Add to validation in `_parse_response`.
-2. **`backend/calculators/base.py`** `_build_from_ai_cuts` — Track `width_inches` on items. Calculate laser perimeter for sheet items deterministically. Pass dimensions through to material items.
-3. **`backend/knowledge/materials.py`** — Add `STANDARD_SHEET_SIZES` constant and `select_sheet_size()` function.
-4. **`backend/pricing_engine.py`** `_aggregate_materials` — For sheet/plate groups, call `select_sheet_size`, populate `sheet_size`, `sheets_needed`, `stock_length_ft`, `seaming_required`.
-5. **`backend/pdf_generator.py`** — Replace `_fmt_sheet_dims` with real sheet size display. Handle `seaming_required` flag with warning icon.
-
-## Standard Sheet Sizes Reference
-```python
-STANDARD_SHEET_SIZES = [
-    (48, 96),    # 4'×8' (most common)
-    (48, 120),   # 4'×10'
-    (48, 144),   # 4'×12'
-    (60, 120),   # 5'×10'
-    (60, 144),   # 5'×12'
-]
+**A. Modify AI cut list prompt** (`ai_cut_list.py` `_build_prompt`):
+Add to the prompt schema and rules:
+```
+For sheet/plate items, you MUST also include:
+- "width_inches": the WIDTH of the piece (not just length)
+- "sheet_stock_size": [W, H] — the standard sheet to order from. Options: [48,96], [48,120], [48,144], [60,120], [60,144]
+  Pick the SMALLEST standard sheet where BOTH piece dimensions fit (piece can be rotated).
+  If NO standard sheet fits, use the largest [60,144] and set "seaming_required": true
+- "sheets_needed": how many of that stock sheet this piece requires (usually 1 per piece, but if cutting multiple small pieces from one sheet, group them)
 ```
 
-## Example
-A 28×138" LED sign box needs:
-- Face panel: 28" × 138" → fits on 48×144" (4'×12') ✓
-- Back panel: 28" × 138" → fits on 48×144" ✓
-- Side strips: 6" × 138" → fits on 48×144" ✓
-- End caps: 6" × 28" → fits on ANY standard sheet
+Add `width_inches` to the JSON example for a sheet item.
 
-A 24×120" LED sign box needs:
-- Face panel: 24" × 120" → fits on 48×120" (4'×10') ✓
-- Back panel: 24" × 120" → fits on 48×120" ✓
-- Side strips: 6" × 120" → fits on 48×120" ✓
+**B. Pass through Opus's sheet data** (`base.py` `_build_from_ai_cuts`):
+- For sheet/plate items, read `width_inches`, `sheet_stock_size`, `sheets_needed`, `seaming_required` from the AI response
+- Store these on the material item dict (pass through, don't recalculate)
+- Calculate laser perimeter deterministically: `2 * (width_inches + length_inches) * quantity` for box/panel pieces. Store as `laser_perimeter_inches`.
+- Use `laser_perimeter_inches` for laser cost calculation INSTEAD of the current `sheet_perim_inches += length_in * qty * 2` hack
 
-Result: 28×138" costs MORE (seaming + more material). 24×120" costs LESS (standard sheets, no seaming). **This is correct.**
+**C. Fix `_aggregate_materials`** (`pricing_engine.py`):
+- For sheet/plate profile groups: read the `sheet_stock_size` and `sheets_needed` from the material items (Opus's data)
+- Set `stock_length_ft` = sheet length / 12 (so PDF display works)
+- Add `sheet_size`, `sheets_needed`, `seaming_required` to the aggregated result
+- DO NOT calculate sheet count from sqft/32 anymore — use Opus's number
+- For cost: `sheets_needed × sheet_sqft × price_per_sqft`
+
+**D. Fix PDF display** (`pdf_generator.py`):
+- Replace `_fmt_sheet_dims()` with logic that reads `sheet_size` from the material summary
+- Display as: "2 × 4'×12'" or "1 × 5'×10'" or "3 × 4'×8' ⚠️SEAM"
+- For `is_area_sold` items WITH `sheet_size`: show `sheets_needed × WxH`
+- For `is_area_sold` items WITHOUT `sheet_size` (legacy/fallback): show `"N pcs"` as before
+
+**E. Validation** (`ai_cut_list.py` `_parse_response`):
+- Add `width_inches` to parsed fields (default 0 for non-sheet items)
+- Add `sheet_stock_size` (default None), `sheets_needed` (default 1), `seaming_required` (default False)
+- Validate `sheet_stock_size` is one of the 5 valid options if present
+
+### 4. Constraints
+- DO NOT build a 2D nesting algorithm — Opus handles this
+- DO NOT add new Python calculators for sheet math — we're REMOVING calculation, not adding
+- DO NOT change behavior for non-sheet materials (tubes, bars, angles)
+- ALL existing tests must pass
+- If Opus omits sheet fields (older cached responses or test data), fall back to current behavior gracefully
+
+### 5. Acceptance Criteria
+- [ ] AI cut list prompt includes `width_inches`, `sheet_stock_size`, `sheets_needed` in schema for sheet items
+- [ ] `_parse_response` reads and validates new sheet fields
+- [ ] `_build_from_ai_cuts` passes through sheet data and calculates deterministic laser perimeter
+- [ ] `_aggregate_materials` uses Opus's sheet data instead of sqft/32 math
+- [ ] PDF shows real sheet sizes (e.g., "2 × 4'×10'")
+- [ ] Seaming flagged when `seaming_required: true`
+- [ ] Same LED sign at 24×120" costs LESS than at 28×138" (sanity check)
+- [ ] Laser cost uses geometric perimeter, not AI-hallucinated number
+- [ ] All existing tests pass
+- [ ] Non-sheet materials unchanged
+
+## Files to Modify
+1. **`backend/calculators/ai_cut_list.py`** — Prompt schema + `_parse_response` validation
+2. **`backend/calculators/base.py`** — `_build_from_ai_cuts` pass-through + deterministic laser perimeter
+3. **`backend/pricing_engine.py`** — `_aggregate_materials` uses Opus's sheet data
+4. **`backend/pdf_generator.py`** — Real sheet size display
+
+## Standard Sheet Sizes (for the prompt)
+```
+[48, 96]   = 4'×8'
+[48, 120]  = 4'×10'
+[48, 144]  = 4'×12'
+[60, 120]  = 5'×10'
+[60, 144]  = 5'×12'
+```
