@@ -80,8 +80,12 @@ Add `width_inches` to the JSON example for a sheet item.
 - [ ] All existing tests pass
 - [ ] Non-sheet materials unchanged
 
+**F. Fix BOM↔Build mirror rule** (`ai_cut_list.py` `_build_instructions_prompt`):
+- Add to the build instructions prompt rules: "Every hardware item in the BOM must be referenced in at least one build step. If a bolt is in the BOM, there must be a step that installs it. If a nut is in the BOM, the same step must reference it. Hardware without a matching build step will be flagged and removed."
+- This makes Opus generate complete build sequences that reference ALL hardware, so the BOM validator stops orphaning valid items.
+
 ## Files to Modify
-1. **`backend/calculators/ai_cut_list.py`** — Prompt schema + `_parse_response` validation
+1. **`backend/calculators/ai_cut_list.py`** — Prompt schema + `_parse_response` validation + build instructions mirror rule
 2. **`backend/calculators/base.py`** — `_build_from_ai_cuts` pass-through + deterministic laser perimeter
 3. **`backend/pricing_engine.py`** — `_aggregate_materials` uses Opus's sheet data
 4. **`backend/pdf_generator.py`** — Real sheet size display
