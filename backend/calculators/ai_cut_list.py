@@ -779,6 +779,75 @@ Return ONLY valid JSON — an array of objects:
 
         return "\n".join(lines)
 
+    # Field names that indicate user-specified gauge/thickness
+    _GAUGE_FIELD_NAMES = (
+        "material_gauge", "frame_gauge", "material_thickness",
+        "tube_wall_thickness", "top_thickness", "gauge", "thickness",
+        "expanded_metal_gauge", "sheet_thickness",
+    )
+
+    # Common gauge descriptions → decimal inches
+    _GAUGE_MAP = {
+        "7 gauge": ".187", "7ga": ".187",
+        "10 gauge": ".134", "10ga": ".134",
+        "11 gauge": ".120", "11ga": ".120",
+        "12 gauge": ".105", "12ga": ".105",
+        "14 gauge": ".075", "14ga": ".075",
+        "16 gauge": ".063", "16ga": ".063",
+        "18 gauge": ".048", "18ga": ".048",
+        "20 gauge": ".036", "20ga": ".036",
+    }
+
+    def _detect_gauge_constraint(self, fields):
+        # type: (dict) -> str
+        """
+        Scan fields and description for user-specified gauge/thickness.
+        Returns a HARD CONSTRAINT block if found, empty string otherwise.
+        """
+        gauge_value = None
+
+        # Check explicit gauge/thickness fields
+        for field_name in self._GAUGE_FIELD_NAMES:
+            val = fields.get(field_name)
+            if val and str(val).strip():
+                gauge_value = str(val).strip()
+                break
+
+        # If no explicit field, scan description for gauge patterns
+        if not gauge_value:
+            desc = str(fields.get("description", "") or "").lower()
+            # Match decimal thickness like .125, 0.125, .063
+            m = re.search(r"(?:^|[\s(])(\.\d{2,3})(?:[\"\s']|[\s-]?(?:inch|thick|gauge|aluminum|steel|sheet|plate))", desc)
+            if m:
+                gauge_value = m.group(1)
+            else:
+                # Match fraction like 1/8", 3/16", 1/4"
+                m = re.search(r'(\d/\d{1,2})\s*["\']?\s*(?:thick|sheet|plate|aluminum|steel)?', desc)
+                if m:
+                    frac = m.group(1)
+                    # Convert common fractions
+                    frac_map = {"1/8": ".125", "3/16": ".1875", "1/4": ".250",
+                                "1/16": ".063", "3/8": ".375", "1/2": ".500"}
+                    gauge_value = frac_map.get(frac, frac + '"')
+                else:
+                    # Match named gauges like "11 gauge", "14ga"
+                    for name, decimal in self._GAUGE_MAP.items():
+                        if name in desc:
+                            gauge_value = "%s (%s\")" % (name, decimal)
+                            break
+
+        if not gauge_value:
+            return ""
+
+        return (
+            "\nMATERIAL GAUGE (HARD CONSTRAINT — DO NOT OVERRIDE):\n"
+            "User specified: %s.\n"
+            "ALL sheet, plate, and panel items MUST use this gauge/thickness.\n"
+            "Do NOT suggest thinner or thicker material for ANY part of this build.\n"
+            "Every sheet/plate component uses the user's specified thickness — no exceptions.\n"
+            % gauge_value
+        )
+
     def _get_profiles_for_job_type(self, job_type: str) -> str:
         """Return only the profile lines relevant to a job type."""
         groups = _JOB_TYPE_PROFILES.get(job_type, _ALL_PROFILE_GROUPS)
@@ -1248,6 +1317,13 @@ Return ONLY valid JSON — an array of step objects:
                 "Weld process: \"tig\" for all joints.\n"
             )
 
+        # --- Gauge / thickness constraint ---
+        gauge_constraint = self._detect_gauge_constraint(fields)
+
+        # --- Labor calibration from shop owner benchmarks ---
+        from .labor_calculator import LABOR_CALIBRATION_NOTES
+        labor_calibration = LABOR_CALIBRATION_NOTES
+
         prompt = """You are an expert metal fabricator. Given a job description and project details, generate a COMPLETE fabrication package: cut list, build instructions, hardware, consumables, labor hours, and finishing recommendation.
 
 Think through this like you're planning the entire job from raw material to delivery.
@@ -1259,7 +1335,7 @@ PROJECT INFO:
 %s
 WELD PROCESS GUIDANCE:
 %s
-
+%s
 AVAILABLE PROFILES (use ONLY these for cut list items):
 %s
 
@@ -1269,6 +1345,18 @@ CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
 
 SHEET/PLATE RULES:
 For sheet/plate items include: width_inches, sheet_stock_size ([W,H] from standard sizes: [48,96], [48,120], [48,144], [60,120], [60,144]), sheets_needed.
+
+LABOR HOUR ESTIMATION RULES:
+- TIG welding (aluminum, stainless) is 2.5-3x slower per inch than MIG (mild steel).
+- Outdoor painted steel: grind is cleanup pass, not full furniture-grade grinding.
+- Bare metal finish (clear coat, brushed): requires mill scale removal — significant grind time.
+- Ground smooth / blended joints: grind time can equal or exceed weld time.
+- Batch cutting: identical pieces share setup — one stop setting, then feed-and-cut.
+- If powder_coat or galvanized: clearcoat and paint = 0 (outsourced).
+- If raw finish: finish_prep = minimal (1.0 hr cleanup), clearcoat/paint = 0.
+- When in doubt, estimate LOWER — shop owner consistently reports AI overestimates.
+
+%s
 
 LABOR PROCESSES (use these exact names):
 layout_setup, cut_prep, fit_tack, full_weld, grind_clean, finish_prep, clearcoat, paint, hardware_install, site_install, final_inspection
@@ -1327,7 +1415,8 @@ Return ONLY valid JSON matching this structure:
     "assumptions": ["assumption 1"],
     "exclusions": ["exclusion 1"]
 }""" % (job_type, knowledge_block, material_context, fields_text,
-        context_blocks, weld_guidance, profiles_text)
+        context_blocks, weld_guidance, gauge_constraint,
+        profiles_text, labor_calibration)
 
         return prompt
 

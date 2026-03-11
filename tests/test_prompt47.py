@@ -532,3 +532,59 @@ def test_canonical_processes_match_between_modules():
     })
     for proc in ai_procs:
         assert proc in prompt, "Process '%s' missing from full package prompt" % proc
+
+
+# ---------------------------------------------------------------------------
+# 10. Gauge constraint injection
+# ---------------------------------------------------------------------------
+
+def test_gauge_constraint_from_field():
+    """When fields have material_gauge, prompt must contain HARD CONSTRAINT."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("led_sign_custom", {
+        "description": "138x28 aluminum LED sign cabinet",
+        "material": "Aluminum (6061-T6)",
+        "material_gauge": ".125",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert ".125" in prompt
+    assert "DO NOT OVERRIDE" in prompt
+
+
+def test_gauge_constraint_from_description():
+    """When description mentions a gauge, prompt must contain HARD CONSTRAINT."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("led_sign_custom", {
+        "description": "138x28 aluminum LED sign cabinet, .125 aluminum sheet",
+        "material": "Aluminum (6061-T6)",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert ".125" in prompt
+
+
+def test_no_gauge_constraint_when_not_specified():
+    """Without gauge info, no constraint block should appear."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("bollard", {
+        "description": "4 steel bollards 42 inches tall",
+    })
+    assert "MATERIAL GAUGE (HARD CONSTRAINT" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# 11. Labor calibration in full package prompt
+# ---------------------------------------------------------------------------
+
+def test_full_package_prompt_has_labor_calibration():
+    """Full package prompt must include shop owner calibration benchmarks."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("swing_gate", {
+        "description": "6ft swing gate",
+    })
+    assert "LABOR CALIBRATION" in prompt
+    assert "BENCHMARK" in prompt
+    assert "estimate LOWER" in prompt
