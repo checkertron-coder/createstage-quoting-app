@@ -57,6 +57,7 @@ class TestConditionalRequiredFields:
         answered = {
             "clear_width": "12",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Pickets (vertical bars)",
@@ -74,6 +75,7 @@ class TestConditionalRequiredFields:
         answered = {
             "clear_width": "12",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Expanded metal",
@@ -91,6 +93,7 @@ class TestConditionalRequiredFields:
         answered = {
             "clear_width": "12",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Expanded metal",
@@ -109,6 +112,7 @@ class TestConditionalRequiredFields:
         answered = {
             "clear_width": "12",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Pickets (vertical bars)",

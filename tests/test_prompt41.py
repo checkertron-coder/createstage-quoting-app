@@ -46,52 +46,50 @@ def test_labor_calibration_mentions_picket_time():
 
 
 def test_material_question_fires_when_missing(client, auth_headers):
-    """When description does not mention material, a material question is injected."""
+    """When description does not mention material, material_type question appears from tree."""
     resp = client.post("/api/session/start", json={
         "description": "Build a 6-foot fence with pickets",
     }, headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     questions = data.get("next_questions", [])
-    # Find the material question
-    material_q = [q for q in questions if q.get("id") == "material"]
-    assert len(material_q) == 1, "Material question should be injected when not in description"
+    # material_type is now a tree question (not dynamically injected)
+    material_q = [q for q in questions if q.get("id") in ("material_type", "material")]
+    assert len(material_q) >= 1, "Material question should appear from question tree"
     assert material_q[0]["required"] is True
-    # `source` is stripped by _serialize_questions — verify via presence + required
-    # Has multiple options including aluminum and steel
     options = material_q[0].get("options", [])
     assert any("steel" in o.lower() for o in options)
-    assert any("aluminum" in o.lower() or "6061" in o.lower() for o in options)
+    assert any("aluminum" in o.lower() for o in options)
 
 
 def test_material_question_skipped_when_mentioned(client, auth_headers):
-    """When description explicitly mentions steel, material question may be skipped."""
+    """When description explicitly mentions steel, material question still appears in tree."""
     resp = client.post("/api/session/start", json={
         "description": "Build a mild steel cantilever gate, 12 feet wide, 6 feet tall",
     }, headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     questions = data.get("next_questions", [])
-    # If "mild steel" was extracted into material/frame_material, no material question injected
-    material_q = [q for q in questions if q.get("source") == "material_always_required"]
-    # Either extraction caught it, or the question tree already has a material question
-    # We verify the question is NOT double-injected if already present
+    # material_type is a tree question — always present until answered
+    material_q = [q for q in questions if q.get("id") in ("material_type", "material")]
+    # It's OK for it to be present (tree question) — just shouldn't be double-injected
     assert len(material_q) <= 1
 
 
 def test_material_question_has_aluminum_options(client, auth_headers):
-    """Material question includes aluminum alloy options."""
+    """Material question includes aluminum option (alloy is a branch follow-up)."""
     resp = client.post("/api/session/start", json={
         "description": "Build a 6-foot fence with pickets",
     }, headers=auth_headers)
     assert resp.status_code == 200
     data = resp.json()
     questions = data.get("next_questions", [])
-    material_q = [q for q in questions if q.get("id") == "material"]
-    assert len(material_q) == 1, "Material question should be present"
+    material_q = [q for q in questions if q.get("id") in ("material_type", "material")]
+    assert len(material_q) >= 1, "Material question should be present"
     options = material_q[0].get("options", [])
-    assert any("6061" in o for o in options), "Should include 6061 alloy"
-    assert any("5052" in o for o in options), "Should include 5052 alloy"
+    # material_type tree question has "Aluminum" as an option
+    assert any("aluminum" in o.lower() for o in options), "Should include aluminum option"
+    assert any("steel" in o.lower() for o in options), "Should include steel option"
 
 
 # ── AC-3: Finish label never says "steel" on aluminum ───────────────────────

@@ -95,6 +95,7 @@ def _cantilever_basic_fields():
     return {
         "clear_width": "10",
         "height": "6",
+        "material_type": "Carbon steel (standard)",
         "frame_material": "Square tube (most common)",
         "frame_gauge": "11 gauge (0.120\" - standard for gates)",
         "frame_size": "2\" x 2\"",
@@ -198,6 +199,7 @@ def _swing_double_fields():
     return {
         "clear_width": "12",
         "height": "6",
+        "material_type": "Carbon steel (standard)",
         "panel_config": "Double panel (two leaves, meet in center)",
         "frame_material": "Square tube (most common)",
         "frame_gauge": "11 gauge (0.120\" - standard)",
@@ -279,6 +281,7 @@ def _railing_40ft_fields():
     return {
         "linear_footage": "40",
         "location": "Exterior",
+        "material_type": "Carbon steel (standard)",
         "application": "Commercial / public building",
         "railing_height": "42\" (commercial code minimum / IBC)",
         "top_rail_profile": "1-1/2\" round tube (ADA graspable)",
@@ -654,6 +657,7 @@ def test_calculate_endpoint_with_complete_session(client, auth_headers):
         "answers": {
             "clear_width": "10",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Expanded metal",

@@ -493,6 +493,7 @@ def _sample_cantilever_fields():
     return {
         "clear_width": "10",
         "height": "6",
+        "material_type": "Carbon steel (standard)",
         "frame_material": "Square tube (most common)",
         "frame_gauge": "11 gauge (0.120\" - standard for gates)",
         "infill_type": "Expanded metal",

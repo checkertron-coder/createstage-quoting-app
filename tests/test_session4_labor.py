@@ -443,6 +443,7 @@ def test_estimate_endpoint_after_calculate(client, auth_headers):
         "answers": {
             "clear_width": "10",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Expanded metal",
@@ -499,6 +500,7 @@ def test_estimate_stores_in_session(client, auth_headers):
         "answers": {
             "clear_width": "10",
             "height": "6",
+            "material_type": "Carbon steel (standard)",
             "frame_material": "Square tube (most common)",
             "frame_gauge": "11 gauge (0.120\" - standard for gates)",
             "infill_type": "Expanded metal",
@@ -532,6 +534,7 @@ def test_full_pipeline_intake_to_estimate(client, auth_headers):
     answer_resp = client.post(f"/api/session/{session_id}/answer", json={
         "answers": {
             "linear_footage": "40",
+            "material_type": "Carbon steel (standard)",
             "location": "Exterior — exposed to weather",
             "application": "Porch / deck railing",
             "railing_height": "42\" (commercial standard / IBC compliant)",

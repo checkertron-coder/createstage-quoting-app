@@ -92,6 +92,7 @@ def test_smoke_calculate(client, auth_headers, db):
     params.update({
         "clear_width": 16,
         "height": 6,
+        "material_type": "Carbon steel (standard)",
         "frame_material": "2x2 square tube",
         "frame_gauge": "11ga",
         "post_count": "2 posts (standard)",
@@ -134,6 +135,7 @@ def test_smoke_estimate(client, auth_headers, db):
     params.update({
         "linear_footage": 10,
         "location": "Exterior",
+        "material_type": "Carbon steel (standard)",
         "application": "Residential deck",
         "railing_height": 42,
         "top_rail_profile": "1.5x1.5 square tube",
@@ -185,6 +187,7 @@ def test_smoke_full_pipeline(client, auth_headers, db):
     params.update({
         "clear_width": 5,
         "height": 5,
+        "material_type": "Carbon steel (standard)",
         "panel_config": "Single panel",
         "frame_material": "2x2 square tube",
         "frame_gauge": "11ga",

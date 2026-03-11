@@ -588,3 +588,159 @@ def test_full_package_prompt_has_labor_calibration():
     assert "LABOR CALIBRATION" in prompt
     assert "BENCHMARK" in prompt
     assert "estimate LOWER" in prompt
+
+
+# ---------------------------------------------------------------------------
+# 12. Material type constraint — question tree field
+# ---------------------------------------------------------------------------
+
+def test_material_constraint_carbon_steel():
+    """When material_type='Carbon steel', prompt has steel constraint, no al_ profiles."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("cantilever_gate", {
+        "description": "12ft cantilever gate with pickets",
+        "material_type": "Carbon steel (standard)",
+        "height": "6",
+        "clear_width": "12",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert "CARBON STEEL" in prompt
+    assert "DO NOT MIX MATERIALS" in prompt
+    # No aluminum profiles should appear
+    assert "al_sq_tube" not in prompt
+    assert "al_sheet" not in prompt
+    # Steel profiles should be present
+    assert "sq_tube_2x2_11ga" in prompt
+
+
+def test_material_constraint_aluminum():
+    """When material_type='Aluminum', prompt has aluminum constraint, ONLY al_ profiles."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("cantilever_gate", {
+        "description": "12ft aluminum cantilever gate",
+        "material_type": "Aluminum",
+        "aluminum_alloy": "6061-T6 (structural, most common)",
+        "height": "6",
+        "clear_width": "12",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert "ALUMINUM" in prompt
+    assert "al_*" in prompt or "al_sq_tube" in prompt
+    # Steel profiles should NOT appear in available profiles
+    # (check the AVAILABLE PROFILES section specifically)
+    profiles_start = prompt.index("AVAILABLE PROFILES")
+    profiles_end = prompt.index("MATERIAL TYPES")
+    profiles_section = prompt[profiles_start:profiles_end]
+    assert "sq_tube_2x2_11ga" not in profiles_section
+    assert "al_sq_tube" in profiles_section
+
+
+def test_material_constraint_stainless():
+    """When material_type='Stainless steel', prompt has stainless constraint."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("straight_railing", {
+        "description": "20ft stainless railing with cable infill",
+        "material_type": "Stainless steel",
+        "stainless_grade": "316 (marine/chemical)",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert "STAINLESS STEEL" in prompt
+    assert "316" in prompt
+    assert "tig" in prompt.lower()
+
+
+def test_no_material_constraint_without_field():
+    """Without material_type field, no material constraint block appears."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_full_package_prompt("bollard", {
+        "description": "4 steel bollards 42 inches tall",
+    })
+    assert "MATERIAL TYPE (HARD CONSTRAINT" not in prompt
+
+
+def test_material_constraint_also_in_standard_prompt():
+    """_build_prompt also respects material_type field."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator()
+    prompt = gen._build_prompt("cantilever_gate", {
+        "description": "12ft gate",
+        "material_type": "Carbon steel (standard)",
+    })
+    assert "HARD CONSTRAINT" in prompt
+    assert "CARBON STEEL" in prompt
+    assert "al_sq_tube" not in prompt
+
+
+# ---------------------------------------------------------------------------
+# 13. Question trees have material_type question
+# ---------------------------------------------------------------------------
+
+def test_fence_gate_trees_have_material_type_question():
+    """All fence/gate/railing trees must have material_type as required field."""
+    import json
+    import os
+    trees_dir = os.path.join(
+        os.path.dirname(__file__), "..", "backend", "question_trees", "data"
+    )
+    must_have = [
+        "cantilever_gate", "swing_gate", "ornamental_fence",
+        "straight_railing", "stair_railing",
+    ]
+    for tree_name in must_have:
+        path = os.path.join(trees_dir, tree_name + ".json")
+        with open(path) as f:
+            tree = json.load(f)
+        assert "material_type" in tree["required_fields"], (
+            "%s missing material_type in required_fields" % tree_name
+        )
+        question_ids = [q["id"] for q in tree["questions"]]
+        assert "material_type" in question_ids, (
+            "%s missing material_type question" % tree_name
+        )
+        # Material type should come before frame_material or panel_design
+        mat_idx = question_ids.index("material_type")
+        if "frame_material" in question_ids:
+            assert mat_idx < question_ids.index("frame_material"), (
+                "%s: material_type must come before frame_material" % tree_name
+            )
+
+
+# ---------------------------------------------------------------------------
+# 14. Consumable price validation
+# ---------------------------------------------------------------------------
+
+def test_consumable_validation_fixes_zero_prices():
+    """Consumables with unit_price=0 should get fallback prices."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    consumables = [
+        {"description": "ER70S-6 welding wire", "quantity": 2, "unit_price": 0, "line_total": 0, "category": "consumable"},
+        {"description": "4.5\" grinding disc", "quantity": 3, "unit_price": 0, "line_total": 0, "category": "consumable"},
+        {"description": "Unknown item", "quantity": 1, "unit_price": 0, "line_total": 0, "category": "consumable"},
+    ]
+    result = pe._validate_consumable_prices(consumables)
+    # Wire should match fallback (~$3.50)
+    assert result[0]["unit_price"] > 0
+    assert result[0]["line_total"] > 0
+    # Grinding disc should match fallback (~$4.50)
+    assert result[1]["unit_price"] > 0
+    assert result[1]["line_total"] == round(result[1]["unit_price"] * 3, 2)
+    # Unknown gets minimum $5.00
+    assert result[2]["unit_price"] >= 5.0
+    assert result[2]["line_total"] >= 5.0
+
+
+def test_consumable_validation_preserves_nonzero_prices():
+    """Consumables with real prices should not be modified."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    consumables = [
+        {"description": "Welding wire", "quantity": 1, "unit_price": 12.50, "line_total": 12.50, "category": "consumable"},
+    ]
+    result = pe._validate_consumable_prices(consumables)
+    assert result[0]["unit_price"] == 12.50
+    assert result[0]["line_total"] == 12.50

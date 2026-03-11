@@ -4,7 +4,7 @@
     "display_name": "Ornamental Fence Sections",
     "category": "ornamental",
     "required_fields": [
-        "linear_footage", "height", "panel_design", "picket_spacing",
+        "linear_footage", "height", "material_type", "panel_design", "picket_spacing",
         "post_frequency", "finish", "installation"
     ],
     "questions": [
@@ -26,6 +26,39 @@
             "required": true,
             "hint": "Pool fencing code typically requires 4 ft minimum with self-closing/self-latching gate. Check local codes.",
             "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material_type",
+            "text": "What material will this fence be built from?",
+            "type": "choice",
+            "options": ["Carbon steel (standard)", "Stainless steel", "Aluminum"],
+            "required": true,
+            "hint": "Carbon steel is standard for most ornamental fence work. Aluminum for lightweight or coastal. Stainless for specialty environments.",
+            "depends_on": null,
+            "branches": {
+                "Stainless steel": ["stainless_grade"],
+                "Aluminum": ["aluminum_alloy"]
+            }
+        },
+        {
+            "id": "stainless_grade",
+            "text": "What grade of stainless steel?",
+            "type": "choice",
+            "options": ["304 (standard)", "316 (marine/chemical)", "Not sure"],
+            "required": false,
+            "hint": "304 is standard. 316 for saltwater, chemical, or food-grade environments.",
+            "depends_on": "material_type",
+            "branches": null
+        },
+        {
+            "id": "aluminum_alloy",
+            "text": "What aluminum alloy?",
+            "type": "choice",
+            "options": ["6061-T6 (structural, most common)", "5052 (sheet/marine)", "Not sure"],
+            "required": false,
+            "hint": "6061-T6 is the go-to for structural aluminum. 5052 for sheet forming and marine use.",
+            "depends_on": "material_type",
             "branches": null
         },
         {

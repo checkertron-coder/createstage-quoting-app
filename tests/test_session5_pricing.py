@@ -27,6 +27,7 @@ def _sample_cantilever_fields():
     return {
         "clear_width": "10",
         "height": "6",
+        "material_type": "Carbon steel (standard)",
         "frame_material": "Square tube (most common)",
         "frame_gauge": "11 gauge (0.120\" - standard for gates)",
         "infill_type": "Expanded metal",
@@ -491,6 +492,7 @@ def test_full_pipeline_straight_railing(client, auth_headers):
     # Answer all required fields
     answers = {
         "linear_footage": "20",
+        "material_type": "Carbon steel (standard)",
         "railing_height": "42 inches (standard)",
         "infill_style": "Cable rail",
         "post_mount_type": "Surface mount flange (bolted on top of slab)",

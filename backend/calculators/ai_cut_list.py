@@ -392,23 +392,43 @@ class AICutListGenerator:
         ]
         needs_tig = any(ind in all_fields_text for ind in tig_indicators)
 
-        # Stainless detection
-        is_stainless = "stainless" in all_fields_text or "304" in all_fields_text or "316" in all_fields_text
-        is_aluminum = "aluminum" in all_fields_text or "6061" in all_fields_text
+        # Material type detection — uses question tree field first, falls back to description
+        material_constraint, is_aluminum, is_stainless = self._detect_material_constraint(fields)
+        # Legacy fallback for jobs without material_type field
+        if not material_constraint and not is_aluminum and not is_stainless:
+            if "stainless" in all_fields_text or "304" in all_fields_text or "316" in all_fields_text:
+                is_stainless = True
+            if "aluminum" in all_fields_text or "6061" in all_fields_text:
+                is_aluminum = True
 
         # Build weld process guidance
         weld_guidance = self._build_weld_guidance(needs_tig, is_stainless, is_aluminum)
 
         profiles_text = self._get_profiles_for_job_type(job_type)
 
-        # Inject aluminum profiles for any job type when material is aluminum
-        if is_aluminum:
+        # Filter profiles based on material selection
+        if is_aluminum and material_constraint:
+            # User explicitly chose aluminum — ONLY aluminum profiles
+            al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
+                         "al_angle", "al_round_tube", "al_sheet"]
+            al_lines = []
+            for ag in al_groups:
+                line = _PROFILE_GROUPS.get(ag)
+                if line:
+                    al_lines.append(line)
+            profiles_text = "\n".join(al_lines)
+        elif is_aluminum:
+            # Detected from description — add aluminum but keep steel (legacy behavior)
             al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
                          "al_angle", "al_round_tube", "al_sheet"]
             for ag in al_groups:
                 line = _PROFILE_GROUPS.get(ag)
                 if line and line not in profiles_text:
                     profiles_text += "\n" + line
+        elif material_constraint and not is_stainless:
+            # User explicitly chose carbon steel — strip any aluminum profiles
+            profile_lines = profiles_text.split("\n")
+            profiles_text = "\n".join(l for l in profile_lines if "Aluminum" not in l)
 
         # Inject relevant fabrication knowledge
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
@@ -428,9 +448,9 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
         # Build structured context blocks for compound/complex jobs
         context_blocks = self._build_field_context(job_type, fields)
 
-        # Material context — aluminum requires al_* profile keys
-        material_context = ""
-        if is_aluminum:
+        # Material context — from explicit selection or legacy detection
+        material_context = material_constraint
+        if not material_context and is_aluminum:
             material_context = """
 MATERIAL CONTEXT — ALUMINUM:
 This project uses ALUMINUM, not steel. You MUST:
@@ -847,6 +867,75 @@ Return ONLY valid JSON — an array of objects:
             "Every sheet/plate component uses the user's specified thickness — no exceptions.\n"
             % gauge_value
         )
+
+    def _detect_material_constraint(self, fields):
+        # type: (dict) -> tuple
+        """
+        Detect user-selected material type from fields.
+        Returns (constraint_text, is_aluminum, is_stainless).
+
+        When the user explicitly selects a material type via the question tree,
+        this produces a HARD CONSTRAINT and signals which profile set to use.
+        """
+        material_type = str(fields.get("material_type", "") or "").lower().strip()
+        stainless_grade = str(fields.get("stainless_grade", "") or "").lower().strip()
+        aluminum_alloy = str(fields.get("aluminum_alloy", "") or "").lower().strip()
+        desc = str(fields.get("description", "") or "").lower()
+
+        # Explicit field takes priority
+        if "aluminum" in material_type:
+            alloy_note = ""
+            if "6061" in aluminum_alloy:
+                alloy_note = " (6061-T6)"
+            elif "5052" in aluminum_alloy:
+                alloy_note = " (5052)"
+            constraint = (
+                "\nMATERIAL TYPE (HARD CONSTRAINT — DO NOT MIX MATERIALS):\n"
+                "User specified: ALUMINUM%s.\n"
+                "ALL components MUST be aluminum. Use ONLY al_* profile keys.\n"
+                "Set material_type to \"aluminum_6061\" for all items.\n"
+                "Weld process: \"tig\" for all joints (aluminum requires TIG).\n"
+                "Do NOT use any steel profiles (sq_tube_*, flat_bar_*, etc.).\n"
+                "Do NOT mix steel and aluminum — they cannot be welded together.\n"
+                % alloy_note
+            )
+            return constraint, True, False
+
+        if "stainless" in material_type:
+            grade_note = "304"
+            if "316" in stainless_grade:
+                grade_note = "316"
+            constraint = (
+                "\nMATERIAL TYPE (HARD CONSTRAINT — DO NOT MIX MATERIALS):\n"
+                "User specified: STAINLESS STEEL (%s).\n"
+                "ALL components MUST be stainless steel.\n"
+                "Set material_type to \"stainless_%s\" for all items.\n"
+                "Weld process: \"tig\" for all joints (stainless requires TIG with proper shielding).\n"
+                "Use standard steel profile keys (sq_tube_*, flat_bar_*, etc.) but note stainless material_type.\n"
+                "Do NOT mix carbon steel and stainless steel.\n"
+                % (grade_note, grade_note)
+            )
+            return constraint, False, True
+
+        if "carbon" in material_type or "steel" in material_type:
+            constraint = (
+                "\nMATERIAL TYPE (HARD CONSTRAINT — DO NOT MIX MATERIALS):\n"
+                "User specified: CARBON STEEL.\n"
+                "ALL components MUST be carbon steel (mild steel).\n"
+                "Set material_type to \"mild_steel\" for all items.\n"
+                "Do NOT use aluminum profiles (al_*). Do NOT mix aluminum and steel.\n"
+                "Weld process: \"mig\" for standard joints, \"stick\" for field/site work.\n"
+            )
+            return constraint, False, False
+
+        # No explicit field — fall back to description-based detection
+        if "aluminum" in desc or "6061" in desc:
+            return "", True, False
+        if "stainless" in desc or "304" in desc or "316" in desc:
+            return "", False, True
+
+        # Default: no constraint (steel assumed by profile list)
+        return "", False, False
 
     def _get_profiles_for_job_type(self, job_type: str) -> str:
         """Return only the profile lines relevant to a job type."""
@@ -1283,19 +1372,42 @@ Return ONLY valid JSON — an array of step objects:
             "stainless", "aluminum", "chrome", "brushed finish",
         ]
         needs_tig = any(ind in all_fields_text for ind in tig_indicators)
-        is_stainless = "stainless" in all_fields_text or "304" in all_fields_text or "316" in all_fields_text
-        is_aluminum = "aluminum" in all_fields_text or "6061" in all_fields_text
+
+        # Material type detection — uses question tree field first, falls back to description
+        material_constraint, is_aluminum, is_stainless = self._detect_material_constraint(fields)
+        # Legacy fallback for jobs without material_type field
+        if not material_constraint and not is_aluminum and not is_stainless:
+            if "stainless" in all_fields_text or "304" in all_fields_text or "316" in all_fields_text:
+                is_stainless = True
+            if "aluminum" in all_fields_text or "6061" in all_fields_text:
+                is_aluminum = True
 
         weld_guidance = self._build_weld_guidance(needs_tig, is_stainless, is_aluminum)
         profiles_text = self._get_profiles_for_job_type(job_type)
 
-        if is_aluminum:
+        # Filter profiles based on material selection
+        if is_aluminum and material_constraint:
+            # User explicitly chose aluminum — ONLY aluminum profiles
+            al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
+                         "al_angle", "al_round_tube", "al_sheet"]
+            al_lines = []
+            for ag in al_groups:
+                line = _PROFILE_GROUPS.get(ag)
+                if line:
+                    al_lines.append(line)
+            profiles_text = "\n".join(al_lines)
+        elif is_aluminum:
+            # Detected from description — add aluminum but keep steel (legacy behavior)
             al_groups = ["al_sq_tube", "al_rect_tube", "al_flat_bar",
                          "al_angle", "al_round_tube", "al_sheet"]
             for ag in al_groups:
                 line = _PROFILE_GROUPS.get(ag)
                 if line and line not in profiles_text:
                     profiles_text += "\n" + line
+        elif material_constraint and not is_stainless:
+            # User explicitly chose carbon steel — strip any aluminum profiles
+            profile_lines = profiles_text.split("\n")
+            profiles_text = "\n".join(l for l in profile_lines if "Aluminum" not in l)
 
         # Fab knowledge injection
         finish_type = str(fields.get("finish", fields.get("finish_type", "")) or "")
@@ -1309,8 +1421,9 @@ Return ONLY valid JSON — an array of step objects:
 
         context_blocks = self._build_field_context(job_type, fields)
 
-        material_context = ""
-        if is_aluminum:
+        # Material context — from explicit selection or legacy detection
+        material_context = material_constraint
+        if not material_context and is_aluminum:
             material_context = (
                 "\nMATERIAL CONTEXT — ALUMINUM:\n"
                 "Use al_* profile keys. Set material_type to \"aluminum_6061\". "

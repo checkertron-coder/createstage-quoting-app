@@ -98,7 +98,9 @@ class PricingEngine:
         if opus_hardware is not None:
             # Full package path — Opus provided hardware directly
             priced_hardware = list(opus_hardware)
-            consumables = list(opus_consumables or [])
+            consumables = self._validate_consumable_prices(
+                list(opus_consumables or [])
+            )
 
             # Still rebuild finishing from Opus's method recommendation
             if opus_finishing_method:
@@ -340,6 +342,66 @@ class PricingEngine:
                 "notes": "Opus full package estimate",
             })
         return processes if processes else existing_processes
+
+    # Fallback prices for common consumables when Opus returns $0
+    _CONSUMABLE_FALLBACK_PRICES = {
+        "welding wire": 3.50,
+        "er70s": 3.50,
+        "er4043": 18.00,
+        "er5356": 18.00,
+        "er308": 22.00,
+        "grinding disc": 4.50,
+        "flap disc": 6.50,
+        "cut-off disc": 3.50,
+        "cutoff disc": 3.50,
+        "shielding gas": 15.00,
+        "argon": 15.00,
+        "75/25": 12.00,
+        "primer": 8.50,
+        "clear coat": 12.50,
+        "clearcoat": 12.50,
+        "paint": 14.00,
+        "sandpaper": 5.00,
+        "anti-spatter": 9.00,
+        "soapstone": 3.00,
+        "marking": 3.00,
+        "masking tape": 6.00,
+        "wire brush": 8.00,
+        "wire wheel": 12.00,
+        "acetone": 8.00,
+        "degreaser": 10.00,
+    }
+
+    def _validate_consumable_prices(self, consumables):
+        # type: (list) -> list
+        """
+        Ensure all consumable items have non-zero prices.
+        If Opus returned unit_price=0, look up a fallback price.
+        Always recalculates line_total from quantity * unit_price.
+        """
+        for item in consumables:
+            unit_price = float(item.get("unit_price", 0) or 0)
+            qty = max(int(item.get("quantity", 1) or 1), 1)
+
+            if unit_price <= 0:
+                # Try to match description against known consumables
+                desc = str(item.get("description", "")).lower()
+                matched_price = None
+                for keyword, price in self._CONSUMABLE_FALLBACK_PRICES.items():
+                    if keyword in desc:
+                        matched_price = price
+                        break
+                if matched_price:
+                    unit_price = matched_price
+                else:
+                    # Last resort — minimum $5.00 per consumable item
+                    unit_price = 5.00
+
+                item["unit_price"] = round(unit_price, 2)
+
+            item["line_total"] = round(qty * unit_price, 2)
+
+        return consumables
 
     def _build_markup_options(self, subtotal: float) -> dict:
         """
