@@ -233,8 +233,8 @@ class TestMaterialsAggregation:
         assert abs(agg_total - material_subtotal) < 0.01, (
             "Aggregated total %.2f != material subtotal %.2f" % (agg_total, material_subtotal))
 
-    def test_plates_show_piece_count(self):
-        """Plates/sheets are area-sold — show piece_count and sheets_needed."""
+    def test_plates_are_area_sold(self):
+        """Plates/sheets are area-sold with sheets_needed for ordering."""
         from backend.pricing_engine import PricingEngine
         engine = PricingEngine()
         materials = [
@@ -246,8 +246,7 @@ class TestMaterialsAggregation:
         plate = [s for s in summary if "plate" in s["profile"]]
         assert len(plate) == 1
         assert plate[0]["is_area_sold"] is True
-        assert plate[0]["piece_count"] == 4
-        # Plates now calculate sheets_needed (at least 1 sheet to order)
+        # Plates calculate sheets_needed (at least 1 sheet to order)
         assert plate[0]["sticks_needed"] >= 1
         assert plate[0].get("sheets_needed", 0) >= 1
 
@@ -266,7 +265,7 @@ class TestMaterialsAggregation:
         summary = engine._aggregate_materials(materials)
         concrete = [s for s in summary if s.get("is_concrete")]
         assert len(concrete) == 1
-        assert concrete[0]["piece_count"] == 6
+        assert concrete[0]["sticks_needed"] == 6  # 6 bags to order
         assert concrete[0]["total_cost"] == 36.0
         assert concrete[0]["weight_lbs"] == 480.0  # 6 × 80 lbs
 
@@ -288,16 +287,16 @@ class TestMaterialsAggregation:
             ],
             "materials_summary": [
                 {"profile": "sq_tube_2x2_11ga", "description": "Frame rail",
-                 "total_length_ft": 40.0, "piece_count": 4, "stock_length_ft": 24,
+                 "total_length_ft": 40.0, "stock_length_ft": 24,
                  "sticks_needed": 2, "remainder_ft": 8.0, "weight_lbs": 78.0,
                  "total_cost": 40.0, "is_area_sold": False},
                 {"profile": "sq_bar_0.5", "description": "Picket",
-                 "total_length_ft": 150.0, "piece_count": 50, "stock_length_ft": 20,
+                 "total_length_ft": 150.0, "stock_length_ft": 20,
                  "sticks_needed": 8, "remainder_ft": 10.0, "weight_lbs": 127.5,
                  "total_cost": 75.0, "is_area_sold": False},
-                {"profile": "concrete", "description": "Concrete",
-                 "total_length_ft": 0, "piece_count": 6, "stock_length_ft": 0,
-                 "sticks_needed": 0, "remainder_ft": 0, "weight_lbs": 480.0,
+                {"profile": "concrete", "description": "Concrete - 6 x 80lb bags",
+                 "total_length_ft": 0, "stock_length_ft": 0,
+                 "sticks_needed": 6, "remainder_ft": 0, "weight_lbs": 480.0,
                  "total_cost": 36.0, "is_area_sold": False, "is_concrete": True},
             ],
             "hardware": [], "consumables": [], "labor": [],

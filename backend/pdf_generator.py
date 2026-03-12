@@ -618,8 +618,8 @@ def generate_quote_pdf(
 
     pdf.section_header("MATERIALS - STOCK ORDER")
     if materials_summary:
-        cols = [("Profile", 42), ("Total", 24), ("Dimensions", 22),
-                ("Remainder", 24), ("Weight", 22), ("Cost", 22)]
+        cols = [("Material", 46), ("Qty", 16), ("Stock Size", 28),
+                ("Remainder", 22), ("Weight", 22), ("Cost", 22)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
 
@@ -627,42 +627,36 @@ def generate_quote_pdf(
         concrete_items = [ms for ms in materials_summary if ms.get("is_concrete")]
 
         for ms in steel_items:
-            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:24])
+            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:26])
             is_area = ms.get("is_area_sold", False)
             prof_key = str(ms.get("profile", "")).lower()
             is_sheet = "sheet" in prof_key or "plate" in prof_key
             if is_area or is_sheet:
-                sheets = ms.get("sheets_needed", 0)
-                pcs = sheets or ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
-                has_sheet_size = ms.get("sheet_size") is not None
-                if is_sheet and (has_sheet_size or ms.get("stock_length_ft", 0) >= 8):
-                    total_col = "%d x" % pcs if pcs else "-"
-                    sticks_col = _fmt_sheet_dims(ms)
-                else:
-                    total_col = "%d pcs" % pcs
-                    sticks_col = "-"
+                order_qty = ms.get("sheets_needed", 0) or ms.get("sticks_needed", 0)
+                qty_col = str(order_qty) if order_qty else "-"
+                stock_col = _fmt_sheet_dims(ms) + " sheet" if ms.get("sheet_size") else "-"
                 remain_col = "-"
             else:
-                total_col = "%.1f'" % ms.get("total_length_ft", 0)
                 stk = ms.get("sticks_needed", 0)
                 stk_len = ms.get("stock_length_ft", 20)
-                sticks_col = "%d x %d'" % (stk, stk_len)
+                qty_col = str(stk)
+                stock_col = "%d' sticks" % stk_len
                 remain = ms.get("remainder_ft", 0)
                 remain_col = "%.1f'" % remain if remain > 0 else "-"
             weight = ms.get("weight_lbs", 0)
             weight_col = "%.0f lbs" % weight if weight > 0 else "-"
             cost_col = _fmt(ms.get("total_cost", 0))
-            pdf.table_row([profile, total_col, sticks_col, remain_col, weight_col, cost_col],
+            pdf.table_row([profile, qty_col, stock_col, remain_col, weight_col, cost_col],
                           widths)
 
         # Concrete as separate line below steel
         if concrete_items:
             for cc in concrete_items:
-                qty = cc.get("piece_count", 0)
-                desc = _safe("Concrete - %d x 80lb bags" % qty)
+                qty = cc.get("sticks_needed", 0)
+                desc = _safe(cc.get("description", "Concrete - %d x 80lb bags" % qty))
                 weight_col = "%.0f lbs" % cc.get("weight_lbs", 0)
                 cost_col = _fmt(cc.get("total_cost", 0))
-                pdf.table_row([desc, "", "", "", weight_col, cost_col], widths)
+                pdf.table_row([desc, str(qty), "80lb bags", "-", weight_col, cost_col], widths)
     else:
         # Fallback: per-piece table if no summary available
         cols = [("Material", 70), ("Spec", 40), ("Qty", 20), ("Unit", 30), ("Total", 30)]
@@ -1389,8 +1383,8 @@ def generate_materials_pdf(priced_quote, user_profile):
 
     pdf.section_header("STOCK ORDER")
     if summary:
-        cols = [("Profile", 52), ("Total", 28), ("Dimensions", 22),
-                ("Stock Length", 28), ("Remainder", 28), ("Weight", 32)]
+        cols = [("Material", 56), ("Qty", 18), ("Stock Size", 30),
+                ("Remainder", 28), ("Weight", 32)]
         widths = [c[1] for c in cols]
         pdf.table_header(cols)
 
@@ -1398,40 +1392,32 @@ def generate_materials_pdf(priced_quote, user_profile):
         concrete_items = [ms for ms in summary if ms.get("is_concrete")]
 
         for ms in steel_items:
-            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:26])
+            profile = _safe(_fmt_profile(str(ms.get("profile", "")))[:30])
             is_area = ms.get("is_area_sold", False)
             prof_key = str(ms.get("profile", "")).lower()
             is_sheet = "sheet" in prof_key or "plate" in prof_key
             if is_area or is_sheet:
-                sheets = ms.get("sheets_needed", 0)
-                pcs = sheets or ms.get("piece_count", 0) or ms.get("sticks_needed", 0)
-                has_sheet_size = ms.get("sheet_size") is not None
-                if is_sheet and (has_sheet_size or ms.get("stock_length_ft", 0) >= 8):
-                    total_col = "%d x" % pcs if pcs else "-"
-                    sticks_col = _fmt_sheet_dims(ms)
-                else:
-                    total_col = "%d pcs" % pcs
-                    sticks_col = "-"
+                order_qty = ms.get("sheets_needed", 0) or ms.get("sticks_needed", 0)
+                qty_col = str(order_qty) if order_qty else "-"
+                stock_col = _fmt_sheet_dims(ms) + " sheet" if ms.get("sheet_size") else "-"
                 remain_col = "-"
             else:
-                total_col = "%.1f'" % ms.get("total_length_ft", 0)
                 stk = ms.get("sticks_needed", 0)
                 stk_len = ms.get("stock_length_ft", 20)
-                sticks_col = "%d x %d'" % (stk, stk_len)
+                qty_col = str(stk)
+                stock_col = "%d' sticks" % stk_len
                 remain = ms.get("remainder_ft", 0)
                 remain_col = "%.1f'" % remain if remain > 0 else "-"
             weight = ms.get("weight_lbs", 0)
             weight_col = "%.0f lbs" % weight if weight > 0 else "-"
-            pdf.table_row([profile, total_col, sticks_col,
-                           "%d'" % ms.get("stock_length_ft", 20), remain_col,
-                           weight_col], widths)
+            pdf.table_row([profile, qty_col, stock_col, remain_col, weight_col], widths)
 
         if concrete_items:
             for cc in concrete_items:
-                qty = cc.get("piece_count", 0)
-                desc = _safe("Concrete - %d x 80lb bags" % qty)
+                qty = cc.get("sticks_needed", 0)
+                desc = _safe(cc.get("description", "Concrete - %d x 80lb bags" % qty))
                 weight_col = "%.0f lbs" % cc.get("weight_lbs", 0)
-                pdf.table_row([desc, "", "", "", "", weight_col], widths)
+                pdf.table_row([desc, str(qty), "80lb bags", "-", weight_col], widths)
     else:
         # Fallback: per-piece table if no summary
         cols = [("Profile", 50), ("Description", 55), ("Length", 25),

@@ -557,11 +557,10 @@ class PricingEngine:
 
         Returns list of dicts with: profile, description, total_length_ft,
         stock_length_ft, sticks_needed, remainder_ft, weight_lbs, total_cost,
-        piece_count, is_area_sold.
+        is_area_sold.
         Concrete items tracked separately with is_concrete flag.
 
         Uses cut_list (detailed_cut_list) when available to:
-        - Count actual pieces per profile (not consolidated qty=1)
         - Bin-pack pieces into sticks for accurate stick count
         - Calculate plate/sheet area from piece dimensions for sheet count
         """
@@ -579,7 +578,6 @@ class PricingEngine:
         # piece_lengths[profile] = [length_ft, length_ft, ...]  (one per piece)
         # piece_areas[profile] = total area in sq inches (for plate/sheet)
         profile_piece_lengths = {}  # type: dict
-        profile_piece_counts = {}   # type: dict
         profile_piece_areas = {}    # type: dict
         if cut_list:
             for piece in (cut_list or []):
@@ -591,11 +589,9 @@ class PricingEngine:
                     continue
                 if profile not in profile_piece_lengths:
                     profile_piece_lengths[profile] = []
-                    profile_piece_counts[profile] = 0
                     profile_piece_areas[profile] = 0.0
                 for _ in range(qty):
                     profile_piece_lengths[profile].append(length_in / 12.0)
-                profile_piece_counts[profile] += qty
                 # Accumulate plate/sheet area
                 if width_in > 0:
                     profile_piece_areas[profile] += length_in * width_in * qty
@@ -627,7 +623,6 @@ class PricingEngine:
                     "profile": profile,
                     "description": item.get("description", profile),
                     "total_length_ft": 0.0,
-                    "piece_count": 0,
                     "total_cost": 0.0,
                     "stock_length_ft": stock_ft or 0,
                     "is_area_sold": is_area_sold,
@@ -637,7 +632,6 @@ class PricingEngine:
                     "seaming_required": False,
                 }
             groups[profile]["total_length_ft"] += (length_in * qty) / 12.0
-            groups[profile]["piece_count"] += qty
             groups[profile]["total_cost"] += line_total
 
             # Accumulate sheet data from material items (set by _build_from_ai_cuts)
@@ -651,11 +645,6 @@ class PricingEngine:
                 groups[profile]["sheets_needed"] += item.get("sheets_needed", 0)
                 if item.get("seaming_required"):
                     groups[profile]["seaming_required"] = True
-
-        # Override piece_count from cut list (consolidated items always have qty=1)
-        for profile in groups:
-            if profile in profile_piece_counts:
-                groups[profile]["piece_count"] = profile_piece_counts[profile]
 
         result = []
         for profile, info in sorted(groups.items()):
@@ -753,7 +742,6 @@ class PricingEngine:
                 "profile": profile,
                 "description": info["description"],
                 "total_length_ft": total_ft,
-                "piece_count": info["piece_count"],
                 "stock_length_ft": stock_ft,
                 "sticks_needed": sticks,
                 "remainder_ft": remainder,
@@ -776,11 +764,10 @@ class PricingEngine:
             total_cost = sum(c.get("line_total", 0) for c in concrete_items)
             result.append({
                 "profile": "concrete",
-                "description": concrete_items[0].get("description", "Concrete"),
+                "description": "Concrete - %d x 80lb bags" % total_qty,
                 "total_length_ft": 0,
-                "piece_count": total_qty,
                 "stock_length_ft": 0,
-                "sticks_needed": 0,
+                "sticks_needed": total_qty,
                 "remainder_ft": 0,
                 "weight_lbs": round(total_qty * 80, 1),  # 80lb bags
                 "total_cost": round(total_cost, 2),

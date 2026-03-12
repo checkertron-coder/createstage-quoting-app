@@ -642,50 +642,50 @@ const QuoteFlow = {
             return `
                 <table class="data-table">
                     <thead><tr>
-                        <th>Profile</th><th>Pcs</th><th>Total</th>
-                        <th>Qty</th><th>Remainder</th><th>Weight</th><th class="r">Cost</th>
+                        <th>Material</th><th>Qty</th><th>Stock Size</th>
+                        <th>Remainder</th><th>Weight</th><th class="r">Cost</th>
                     </tr></thead>
                     <tbody>
                         ${steelRows.map((s, idx) => {
                             const profile = (s.profile || '').replace(/_/g, ' ');
                             const isArea = s.is_area_sold;
                             const isSheet = (s.profile || '').includes('sheet') || (s.profile || '').includes('plate');
-                            let totalCol, sticksInput;
+                            let qtyCol, stockCol;
                             if (isArea && isSheet && s.sheet_size) {
                                 const sw = s.sheet_size[0] / 12, sh = s.sheet_size[1] / 12;
-                                const sheets = s.sheets_needed || s.piece_count || 0;
-                                totalCol = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sheets}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustSheetQty(${idx}, parseInt(this.value))"> x`;
-                                sticksInput = sw + "'×" + sh + "'" + (s.seaming_required ? ' ⚠️SEAM' : '');
+                                const sheets = s.sheets_needed || s.sticks_needed || 0;
+                                qtyCol = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sheets}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustSheetQty(${idx}, parseInt(this.value))">`;
+                                stockCol = sw + "'x" + sh + "' sheet" + (s.seaming_required ? ' SEAM' : '');
                             } else if (isArea) {
-                                totalCol = (s.piece_count || 0) + ' pcs';
-                                sticksInput = '-';
+                                qtyCol = s.sticks_needed || '-';
+                                stockCol = '-';
                             } else {
-                                totalCol = s.total_length_ft.toFixed(1) + "'";
                                 const sticks = s.sticks_needed || 0;
                                 const stockLen = s.stock_length_ft || 20;
-                                sticksInput = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))"> x ${stockLen}'`;
+                                qtyCol = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))">`;
+                                stockCol = stockLen + "' sticks";
                             }
-                            const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "' left") : '-';
+                            const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "'") : '-';
                             const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
                             return `<tr>
                                 <td>${profile}</td>
-                                <td>${s.piece_count || ''}</td>
-                                <td>${totalCol}</td>
-                                <td>${sticksInput}</td>
+                                <td>${qtyCol}</td>
+                                <td>${stockCol}</td>
                                 <td>${remainCol}</td>
                                 <td>${weightCol}</td>
                                 <td class="r">${this._fmt(s.total_cost)}</td>
                             </tr>`;
                         }).join('')}
                         ${concreteRows.map(s => `<tr>
-                            <td>Concrete (${s.piece_count} x 80lb bags)</td>
-                            <td>${s.piece_count}</td>
-                            <td>-</td><td>-</td><td>-</td>
+                            <td>${s.description || 'Concrete'}</td>
+                            <td>${s.sticks_needed || 0}</td>
+                            <td>80lb bags</td>
+                            <td>-</td>
                             <td>${Math.round(s.weight_lbs)} lbs</td>
                             <td class="r">${this._fmt(s.total_cost)}</td>
                         </tr>`).join('')}
                         <tr class="subtotal-row">
-                            <td colspan="6">Material Subtotal</td>
+                            <td colspan="5">Material Subtotal</td>
                             <td class="r" id="mat-table-subtotal"><strong>${this._fmt(pq.material_subtotal)}</strong></td>
                         </tr>
                     </tbody>
@@ -1047,7 +1047,7 @@ const QuoteFlow = {
         const item = steelRows[idx];
         if (!item) return;
 
-        const oldSheets = item.sheets_needed || item.piece_count || 1;
+        const oldSheets = item.sheets_needed || item.sticks_needed || 1;
         item.sheets_needed = newSheets;
         const ratio = newSheets / oldSheets;
         item.total_cost = Math.round((item.total_cost || 0) * ratio * 100) / 100;

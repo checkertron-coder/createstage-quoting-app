@@ -770,7 +770,6 @@ def test_bin_pack_posts_one_per_stick():
     assert len(post) == 1
     assert post[0]["sticks_needed"] == 7, \
         "Expected 7 sticks (1 post per stick), got %s" % post[0]["sticks_needed"]
-    assert post[0]["piece_count"] == 7
 
 
 def test_bin_pack_short_pieces_fit_multiple():
@@ -794,7 +793,6 @@ def test_bin_pack_short_pieces_fit_multiple():
     assert len(tube) == 1
     assert tube[0]["sticks_needed"] == 3, \
         "Expected 3 sticks (3 per stick), got %s" % tube[0]["sticks_needed"]
-    assert tube[0]["piece_count"] == 8
 
 
 def test_plate_sheets_from_cut_list_area():
@@ -818,7 +816,6 @@ def test_plate_sheets_from_cut_list_area():
     assert len(plate) == 1
     assert plate[0]["sheets_needed"] == 1, \
         "All pieces fit on 1 sheet of 4x8, got %s" % plate[0]["sheets_needed"]
-    assert plate[0]["piece_count"] == 10
     # Weight should be 1 sheet × 32 sqft × 10.2 lb/sqft = 326.4 lbs
     assert plate[0]["weight_lbs"] == 326.4, \
         "Expected 326.4 lbs (1 sheet), got %s" % plate[0]["weight_lbs"]
