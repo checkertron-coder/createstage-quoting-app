@@ -663,9 +663,16 @@ const QuoteFlow = {
                                 const sticks = s.sticks_needed || 0;
                                 const stockLen = s.stock_length_ft || 20;
                                 qtyCol = `<input type="number" class="inline-edit inline-edit-sm" step="1" min="1" value="${sticks}" data-mat-idx="${idx}" onchange="QuoteFlow.adjustMaterialQty(${idx}, parseInt(this.value))">`;
-                                stockCol = stockLen + "' sticks";
+                                stockCol = stockLen + " ft";
                             }
-                            const remainCol = (!isArea && s.remainder_ft > 0) ? (s.remainder_ft.toFixed(1) + "'") : '-';
+                            let remainCol;
+                            if (isArea && s.remainder_sqft > 0) {
+                                remainCol = s.remainder_sqft.toFixed(1) + ' sqft';
+                            } else if (!isArea && s.remainder_ft > 0) {
+                                remainCol = s.remainder_ft.toFixed(1) + "'";
+                            } else {
+                                remainCol = '-';
+                            }
                             const weightCol = s.weight_lbs > 0 ? (Math.round(s.weight_lbs) + ' lbs') : '-';
                             return `<tr>
                                 <td>${profile}</td>
@@ -684,6 +691,11 @@ const QuoteFlow = {
                             <td>${Math.round(s.weight_lbs)} lbs</td>
                             <td class="r">${this._fmt(s.total_cost)}</td>
                         </tr>`).join('')}
+                        <tr style="font-style:italic;border-top:1px solid #ddd">
+                            <td colspan="4" style="text-align:right">Total Weight</td>
+                            <td>${Math.round(summary.reduce((sum, s) => sum + (s.weight_lbs || 0), 0) + concreteRows.reduce((sum, s) => sum + (s.weight_lbs || 0), 0))} lbs</td>
+                            <td></td>
+                        </tr>
                         <tr class="subtotal-row">
                             <td colspan="5">Material Subtotal</td>
                             <td class="r" id="mat-table-subtotal"><strong>${this._fmt(pq.material_subtotal)}</strong></td>

@@ -635,12 +635,13 @@ def generate_quote_pdf(
                 order_qty = ms.get("sheets_needed", 0) or ms.get("sticks_needed", 0)
                 qty_col = str(order_qty) if order_qty else "-"
                 stock_col = _fmt_sheet_dims(ms) + " sheet" if ms.get("sheet_size") else "-"
-                remain_col = "-"
+                remain_sqft = ms.get("remainder_sqft", 0)
+                remain_col = "%.1f sqft" % remain_sqft if remain_sqft > 0 else "-"
             else:
                 stk = ms.get("sticks_needed", 0)
                 stk_len = ms.get("stock_length_ft", 20)
                 qty_col = str(stk)
-                stock_col = "%d' sticks" % stk_len
+                stock_col = "%d ft" % stk_len
                 remain = ms.get("remainder_ft", 0)
                 remain_col = "%.1f'" % remain if remain > 0 else "-"
             weight = ms.get("weight_lbs", 0)
@@ -674,6 +675,15 @@ def generate_quote_pdf(
                  _fmt(unit_price), _fmt(total)],
                 widths,
             )
+
+    # Total weight row
+    if materials_summary:
+        total_weight = sum(ms.get("weight_lbs", 0) for ms in materials_summary)
+        if total_weight > 0:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.cell(112, 5.5, "Total Weight", 0, 0, "R")
+            pdf.cell(22, 5.5, "%.0f lbs" % total_weight, 0, 0, "L")
+            pdf.cell(22, 5.5, "", 0, 1, "R")
 
     pdf.subtotal_row("Material Subtotal", material_sub)
 
@@ -1400,12 +1410,13 @@ def generate_materials_pdf(priced_quote, user_profile):
                 order_qty = ms.get("sheets_needed", 0) or ms.get("sticks_needed", 0)
                 qty_col = str(order_qty) if order_qty else "-"
                 stock_col = _fmt_sheet_dims(ms) + " sheet" if ms.get("sheet_size") else "-"
-                remain_col = "-"
+                remain_sqft = ms.get("remainder_sqft", 0)
+                remain_col = "%.1f sqft" % remain_sqft if remain_sqft > 0 else "-"
             else:
                 stk = ms.get("sticks_needed", 0)
                 stk_len = ms.get("stock_length_ft", 20)
                 qty_col = str(stk)
-                stock_col = "%d' sticks" % stk_len
+                stock_col = "%d ft" % stk_len
                 remain = ms.get("remainder_ft", 0)
                 remain_col = "%.1f'" % remain if remain > 0 else "-"
             weight = ms.get("weight_lbs", 0)
@@ -1418,6 +1429,14 @@ def generate_materials_pdf(priced_quote, user_profile):
                 desc = _safe(cc.get("description", "Concrete - %d x 80lb bags" % qty))
                 weight_col = "%.0f lbs" % cc.get("weight_lbs", 0)
                 pdf.table_row([desc, str(qty), "80lb bags", "-", weight_col], widths)
+
+        # Total weight row
+        total_weight = sum(ms.get("weight_lbs", 0) for ms in summary)
+        if total_weight > 0:
+            pdf.set_font("Helvetica", "I", 8)
+            pdf.cell(widths[0] + widths[1] + widths[2] + widths[3], 5.5,
+                     "Total Weight", 0, 0, "R")
+            pdf.cell(widths[4], 5.5, "%.0f lbs" % total_weight, 0, 1, "L")
     else:
         # Fallback: per-piece table if no summary
         cols = [("Profile", 50), ("Description", 55), ("Length", 25),

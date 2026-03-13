@@ -404,6 +404,9 @@ class AICutListGenerator:
         # Build weld process guidance
         weld_guidance = self._build_weld_guidance(needs_tig, is_stainless, is_aluminum)
 
+        # Gauge / thickness constraint
+        gauge_constraint = self._detect_gauge_constraint(fields)
+
         profiles_text = self._get_profiles_for_job_type(job_type)
 
         # Filter profiles based on material selection
@@ -470,7 +473,7 @@ PROJECT INFO:
 %s
 WELD PROCESS GUIDANCE:
 %s
-
+%s
 AVAILABLE PROFILES (use ONLY these):
 %s
   NOTE on flat bar naming: width x thickness. flat_bar_1x0.125 = 1" wide x 1/8" thick (your "1x1/8" flat bar)
@@ -530,7 +533,7 @@ Return ONLY valid JSON — an array of objects:
         "notes": "Back panel 138x28, fits on 4'x12' sheet."
     }
 ]""" % (job_type, knowledge_block, material_context, fields_text,
-        context_blocks, weld_guidance, profiles_text)
+        context_blocks, weld_guidance, gauge_constraint, profiles_text)
 
         return prompt
 
@@ -862,9 +865,9 @@ Return ONLY valid JSON — an array of objects:
         return (
             "\nMATERIAL GAUGE (HARD CONSTRAINT — DO NOT OVERRIDE):\n"
             "User specified: %s.\n"
-            "ALL sheet, plate, and panel items MUST use this gauge/thickness.\n"
-            "Do NOT suggest thinner or thicker material for ANY part of this build.\n"
-            "Every sheet/plate component uses the user's specified thickness — no exceptions.\n"
+            "ALL materials (tube, bar, angle, sheet, plate, channel) MUST match this gauge/thickness.\n"
+            "Do NOT mix thicknesses — every structural and decorative piece uses the user's specified gauge.\n"
+            "Do NOT substitute a different thickness to save weight or for any other reason.\n"
             % gauge_value
         )
 

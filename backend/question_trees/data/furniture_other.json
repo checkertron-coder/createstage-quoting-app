@@ -74,6 +74,21 @@
             "required": true,
             "hint": null,
             "depends_on": null,
+            "branches": {
+                "Clear coat": ["clear_coat_type"]
+            }
+        },
+        {
+            "id": "clear_coat_type",
+            "text": "What type of clear coat?",
+            "type": "choice",
+            "options": [
+                "2K urethane (professional — 3 coats)",
+                "Spray can (basic — 2 coats)"
+            ],
+            "required": false,
+            "hint": "2K urethane is a catalyzed professional-grade clear that requires a spray gun. More durable and UV resistant. Spray can is quick but less durable.",
+            "depends_on": "finish",
             "branches": null
         }
     ]

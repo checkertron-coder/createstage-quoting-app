@@ -24,7 +24,10 @@
             "required": true,
             "hint": "Channel letters are the most common commercial illuminated sign. Cabinet signs are simpler fabrication.",
             "depends_on": null,
-            "branches": null
+            "branches": {
+                "Cabinet / box sign (illuminated panel)": ["material_thickness", "cabinet_construction", "cabinet_depth"],
+                "Light box (backlit panel)": ["material_thickness", "cabinet_construction", "cabinet_depth"]
+            }
         },
         {
             "id": "dimensions",
@@ -66,6 +69,44 @@
             "required": true,
             "hint": "Aluminum is standard for channel letters (lightweight, corrosion resistant). Stainless for premium look.",
             "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "material_thickness",
+            "text": "What material thickness / gauge?",
+            "type": "choice",
+            "options": [
+                "0.063\" (thin — small signs only)",
+                "0.080\" (standard for most cabinet signs)",
+                "0.125\" (heavy duty — large or structural signs)",
+                "0.190\" (extra heavy — oversized signs)"
+            ],
+            "required": false,
+            "hint": "Thicker material is stronger and more rigid but heavier and more expensive. 0.080\" is standard for most cabinet signs under 10 ft.",
+            "depends_on": "sign_type",
+            "branches": null
+        },
+        {
+            "id": "cabinet_construction",
+            "text": "How should the cabinet be constructed?",
+            "type": "choice",
+            "options": [
+                "Self-supporting box (sides welded — no internal frame)",
+                "Corner bracing (angle or gusset at corners only)",
+                "Full internal frame (tube frame with sheet skin)"
+            ],
+            "required": false,
+            "hint": "Self-supporting works for most signs under 6 ft. Corner bracing adds rigidity for 6-10 ft signs. Full frame for 10+ ft or heavy signs.",
+            "depends_on": "sign_type",
+            "branches": null
+        },
+        {
+            "id": "cabinet_depth",
+            "text": "Cabinet depth (front to back)?",
+            "type": "text",
+            "required": false,
+            "hint": "Common depths: 5\" (shallow / halo-lit), 8\" (standard), 12\" (deep / large letters). Deeper cabinets need more material.",
+            "depends_on": "sign_type",
             "branches": null
         },
         {
@@ -114,6 +155,21 @@
             "required": false,
             "hint": null,
             "depends_on": null,
+            "branches": {
+                "Clear coat / clearcoat (aluminum or stainless)": ["clear_coat_type"]
+            }
+        },
+        {
+            "id": "clear_coat_type",
+            "text": "What type of clear coat?",
+            "type": "choice",
+            "options": [
+                "2K urethane (professional — 3 coats)",
+                "Spray can (basic — 2 coats)"
+            ],
+            "required": false,
+            "hint": "2K urethane is a catalyzed professional-grade clear that requires a spray gun. More durable and UV resistant. Spray can is quick but less durable.",
+            "depends_on": "finish",
             "branches": null
         }
     ]

@@ -82,11 +82,13 @@ class PricingEngine:
 
         labor_processes = labor_estimate.get("processes", [])
         total_sq_ft = material_list.get("total_sq_ft", 0)
+        clear_coat_type = fields.get("clear_coat_type", "")
         finishing_builder = FinishingBuilder()
         finishing = finishing_builder.build(
             finish_type=finish_field,
             total_sq_ft=total_sq_ft,
             labor_processes=labor_processes,
+            clear_coat_type=clear_coat_type,
         )
 
         # --- Check for _opus_* keys (full package path) ---
@@ -108,6 +110,7 @@ class PricingEngine:
                     finish_type=opus_finishing_method,
                     total_sq_ft=total_sq_ft,
                     labor_processes=labor_processes,
+                    clear_coat_type=clear_coat_type,
                 )
 
             # Use Opus labor hours if available (multiply by user's shop rate)
@@ -680,6 +683,13 @@ class PricingEngine:
 
                 stock_ft = sheet_size[1] / 12.0
                 remainder = 0
+                # Unused sheet area (sqft) for fabricator visibility
+                actual_area = profile_piece_areas.get(profile, 0)
+                ordered_area = sticks * sheet_area_sqin
+                if actual_area > 0 and ordered_area > actual_area:
+                    remainder_sqft = round((ordered_area - actual_area) / 144.0, 1)
+                else:
+                    remainder_sqft = 0
             elif stock_ft > 0:
                 # Use bin-packing if we have individual piece lengths
                 if profile in profile_piece_lengths:
@@ -701,10 +711,19 @@ class PricingEngine:
             if info["is_area_sold"]:
                 # Plate/sheet weight = weight of the stock being ordered
                 try:
+                    import re as _re
                     from .knowledge.materials import PROFILES
                     lookup_key = profile[3:] if profile.startswith("al_") else profile
                     mat_data = PROFILES.get(lookup_key, {})
                     w_per_sqft = mat_data.get("weight_per_foot", 0)
+                    # Dynamic fallback: compute from thickness if PROFILES miss
+                    if w_per_sqft <= 0 and ("sheet" in lookup_key or "plate" in lookup_key):
+                        m = _re.search(r'[\._](\d+\.?\d*)', lookup_key)
+                        if m:
+                            thickness = float(m.group(1))
+                            if thickness < 1:  # sane guard: 0.040-0.500
+                                # Steel weight: thickness × 144 sqin/sqft × 0.2836 lb/in³
+                                w_per_sqft = round(thickness * 144 * 0.2836, 2)
                     if w_per_sqft > 0:
                         if profile.startswith("al_"):
                             w_per_sqft = round(w_per_sqft * 0.344, 2)
@@ -752,6 +771,8 @@ class PricingEngine:
             # Attach sheet metadata for PDF display
             if sheet_size and info["is_area_sold"]:
                 entry["sheet_size"] = sheet_size
+                if remainder_sqft > 0:
+                    entry["remainder_sqft"] = remainder_sqft
             if sheets_needed > 0:
                 entry["sheets_needed"] = sheets_needed
             if seaming:

@@ -669,7 +669,72 @@ PROFILES = {
         "common_uses": ["spiral stair center column", "heavy structural pipe"],
     },
 
-    # --- Sheet / Plate ---
+    # --- Sheet / Plate (by decimal thickness) ---
+    # These entries support Opus profiles like al_sheet_0.125 where the
+    # al_ prefix is stripped → sheet_0.125 lookup.  Weight is steel lb/sqft;
+    # the pricing engine applies ×0.344 for aluminum automatically.
+    "sheet_0.040": {
+        "shape": "sheet",
+        "dimensions": "0.040 inch sheet",
+        "key": "sheet_0.040",
+        "weight_per_foot": 1.63,    # 0.040 × 144 × 0.2836
+        "wall_thickness": 0.040,
+        "outside_dimension": None,
+        "perimeter_inches": None,
+        "cost_per_foot": {"low": 2.00, "high": 4.00},
+        "common_material": "Aluminum 5052 / CR sheet",
+        "common_uses": ["sign faces", "light enclosures", "aluminum panels"],
+    },
+    "sheet_0.063": {
+        "shape": "sheet",
+        "dimensions": "0.063 inch sheet",
+        "key": "sheet_0.063",
+        "weight_per_foot": 2.57,    # 0.063 × 144 × 0.2836
+        "wall_thickness": 0.063,
+        "outside_dimension": None,
+        "perimeter_inches": None,
+        "cost_per_foot": {"low": 2.50, "high": 4.50},
+        "common_material": "Aluminum 6061 / 5052",
+        "common_uses": ["channel letter returns", "aluminum panels"],
+    },
+    "sheet_0.080": {
+        "shape": "sheet",
+        "dimensions": "0.080 inch sheet",
+        "key": "sheet_0.080",
+        "weight_per_foot": 3.27,    # 0.080 × 144 × 0.2836
+        "wall_thickness": 0.080,
+        "outside_dimension": None,
+        "perimeter_inches": None,
+        "cost_per_foot": {"low": 3.00, "high": 5.00},
+        "common_material": "Aluminum 6061 / A36 HR",
+        "common_uses": ["sign backing", "medium panels", "channel letters"],
+    },
+    "sheet_0.125": {
+        "shape": "sheet",
+        "dimensions": "0.125 inch (1/8 or ~11ga) sheet",
+        "key": "sheet_0.125",
+        "weight_per_foot": 5.10,    # 0.125 × 144 × 0.2836
+        "wall_thickness": 0.125,
+        "outside_dimension": None,
+        "perimeter_inches": None,
+        "cost_per_foot": {"low": 4.50, "high": 7.50},
+        "common_material": "A36 HR / Aluminum 6061",
+        "common_uses": ["heavy sign faces", "structural panels", "base plates"],
+    },
+    "sheet_0.190": {
+        "shape": "sheet",
+        "dimensions": "0.190 inch (~7ga) sheet",
+        "key": "sheet_0.190",
+        "weight_per_foot": 7.76,    # 0.190 × 144 × 0.2836
+        "wall_thickness": 0.190,
+        "outside_dimension": None,
+        "perimeter_inches": None,
+        "cost_per_foot": {"low": 6.00, "high": 10.00},
+        "common_material": "A36 HR",
+        "common_uses": ["heavy panels", "transition to plate"],
+    },
+
+    # --- Sheet / Plate (by gauge) ---
     "sheet_11ga": {
         "shape": "sheet",
         "dimensions": "11ga (0.120 inch) sheet",

@@ -251,7 +251,8 @@ def test_finishing_raw_steel():
 
 
 def test_finishing_clearcoat():
-    """clearcoat → in-house hours, material cost from sq_ft."""
+    """clearcoat → in-house hours, material cost from sq_ft.
+    Default (no clear_coat_type) = 2K urethane @ $1.50/sqft x 3 coats."""
     processes = [
         {"process": "finish_prep", "hours": 1.0, "rate": 125.0, "notes": ""},
         {"process": "clearcoat", "hours": 0.5, "rate": 125.0, "notes": ""},
@@ -262,7 +263,8 @@ def test_finishing_clearcoat():
     assert result["method"] == "clearcoat"
     assert result["area_sq_ft"] == 100.0
     assert result["hours"] == 1.5  # finish_prep + clearcoat
-    assert result["materials_cost"] == round(100.0 * 0.35, 2)
+    # Default 2K urethane: 100 sqft x $1.50/coat x 3 coats = $450
+    assert result["materials_cost"] == round(100.0 * 1.50 * 3, 2)
     assert result["outsource_cost"] == 0.0
     assert result["total"] == result["materials_cost"]
 

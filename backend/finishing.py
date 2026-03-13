@@ -23,12 +23,14 @@ class FinishingBuilder:
     CERAMIC_COAT_PER_SQFT = 6.00    # High-temp ceramic / bedliner
     PATINA_MATERIAL_PER_SQFT = 0.40  # Hot oil, chemical patina agents
 
-    # In-house material costs per sq ft
-    CLEARCOAT_MATERIAL_PER_SQFT = 0.35
+    # In-house material costs per sq ft PER COAT
+    CLEARCOAT_2K_PER_SQFT_PER_COAT = 1.50    # 2K urethane — professional
+    CLEARCOAT_SPRAY_PER_SQFT_PER_COAT = 0.35  # Spray can — basic
     PAINT_MATERIAL_PER_SQFT = 0.50  # Primer + topcoat
 
     def build(self, finish_type: str, total_sq_ft: float,
-              labor_processes: list, is_outsourced: bool = False) -> dict:
+              labor_processes: list, is_outsourced: bool = False,
+              clear_coat_type: str = "", coat_count: int = 0) -> dict:
         """
         Build a FinishingSection dict matching CLAUDE.md contract.
 
@@ -69,7 +71,15 @@ class FinishingBuilder:
             }
 
         if method == "clearcoat":
-            materials_cost = round(area * self.CLEARCOAT_MATERIAL_PER_SQFT, 2)
+            cc_type = self._normalize_clear_coat_type(clear_coat_type)
+            if cc_type == "spray":
+                per_sqft = self.CLEARCOAT_SPRAY_PER_SQFT_PER_COAT
+                coats = coat_count if coat_count > 0 else 2
+            else:
+                # Default: 2K urethane (professional shop assumption)
+                per_sqft = self.CLEARCOAT_2K_PER_SQFT_PER_COAT
+                coats = coat_count if coat_count > 0 else 3
+            materials_cost = round(area * per_sqft * coats, 2)
             return {
                 "method": "clearcoat",
                 "area_sq_ft": round(area, 1),
@@ -77,6 +87,8 @@ class FinishingBuilder:
                 "materials_cost": materials_cost,
                 "outsource_cost": 0.0,
                 "total": round(materials_cost, 2),
+                "clear_coat_type": cc_type,
+                "coat_count": coats,
             }
 
         if method == "paint":
@@ -239,6 +251,14 @@ class FinishingBuilder:
         # Unknown — fall through to the build() fallback which prices as paint
         # rather than silently discarding as "raw"
         return f
+
+    def _normalize_clear_coat_type(self, clear_coat_type: str) -> str:
+        """Normalize clear coat type to '2k' or 'spray'."""
+        ct = str(clear_coat_type).lower().strip()
+        if any(k in ct for k in ("spray", "can", "rattle", "aerosol", "basic")):
+            return "spray"
+        # Default: 2K urethane (professional shop assumption)
+        return "2k"
 
     def _extract_finish_hours(self, method: str, labor_processes: list) -> float:
         """Sum hours for finish-related processes."""
