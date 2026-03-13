@@ -92,10 +92,12 @@ def _call_claude(prompt, tier="deep", temperature=0.1, timeout=120,
     """Execute a Claude API call via httpx."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        logger.debug("No ANTHROPIC_API_KEY — skipping Claude call")
+        print("[VISION-DEBUG] _call_claude: NO ANTHROPIC_API_KEY — returning None", flush=True)
         return None
 
     model = _resolve_model(tier)
+    print(f"[VISION-DEBUG] _call_claude: model={model}, tier={tier}, "
+          f"has_image={bool(image_b64)}, timeout={timeout}", flush=True)
 
     # Build message content
     content = []
@@ -140,37 +142,29 @@ def _call_claude(prompt, tier="deep", temperature=0.1, timeout=120,
         import httpx
         with httpx.Client(timeout=timeout) as client:
             if is_vision:
-                # Log payload size (not content) for vision debugging
                 payload_size = len(json.dumps(payload))
-                logger.info("claude vision request: model=%s payload_size=%d bytes",
-                            model, payload_size)
+                print(f"[VISION-DEBUG] _call_claude: sending vision request, "
+                      f"payload_size={payload_size} bytes, model={model}", flush=True)
             response = client.post(ANTHROPIC_API_URL, headers=headers,
                                    json=payload)
+            print(f"[VISION-DEBUG] _call_claude: response status={response.status_code}", flush=True)
             if response.status_code != 200:
-                # Capture the FULL error response body before raise_for_status
                 elapsed = time.time() - start
-                logger.error(
-                    "Claude API error %d (%s%s) after %.1fs: %s",
-                    response.status_code,
-                    tier,
-                    "+vision" if is_vision else "",
-                    elapsed,
-                    response.text[:2000],
-                )
+                error_body = response.text[:2000]
+                print(f"[VISION-DEBUG] _call_claude: API ERROR {response.status_code} "
+                      f"after {elapsed:.1f}s: {error_body}", flush=True)
                 return None
             result = response.json()
             text = result["content"][0]["text"]
             elapsed = time.time() - start
-            logger.info("claude %s%s [%s] %.1fs tokens_in=%d tokens_out=%d",
-                        tier, "+vision" if is_vision else "", model, elapsed,
-                        result.get("usage", {}).get("input_tokens", 0),
-                        result.get("usage", {}).get("output_tokens", 0))
+            print(f"[VISION-DEBUG] _call_claude: SUCCESS {tier}+vision [{model}] "
+                  f"{elapsed:.1f}s tokens_in={result.get('usage', {}).get('input_tokens', 0)} "
+                  f"tokens_out={result.get('usage', {}).get('output_tokens', 0)}", flush=True)
             return text
 
     except Exception as e:
         elapsed = time.time() - start
         err_name = type(e).__name__
-        logger.error("Claude call failed (%s%s, %s) after %.1fs: %s",
-                     tier, "+vision" if is_vision else "",
-                     err_name, elapsed, e)
+        print(f"[VISION-DEBUG] _call_claude: EXCEPTION {err_name} after {elapsed:.1f}s: {e}",
+              flush=True)
         return None
