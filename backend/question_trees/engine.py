@@ -134,10 +134,14 @@ class QuestionTreeEngine:
         # Read the image
         try:
             image_data = _read_image(photo_url_or_path)
-        except Exception:
+        except Exception as e:
+            logger.error("extract_from_photo: _read_image raised %s: %s",
+                         type(e).__name__, e)
             return _empty_photo_result()
 
         if not image_data:
+            logger.error("extract_from_photo: _read_image returned None for '%s'",
+                         photo_url_or_path)
             return _empty_photo_result()
 
         image_b64 = base64.b64encode(image_data).decode("utf-8")
@@ -653,10 +657,18 @@ def _match_option(value: str, options: list) -> Optional[str]:
 
 def _read_image(photo_url_or_path: str) -> Optional[bytes]:
     """Read image data from a URL or local file path."""
+    logger.info("_read_image: attempting to read '%s'", photo_url_or_path)
     if photo_url_or_path.startswith("http"):
-        req = urllib.request.Request(photo_url_or_path)
-        with urllib.request.urlopen(req, timeout=30) as response:
-            return response.read()
+        try:
+            req = urllib.request.Request(photo_url_or_path)
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = response.read()
+                logger.info("_read_image: fetched %d bytes from URL", len(data))
+                return data
+        except Exception as e:
+            logger.error("_read_image: failed to fetch URL '%s': %s: %s",
+                         photo_url_or_path, type(e).__name__, e)
+            return None
     else:
         # Local file — try absolute path first, then relative
         path = Path(photo_url_or_path)
@@ -666,7 +678,13 @@ def _read_image(photo_url_or_path: str) -> Optional[bytes]:
             path = Path(stripped)
         if path.exists():
             with open(path, "rb") as f:
-                return f.read()
+                data = f.read()
+                logger.info("_read_image: read %d bytes from local file '%s'",
+                            len(data), path)
+                return data
+        else:
+            logger.error("_read_image: local file not found: '%s' (also tried '%s')",
+                         photo_url_or_path, path)
     return None
 
 
@@ -748,9 +766,14 @@ def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     Falls back to empty result on any error.
     """
     try:
+        logger.info("_call_claude_vision: calling with b64_len=%d mime=%s prompt_len=%d",
+                     len(image_b64), mime_type, len(prompt))
         text = _claude_vision(prompt, image_b64, mime_type, timeout=60)
         if text is None:
+            logger.error("_call_claude_vision: _claude_vision returned None "
+                         "(check claude_client logs for API error details)")
             return _empty_photo_result()
+        logger.info("_call_claude_vision: got response (%d chars)", len(text))
         parsed = json.loads(text)
         if isinstance(parsed, dict):
             return {
@@ -761,8 +784,15 @@ def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
                 "damage_assessment": parsed.get("damage_assessment", "N/A"),
                 "confidence": float(parsed.get("confidence", 0.0)),
             }
+        logger.error("_call_claude_vision: response is not a dict: %s", type(parsed))
         return _empty_photo_result()
-    except Exception:
+    except json.JSONDecodeError as e:
+        logger.error("_call_claude_vision: JSON parse failed: %s — raw text: %.500s",
+                     e, text if 'text' in dir() else '(no text)')
+        return _empty_photo_result()
+    except Exception as e:
+        logger.error("_call_claude_vision: unexpected error %s: %s",
+                     type(e).__name__, e)
         return _empty_photo_result()
 
 

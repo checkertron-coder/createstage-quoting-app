@@ -4,6 +4,17 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import os
+import sys
+
+# Configure logging BEFORE any loggers are created.
+# Without this, all logger.info() calls in the backend are silently dropped
+# because Python's default lastResort handler only shows WARNING+.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s:%(name)s:%(message)s",
+    stream=sys.stdout,
+    force=True,
+)
 
 from .database import engine, Base
 from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser, photos

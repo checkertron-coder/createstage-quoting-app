@@ -74,6 +74,12 @@ def start_session(
     2. Runs extract_from_description to pull fields from initial text
     3. Returns session_id, detected job_type, extracted fields, and next questions
     """
+    # Diagnostic: log what photos were received
+    logger.info(
+        "SESSION /start: photo_urls=%s, photos=%s, desc_len=%d",
+        request.photo_urls, request.photos, len(request.description),
+    )
+
     # Detect job type if not provided
     if request.job_type:
         job_type = request.job_type
@@ -87,6 +93,8 @@ def start_session(
 
     # Merge photo_urls from both fields (backward compat + new field)
     photo_urls = list(request.photo_urls or request.photos or [])
+    logger.info("SESSION /start: merged photo_urls=%s (count=%d), job_type=%s",
+                photo_urls, len(photo_urls), job_type)
 
     # Validate that we have a question tree for this job type
     available = engine.list_available_trees()
@@ -109,11 +117,18 @@ def start_session(
         # Extract fields from photos (if any)
         photo_extracted_fields = {}
         photo_observations = ""
+        if photo_urls:
+            logger.info("SESSION /start: processing %d photos for vision extraction",
+                        len(photo_urls))
         for photo_url in photo_urls:
             try:
+                logger.info("SESSION /start: calling extract_from_photo('%s')", photo_url)
                 photo_result = engine.extract_from_photo(
                     job_type, photo_url, request.description
                 )
+                logger.info("SESSION /start: photo result confidence=%.2f, obs='%s'",
+                            photo_result.get("confidence", 0),
+                            (photo_result.get("photo_observations", "") or "")[:100])
                 # Merge photo-extracted fields (text wins on conflict)
                 for field_id, value in photo_result.get("extracted_fields", {}).items():
                     if field_id not in extracted_fields:
@@ -122,8 +137,10 @@ def start_session(
                 obs = photo_result.get("photo_observations", "")
                 if obs:
                     photo_observations = (photo_observations + "\n" + obs).strip()
-            except Exception:
-                pass  # Photo extraction failure should never block session start
+            except Exception as e:
+                logger.error("Photo extraction failed for '%s': %s: %s",
+                             photo_url, type(e).__name__, e)
+                # Photo extraction failure should never block session start
 
         # Merge: text fields first, then photo fields (text wins)
         merged_fields = dict(extracted_fields)
@@ -319,8 +336,10 @@ def answer_questions(
                 if field_id not in current_params:
                     current_params[field_id] = value
                     photo_extracted_fields[field_id] = value
-        except Exception:
-            pass  # Photo extraction failure should not block answer submission
+        except Exception as e:
+            logger.error("Photo extraction failed in /answer for '%s': %s: %s",
+                         request.photo_url, type(e).__name__, e)
+            # Photo extraction failure should not block answer submission
 
     # Log answers in message history
     messages = list(session.messages_json or [])
