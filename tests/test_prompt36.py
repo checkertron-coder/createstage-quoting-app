@@ -442,8 +442,8 @@ class TestAISuggestedQuestions:
 
         assert result == []
 
-    def test_suggest_caps_at_3(self):
-        """Even if AI returns 5, only 3 are returned."""
+    def test_suggest_caps_at_8(self):
+        """Even if AI returns 10, only 8 are returned."""
         from backend.question_trees.engine import QuestionTreeEngine
 
         ai_response = json.dumps([
@@ -452,6 +452,11 @@ class TestAISuggestedQuestions:
             {"id": "q3", "text": "Q3?", "type": "text"},
             {"id": "q4", "text": "Q4?", "type": "text"},
             {"id": "q5", "text": "Q5?", "type": "text"},
+            {"id": "q6", "text": "Q6?", "type": "text"},
+            {"id": "q7", "text": "Q7?", "type": "text"},
+            {"id": "q8", "text": "Q8?", "type": "text"},
+            {"id": "q9", "text": "Q9?", "type": "text"},
+            {"id": "q10", "text": "Q10?", "type": "text"},
         ])
 
         with patch("backend.question_trees.engine.call_fast", return_value=ai_response):
@@ -461,7 +466,7 @@ class TestAISuggestedQuestions:
                 {}, [],
             )
 
-        assert len(result) == 3
+        assert len(result) == 8
 
     def test_suggest_enforces_ai_prefix(self):
         """Questions with IDs like 'gauge' should become '_ai_gauge'."""

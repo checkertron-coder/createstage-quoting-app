@@ -35,24 +35,24 @@ class TestExtractionPromptAssertive:
         )
         assert "EXACT option string" in prompt
 
-    def test_prompt_has_aggressive_extraction_language(self):
-        """Prompt should say to be aggressive / extract everything stated."""
+    def test_prompt_has_conservative_extraction_language(self):
+        """Prompt should say to be conservative / extract only explicit fields."""
         from backend.question_trees.engine import _build_extraction_prompt
         prompt = _build_extraction_prompt(
             "cantilever_gate", "Cantilever Gate",
             "gate", "- clear_width: Width?",
         )
-        assert "AGGRESSIVE" in prompt or "EXTRACT every" in prompt
+        assert "CONSERVATIVE" in prompt or "EXPLICITLY stated" in prompt
 
-    def test_prompt_has_choice_field_examples(self):
-        """Prompt includes examples mapping customer words to exact options."""
+    def test_prompt_has_choice_field_rule(self):
+        """Prompt includes rule about matching exact option strings."""
         from backend.question_trees.engine import _build_extraction_prompt
         prompt = _build_extraction_prompt(
             "cantilever_gate", "Cantilever Gate",
             "gate", "- finish: Finish?",
         )
-        assert "Paint (in-house)" in prompt
-        assert "Pickets (vertical bars)" in prompt
+        assert "CHOICE FIELDS" in prompt
+        assert "EXACT option string" in prompt
 
 
 # =====================================================================

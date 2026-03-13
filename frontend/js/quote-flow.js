@@ -472,7 +472,23 @@ const QuoteFlow = {
 
         try {
             this._showProcessing('Calculating materials...');
-            await API.calculate(this.sessionId);
+            const calcResult = await API.calculate(this.sessionId);
+
+            // Scope readiness check — backend may ask for more info
+            if (calcResult.status === 'needs_more_info' && calcResult.additional_questions) {
+                this._showStep('questions');
+                this.allQuestions = calcResult.additional_questions;
+                this._renderQuestions(calcResult.additional_questions);
+                // Prepend notice above rendered questions
+                const container = document.getElementById('questions-container');
+                if (container) {
+                    container.insertAdjacentHTML('afterbegin',
+                        '<div class="scope-notice" style="background:#fff3cd;padding:12px;'
+                        + 'border-radius:8px;margin-bottom:16px;border:1px solid #ffc107">'
+                        + '<strong>More details needed for an accurate quote.</strong></div>');
+                }
+                return; // User answers, then clicks "Continue" which re-runs pipeline
+            }
 
             this._showProcessing('Estimating labor...');
             await API.estimate(this.sessionId);

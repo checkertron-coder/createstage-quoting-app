@@ -376,11 +376,11 @@ class QuestionTreeEngine:
                                      extracted_fields: dict,
                                      tree_question_ids: list) -> list:
         """
-        Use AI to suggest 0-3 additional questions not covered by the question tree.
+        Use AI to suggest 3-8 additional questions not covered by the question tree.
 
-        Identifies critical fabrication/engineering details (gauge, electronics specs,
-        waterproofing, paint coats, etc.) that would materially affect materials,
-        labor, or pricing.
+        Identifies fabrication/engineering details (gauge, electronics specs,
+        waterproofing, paint coats, mounting, etc.) that would materially affect
+        materials, labor, or pricing.
 
         Returns list of question dicts matching the tree question schema, or [].
         Never raises — returns [] on any error.
@@ -405,27 +405,27 @@ class QuestionTreeEngine:
             prompt = (
                 "You are a metal fabrication quoting assistant. A customer submitted "
                 "a job description and we already have a standard set of questions "
-                "for this job type. Identify 0-3 CRITICAL fabrication details NOT "
-                "covered by the existing questions that would materially affect "
-                "materials, labor, or pricing.\n\n"
-                "If everything important is already covered, return `[]`.\n\n"
+                "for this job type. Identify 3-8 fabrication/engineering details NOT "
+                "covered by the existing questions or NOT yet answered that would "
+                "materially affect materials, labor, or pricing.\n\n"
+                "Return `[]` ONLY if the description is so complete that zero "
+                "ambiguity remains.\n\n"
                 "Job type: %s\n\n"
                 "Customer description:\n\"\"\"%s\"\"\"\n\n"
                 "Already extracted fields:\n%s\n\n"
                 "Existing question topics already covered: %s\n\n"
-                "EXAMPLES of what to ask about (only if relevant to this description):\n"
-                "- Material gauge/thickness when not specified\n"
-                "- Electronics specs (controllers, LED drivers, voltage)\n"
-                "- Waterproofing/IP rating for outdoor items\n"
-                "- Number of paint/clear coats\n"
-                "- Surface finish quality (mill finish, brushed, mirror)\n"
-                "- Load rating / weight capacity requirements\n"
-                "- Specific alloy grade (6061 vs 5052 aluminum, 304 vs 316 SS)\n\n"
-                "RULES:\n"
-                "1. Only ask about things the description HINTS at but doesn't specify.\n"
-                "2. Do NOT repeat questions already covered by the existing topics.\n"
-                "3. Each question must have a clear impact on materials, labor, or price.\n"
-                "4. Max 3 questions. Fewer is better. Return [] if none needed.\n\n"
+                "SCOPE GAPS — things that MUST be asked if not already known:\n"
+                "- Mounting method (wall, posts, freestanding, hanging, customer-provided structure)\n"
+                "- Material thickness/gauge when not specified\n"
+                "- Exact dimensions of every component referenced but not dimensioned\n"
+                "- Indoor vs outdoor (drives finish, waterproofing, hardware grade)\n"
+                "- Number of finish coats\n"
+                "- Whether customer supplies any components (LED modules, mounting hardware, etc.)\n"
+                "- Access/serviceability requirements (access panels, removable parts)\n"
+                "- Weight capacity or structural load requirements\n"
+                "- Delivery vs installation (are we just building it, or installing too?)\n\n"
+                "These are NOT optional nice-to-haves. If any of these are unknown AND "
+                "relevant to this job, ASK.\n\n"
                 "KNOWLEDGE vs PREFERENCE:\n"
                 "- KNOWLEDGE: Standard fabrication practices with one correct approach. Do NOT ask.\n"
                 "  Examples: miter angle for square joints (45 deg), weld process for aluminum (TIG),\n"
@@ -444,7 +444,9 @@ class QuestionTreeEngine:
                 "- Weatherproofing: indoor-only vs outdoor IP65 vs outdoor IP67 (submersible)\n"
                 "- Power redundancy: single PSU vs dual with failover\n"
                 "- Letter style: flat-cut vs channel vs halo-lit vs combination\n\n"
-                "Ask 1-3 PREFERENCE questions with biggest impact on quote accuracy.\n"
+                "Ask ALL preference questions that would change the quote by more than "
+                "5%% in materials or labor. Do not cap yourself — if 8 questions are "
+                "needed, ask 8.\n"
                 "Do NOT ask about things that are standard practice or already specified.\n\n"
                 "Return ONLY valid JSON — an array of question objects:\n"
                 "[\n"
@@ -478,7 +480,7 @@ class QuestionTreeEngine:
             if not isinstance(parsed, list):
                 return []
 
-            # Validate, normalize, and cap at 3
+            # Validate, normalize, and cap at 8
             validated = []
             for q in parsed:
                 if not isinstance(q, dict):
@@ -505,7 +507,7 @@ class QuestionTreeEngine:
                     question["unit"] = str(q["unit"])
 
                 validated.append(question)
-                if len(validated) >= 3:
+                if len(validated) >= 8:
                     break
 
             if validated:
@@ -519,6 +521,109 @@ class QuestionTreeEngine:
         except Exception as e:
             logger.warning("AI question suggestion failed: %s", e)
             return []
+
+    def check_scope_readiness(self, job_type: str, description: str,
+                              answered_fields: dict) -> dict:
+        """
+        Evaluate whether we have enough information to generate an accurate quote.
+
+        Returns:
+            {
+                "status": "ready" | "needs_questions" | "insufficient",
+                "missing_critical": ["list of critical gaps"],
+                "confidence": 0.0-1.0,
+                "message": "human-readable explanation"
+            }
+        """
+        try:
+            tree = self.load_tree(job_type)
+            required = tree.get("required_fields", [])
+
+            # Check required fields first
+            missing_required = [f for f in required if f not in answered_fields]
+
+            # Always require finish
+            if "finish" not in answered_fields and "finish" not in missing_required:
+                missing_required.append("finish")
+
+            if missing_required:
+                return {
+                    "status": "needs_questions",
+                    "missing_critical": missing_required,
+                    "confidence": 0.0,
+                    "message": "Missing required fields: %s" % ", ".join(missing_required),
+                }
+
+            # AI evaluation of scope completeness
+            answered_summary = "\n".join(
+                "  - %s: %s" % (k, v)
+                for k, v in answered_fields.items()
+                if not str(k).startswith("_")
+            )
+
+            prompt = (
+                "You are a metal fabrication estimator reviewing a job scope "
+                "before generating a quote.\n\n"
+                "Job type: %s\n"
+                "Customer description:\n\"\"\"%s\"\"\"\n\n"
+                "Fields answered so far:\n%s\n\n"
+                "EVALUATE: Do you have enough information to generate an accurate "
+                "quote (within 15%% of reality)? Consider:\n"
+                "- Are all critical dimensions specified or unambiguously implied?\n"
+                "- Is the mounting/installation method clear?\n"
+                "- Is the material fully specified (type, thickness)?\n"
+                "- Is the finish specified?\n"
+                "- Are there any components the customer might supply vs us fabricating?\n"
+                "- Is indoor/outdoor use clear?\n\n"
+                "Return ONLY valid JSON:\n"
+                "{\"status\": \"ready\"|\"needs_questions\", "
+                "\"missing_critical\": [\"list of gaps\"], "
+                "\"confidence\": 0.0-1.0, "
+                "\"message\": \"brief explanation\"}"
+                % (job_type, description, answered_summary)
+            )
+
+            text = call_fast(prompt, timeout=30)
+            if text is None:
+                # Can't reach AI — fall through with basic check
+                return {
+                    "status": "ready" if not missing_required else "needs_questions",
+                    "missing_critical": missing_required,
+                    "confidence": 0.5,
+                    "message": "AI unavailable — basic field check only",
+                }
+
+            # Parse response
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+                if cleaned.endswith("```"):
+                    cleaned = cleaned[:-3]
+                cleaned = cleaned.strip()
+
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict):
+                return {
+                    "status": "ready",
+                    "missing_critical": [],
+                    "confidence": 0.5,
+                    "message": "Parse error",
+                }
+
+            return {
+                "status": parsed.get("status", "ready"),
+                "missing_critical": parsed.get("missing_critical", []),
+                "confidence": float(parsed.get("confidence", 0.5)),
+                "message": parsed.get("message", ""),
+            }
+        except Exception as e:
+            logger.warning("Scope readiness check failed: %s", e)
+            return {
+                "status": "ready",
+                "missing_critical": [],
+                "confidence": 0.5,
+                "message": str(e),
+            }
 
     def get_quote_params(self, job_type: str, answered_fields: dict,
                          user_id: int = 0, session_id: str = "",
@@ -564,30 +669,23 @@ Job type: {display_name} ({job_type})
 Customer description:
 \"\"\"{description}\"\"\"
 
-EXTRACT every field the customer stated or clearly implied. Be AGGRESSIVE — if the customer said it, extract it.
+EXTRACT ONLY fields the customer EXPLICITLY stated. Be CONSERVATIVE — when in doubt, omit the field. A missing field will trigger a follow-up question; a wrong assumption will produce a wrong quote.
 
 RULES:
-1. MEASUREMENTS: Convert to the field's unit. "10 feet" -> 10. "120 inches" -> 10 (feet). "10'" -> 10. "10x6" -> width=10, height=6.
-2. CHOICE FIELDS: You MUST return the EXACT option string from the options list. Do NOT paraphrase.
-   - If customer says "paint" and options are ["Powder coat (most durable, outsourced)", "Paint (in-house)", ...] -> return "Paint (in-house)"
-   - If customer says "motor" or "electric" and options are ["Yes", "No — manual operation", ...] -> return "Yes"
-   - If customer says "install" or "full install" and options include "Full installation (gate + posts + concrete)" -> return that exact string
-   - If customer says "pickup" or "no install" and options include "Shop pickup (no installation)" -> return that exact string
-   - If customer says "pickets" and options include "Pickets (vertical bars)" -> return "Pickets (vertical bars)"
-3. BOOLEAN/YES-NO: "with motor" -> "Yes". "no motor" -> "No — manual operation" (use exact option string).
-4. If the field is NOT mentioned at all, omit it. But if mentioned even briefly, EXTRACT it.
-5. Return ONLY a JSON object with field_id: extracted_value pairs. Empty object {{{{}}}} if nothing found.
-6. MATERIAL FIELD: If the customer says a generic material like "aluminum", "steel", or "stainless" WITHOUT
-   specifying a grade or alloy (e.g., "6061", "5052", "304", "316", "11ga"), do NOT extract the material field.
-   Let the material question be asked so the user can choose the specific grade.
-   ONLY extract material when the customer explicitly specifies a grade: "6061 aluminum" -> extract, "aluminum" -> do NOT extract.
-7. FINISH FIELD: If the customer mentions ANY finish/coating term, extract the "finish" field. Map these terms:
-   - "clear coat", "clear coated", "clearcoat", "clear-coat", "permalac", "lacquer" -> closest clear coat option, or "clearcoat" if no exact match
+1. ONLY extract fields the customer EXPLICITLY stated. Do NOT infer, assume, or guess.
+   - "with mounting" does NOT tell you the mount TYPE — omit mount type field
+   - "multi-layer" does NOT tell you the exact layer count — omit layer count
+   - "aluminum" does NOT mean 6061-T6 specifically — extract "aluminum" not an alloy grade
+   - If you are less than 95% confident the customer stated this value, OMIT IT
+2. MEASUREMENTS: Convert to the field's unit. "10 feet" -> 10. "120 inches" -> 10 (feet). Only extract measurements the customer gave explicitly.
+3. CHOICE FIELDS: Return the EXACT option string from the options list. If no option is a confident match for what the customer said, OMIT the field entirely — do NOT pick the closest guess.
+4. BOOLEAN/YES-NO: Only extract if the customer explicitly stated yes or no. "with motor" -> "Yes". Absence of mention is NOT "No" — it's omitted.
+5. Return ONLY a JSON object with field_id: extracted_value pairs. Empty object {{{{}}}} if nothing matches confidently.
+6. FINISH FIELD: Only extract if the customer explicitly mentions a finish. Map these terms:
+   - "clear coat", "clearcoat", "clear-coat" -> closest clear coat option
    - "powder coat", "powdercoat" -> closest powder coat option
-   - "anodize", "anodized" -> "anodized"
-   - "brushed", "polished", "mill finish" -> closest option
-   - "raw", "no finish" -> "raw"
-   If NO option in the list matches, still extract the finish field with the customer's term verbatim.
+   - If the customer does NOT mention finish at all, OMIT the finish field entirely.
+7. When in doubt, OMIT. A missing field triggers a question. A wrong field triggers a wrong quote. Questions are cheap. Wrong quotes lose customers.
 
 FIELDS:
 {field_descriptions}
