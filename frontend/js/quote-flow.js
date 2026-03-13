@@ -812,6 +812,11 @@ const QuoteFlow = {
                             <td class="r labor-line-total" data-process="${p.process}">${this._fmt(p.hours * p.rate)}</td>
                         </tr>
                     `).join('')}
+                    <tr style="font-style:italic;border-top:1px solid #ddd">
+                        <td>Total Hours</td>
+                        <td class="r" id="labor-total-hours">${procs.reduce((sum, p) => sum + p.hours, 0).toFixed(1)}</td>
+                        <td colspan="2"></td>
+                    </tr>
                     <tr class="subtotal-row">
                         <td colspan="3">Labor Subtotal</td>
                         <td class="r" id="labor-table-subtotal"><strong>${this._fmt(pq.labor_subtotal)}</strong></td>
@@ -1137,6 +1142,11 @@ const QuoteFlow = {
         if (hwTbl) hwTbl.innerHTML = '<strong>' + this._fmt(pq.hardware_subtotal) + '</strong>';
         if (conTbl) conTbl.innerHTML = '<strong>' + this._fmt(pq.consumable_subtotal) + '</strong>';
         if (laborTbl) laborTbl.innerHTML = '<strong>' + this._fmt(pq.labor_subtotal) + '</strong>';
+        const hoursEl = document.getElementById('labor-total-hours');
+        if (hoursEl) {
+            const totalHrs = (pq.labor || []).filter(p => p.hours > 0).reduce((s, p) => s + p.hours, 0);
+            hoursEl.textContent = totalHrs.toFixed(1);
+        }
     },
 
     _adjustTimers: {},

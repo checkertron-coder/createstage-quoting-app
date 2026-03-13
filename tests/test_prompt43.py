@@ -456,3 +456,122 @@ def test_clearcoat_default_is_2k():
         "Default 2K should be 3 coats, got %d" % result["coat_count"]
     assert result["materials_cost"] == 225.00, \
         "Default 2K: 50 x $1.50 x 3 = $225, got $%.2f" % result["materials_cost"]
+
+
+# ---- Fix 8: Laser Cutting Pricing ----
+
+def test_laser_rate_realistic():
+    """1000" perimeter should cost > $350 at the new $0.35/inch rate."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # Simulate _build_from_ai_cuts with sheet items
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 24,
+         "quantity": 4, "piece_name": "panel"},
+    ]
+    fields = {"description": "aluminum sign", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    # Find laser hardware item
+    hw = result.get("hardware", [])
+    laser_items = [h for h in hw if "laser" in h["description"].lower()]
+    assert len(laser_items) == 1, "Should have exactly one laser cutting hardware item"
+    # 4 panels: perimeter = 2*(48+24)*4 = 576". Cost = 4*75 + 576*0.35 = 501.60
+    laser_cost = laser_items[0]["options"][0]["price"]
+    assert laser_cost > 350, \
+        "Laser cost should be > $350 for 576\" perimeter, got $%.2f" % laser_cost
+
+
+def test_laser_setup_fee_per_sheet():
+    """Multiple sheet pieces should each incur setup fee."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 24, "width_inches": 12,
+         "quantity": 3, "piece_name": "small panel"},
+    ]
+    fields = {"description": "aluminum box", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    hw = result.get("hardware", [])
+    laser_items = [h for h in hw if "laser" in h["description"].lower()]
+    assert len(laser_items) == 1
+    # 3 pieces: setup = 3*75 = 225, perimeter = 2*(24+12)*3 = 216", cut = 216*0.35 = 75.60
+    # Total = 225 + 75.60 = 300.60
+    laser_cost = laser_items[0]["options"][0]["price"]
+    assert laser_cost >= 300, \
+        "3-piece laser should be >= $300 (setup + cut), got $%.2f" % laser_cost
+    assert "3 pieces" in laser_items[0]["description"], \
+        "Description should mention piece count"
+
+
+def test_laser_exclusion_filtered_when_priced():
+    """Opus 'laser cutting' exclusion should be removed when laser is already in hardware."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    session_data = {
+        "session_id": "test-laser-excl",
+        "job_type": "led_sign_custom",
+        "fields": {"description": "aluminum sign", "finish": "raw"},
+        "material_list": {
+            "items": [],
+            "hardware": [
+                {"description": "Laser cutting service — 500\" perimeter, 2 pieces",
+                 "quantity": 1,
+                 "options": [{"supplier": "Local", "price": 250.0,
+                              "url": "", "part_number": None, "lead_days": None}]},
+            ],
+            "total_weight_lbs": 10.0,
+            "total_sq_ft": 5.0,
+            "weld_linear_inches": 0,
+            "assumptions": [],
+            "_opus_exclusions": [
+                "Laser cutting / CNC routing for letter faces — typically $500-$1,500",
+                "Electrical wiring for LED modules",
+            ],
+        },
+        "labor_estimate": {"processes": [], "total_hours": 0},
+        "finishing": {"method": "raw", "area_sq_ft": 5, "hours": 0,
+                      "materials_cost": 0, "outsource_cost": 0, "total": 0},
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 0,
+            "rate_inshop": 125, "rate_onsite": 145}
+    pq = pe.build_priced_quote(session_data, user)
+    excl = pq.get("exclusions", [])
+    # Laser exclusion should be filtered out
+    laser_excl = [e for e in excl if "laser cut" in e.lower()]
+    assert len(laser_excl) == 0, \
+        "Laser exclusion should be filtered when laser is in hardware, got: %s" % laser_excl
+    # Non-laser exclusion should remain
+    led_excl = [e for e in excl if "LED" in e or "Electrical" in e]
+    assert len(led_excl) > 0, "Non-laser exclusions should be kept"
+
+
+def test_laser_exclusion_kept_when_no_hardware():
+    """Opus laser exclusion should be kept when no laser hardware is present."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    session_data = {
+        "session_id": "test-laser-kept",
+        "job_type": "led_sign_custom",
+        "fields": {"description": "steel sign", "finish": "raw"},
+        "material_list": {
+            "items": [],
+            "hardware": [],  # No laser hardware
+            "total_weight_lbs": 10.0,
+            "total_sq_ft": 5.0,
+            "weld_linear_inches": 0,
+            "assumptions": [],
+            "_opus_exclusions": [
+                "Laser cutting / CNC routing — typically $500-$1,500",
+            ],
+        },
+        "labor_estimate": {"processes": [], "total_hours": 0},
+        "finishing": {"method": "raw", "area_sq_ft": 5, "hours": 0,
+                      "materials_cost": 0, "outsource_cost": 0, "total": 0},
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 0,
+            "rate_inshop": 125, "rate_onsite": 145}
+    pq = pe.build_priced_quote(session_data, user)
+    excl = pq.get("exclusions", [])
+    laser_excl = [e for e in excl if "laser" in e.lower()]
+    assert len(laser_excl) > 0, \
+        "Laser exclusion should be kept when no laser hardware present"

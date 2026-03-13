@@ -825,6 +825,14 @@ def generate_quote_pdf(
         if hours > 0:
             pdf.table_row([_safe(name), _fmt_hrs(hours), f"{_fmt(rate)}/hr", _fmt(total)], labor_widths)
 
+    # Total hours row
+    total_hours = sum(p.get("hours", 0) for p in labor if p.get("hours", 0) > 0)
+    if total_hours > 0:
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.cell(labor_widths[0], 5.5, "Total Hours", 0, 0, "L")
+        pdf.cell(labor_widths[1], 5.5, _fmt_hrs(total_hours), 0, 0, "R")
+        pdf.cell(labor_widths[2] + labor_widths[3], 5.5, "", 0, 1, "R")
+
     labor_sub = priced_quote.get("labor_subtotal", 0)
     pdf.subtotal_row("Labor Subtotal", labor_sub)
 

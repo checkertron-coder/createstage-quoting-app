@@ -510,11 +510,22 @@ class PricingEngine:
             exclusions.append("Additional damage discovered during disassembly")
             exclusions.append("Matching existing finish — exact color match not guaranteed")
 
-        # Opus exclusions from full package
+        # Opus exclusions from full package — filter contradictions
         material_list = session_data.get("material_list", {})
+        # Check if laser cutting is already priced as a hardware item
+        hw_items = material_list.get("hardware", [])
+        has_laser_hw = any(
+            "laser" in str(h.get("description", "")).lower()
+            for h in hw_items
+        )
         for e in material_list.get("_opus_exclusions", []):
-            if e not in exclusions:
-                exclusions.append(e)
+            if e in exclusions:
+                continue
+            e_lower = e.lower()
+            # Skip laser/CNC exclusions when laser is already a priced line item
+            if has_laser_hw and ("laser cut" in e_lower or "cnc rout" in e_lower):
+                continue
+            exclusions.append(e)
 
         return exclusions
 
