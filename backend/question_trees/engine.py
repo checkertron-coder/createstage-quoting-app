@@ -766,16 +766,30 @@ def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     Falls back to empty result on any error.
     """
     try:
-        logger.info("_call_claude_vision: calling with b64_len=%d mime=%s prompt_len=%d",
-                     len(image_b64), mime_type, len(prompt))
         text = _claude_vision(prompt, image_b64, mime_type, timeout=60)
         if text is None:
-            logger.error("_call_claude_vision: _claude_vision returned None "
-                         "(check claude_client logs for API error details)")
+            print("[VISION-DEBUG] _call_claude_vision: API returned None", flush=True)
             return _empty_photo_result()
-        logger.info("_call_claude_vision: got response (%d chars)", len(text))
-        parsed = json.loads(text)
+
+        print(f"[VISION-DEBUG] _call_claude_vision: got {len(text)} chars, "
+              f"first 200: {text[:200]!r}", flush=True)
+
+        # Strip markdown code blocks — Claude often wraps JSON in ```json ... ```
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            # Remove opening ```json or ``` line
+            first_newline = cleaned.find("\n")
+            if first_newline != -1:
+                cleaned = cleaned[first_newline + 1:]
+            # Remove closing ```
+            if cleaned.rstrip().endswith("```"):
+                cleaned = cleaned.rstrip()[:-3].rstrip()
+
+        parsed = json.loads(cleaned)
         if isinstance(parsed, dict):
+            print(f"[VISION-DEBUG] _call_claude_vision: parsed OK, "
+                  f"confidence={parsed.get('confidence')}, "
+                  f"fields={list(parsed.get('extracted_fields', {}).keys())}", flush=True)
             return {
                 "extracted_fields": parsed.get("extracted_fields", {}),
                 "photo_observations": parsed.get("photo_observations", ""),
@@ -784,15 +798,17 @@ def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
                 "damage_assessment": parsed.get("damage_assessment", "N/A"),
                 "confidence": float(parsed.get("confidence", 0.0)),
             }
-        logger.error("_call_claude_vision: response is not a dict: %s", type(parsed))
+        print(f"[VISION-DEBUG] _call_claude_vision: response is not a dict: {type(parsed)}",
+              flush=True)
         return _empty_photo_result()
     except json.JSONDecodeError as e:
-        logger.error("_call_claude_vision: JSON parse failed: %s — raw text: %.500s",
-                     e, text if 'text' in dir() else '(no text)')
+        print(f"[VISION-DEBUG] _call_claude_vision: JSON PARSE FAILED: {e} — "
+              f"raw text: {text[:500]!r}" if 'text' in dir() else
+              "[VISION-DEBUG] _call_claude_vision: JSON PARSE FAILED (no text)", flush=True)
         return _empty_photo_result()
     except Exception as e:
-        logger.error("_call_claude_vision: unexpected error %s: %s",
-                     type(e).__name__, e)
+        print(f"[VISION-DEBUG] _call_claude_vision: EXCEPTION {type(e).__name__}: {e}",
+              flush=True)
         return _empty_photo_result()
 
 
