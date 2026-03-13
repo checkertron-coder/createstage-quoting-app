@@ -151,6 +151,7 @@ const API = {
         const body = { description };
         if (jobType) body.job_type = jobType;
         if (photoUrls && photoUrls.length) body.photo_urls = photoUrls;
+        console.log('[VISION-DEBUG] startSession body:', JSON.stringify(body));
         const resp = await this._fetch('/session/start', {
             method: 'POST',
             body: JSON.stringify(body),

@@ -62,6 +62,8 @@ def call_vision(prompt, image_b64, mime_type, temperature=0.1, timeout=60,
                 json_mode=True):
     # type: (str, str, str, float, int, bool) -> Optional[str]
     """Call Claude Vision with an image. Returns response text or None."""
+    print(f"[VISION-DEBUG] call_vision ENTERED: b64_len={len(image_b64) if image_b64 else 0}, "
+          f"mime={mime_type}, prompt_len={len(prompt) if prompt else 0}", flush=True)
     # Validate inputs before sending
     if not image_b64:
         logger.error("call_vision: image_b64 is empty/None")

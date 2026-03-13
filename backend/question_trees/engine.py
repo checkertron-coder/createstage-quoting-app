@@ -657,7 +657,7 @@ def _match_option(value: str, options: list) -> Optional[str]:
 
 def _read_image(photo_url_or_path: str) -> Optional[bytes]:
     """Read image data from a URL or local file path."""
-    logger.info("_read_image: attempting to read '%s'", photo_url_or_path)
+    print(f"[VISION-DEBUG] _read_image ENTERED: path='{photo_url_or_path}'", flush=True)
     if photo_url_or_path.startswith("http"):
         try:
             req = urllib.request.Request(photo_url_or_path)

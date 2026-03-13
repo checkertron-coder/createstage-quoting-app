@@ -74,11 +74,9 @@ def start_session(
     2. Runs extract_from_description to pull fields from initial text
     3. Returns session_id, detected job_type, extracted fields, and next questions
     """
-    # Diagnostic: log what photos were received
-    logger.info(
-        "SESSION /start: photo_urls=%s, photos=%s, desc_len=%d",
-        request.photo_urls, request.photos, len(request.description),
-    )
+    # Diagnostic: print() bypasses any logging config issues
+    print(f"[VISION-DEBUG] /start called: photo_urls={request.photo_urls}, "
+          f"photos={request.photos}, desc_len={len(request.description)}", flush=True)
 
     # Detect job type if not provided
     if request.job_type:
@@ -93,8 +91,8 @@ def start_session(
 
     # Merge photo_urls from both fields (backward compat + new field)
     photo_urls = list(request.photo_urls or request.photos or [])
-    logger.info("SESSION /start: merged photo_urls=%s (count=%d), job_type=%s",
-                photo_urls, len(photo_urls), job_type)
+    print(f"[VISION-DEBUG] /start merged: photo_urls={photo_urls}, count={len(photo_urls)}, "
+          f"job_type={job_type}", flush=True)
 
     # Validate that we have a question tree for this job type
     available = engine.list_available_trees()
@@ -118,17 +116,17 @@ def start_session(
         photo_extracted_fields = {}
         photo_observations = ""
         if photo_urls:
-            logger.info("SESSION /start: processing %d photos for vision extraction",
-                        len(photo_urls))
+            print(f"[VISION-DEBUG] Processing {len(photo_urls)} photos for vision", flush=True)
+        else:
+            print("[VISION-DEBUG] No photos to process — photo_urls is empty", flush=True)
         for photo_url in photo_urls:
             try:
-                logger.info("SESSION /start: calling extract_from_photo('%s')", photo_url)
+                print(f"[VISION-DEBUG] Calling extract_from_photo('{photo_url}')", flush=True)
                 photo_result = engine.extract_from_photo(
                     job_type, photo_url, request.description
                 )
-                logger.info("SESSION /start: photo result confidence=%.2f, obs='%s'",
-                            photo_result.get("confidence", 0),
-                            (photo_result.get("photo_observations", "") or "")[:100])
+                print(f"[VISION-DEBUG] Photo result: confidence={photo_result.get('confidence', 0)}, "
+                      f"obs='{(photo_result.get('photo_observations', '') or '')[:100]}'", flush=True)
                 # Merge photo-extracted fields (text wins on conflict)
                 for field_id, value in photo_result.get("extracted_fields", {}).items():
                     if field_id not in extracted_fields:
