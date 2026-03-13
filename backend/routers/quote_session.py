@@ -460,28 +460,6 @@ def calculate_materials(
     else:
         raise HTTPException(status_code=400, detail=f"No question tree for job type: {job_type}")
 
-    # Scope readiness check — does Opus have enough info to quote accurately?
-    description = str(current_params.get("description", "") or "")
-    scope_check = engine.check_scope_readiness(job_type, description, current_params)
-    logger.info("SCOPE CHECK: %s (confidence=%.2f) — %s",
-                scope_check["status"], scope_check["confidence"], scope_check["message"])
-
-    if scope_check["status"] == "needs_questions" and scope_check.get("missing_critical"):
-        # Generate questions for the missing gaps
-        tree_question_ids = [q["id"] for q in engine.get_next_questions(job_type, current_params)]
-        additional_qs = engine.suggest_additional_questions(
-            job_type, description, current_params, tree_question_ids
-        )
-        if additional_qs:
-            return {
-                "session_id": session_id,
-                "status": "needs_more_info",
-                "scope_check": scope_check,
-                "additional_questions": _serialize_questions(additional_qs),
-                "message": "More information needed for an accurate quote. "
-                           "Please answer the additional questions.",
-            }
-
     # Check calculator exists
     if not has_calculator(job_type):
         raise HTTPException(
