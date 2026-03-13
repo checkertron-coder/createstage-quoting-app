@@ -1,6 +1,6 @@
 {
     "job_type": "sign_frame",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Sign Frame / Bracket",
     "category": "signage",
     "required_fields": [
@@ -15,15 +15,71 @@
             "required": true,
             "hint": "Monument signs are ground-level structures. Post-mount is for elevated signs. Blade signs project from a wall face.",
             "depends_on": null,
-            "branches": null
+            "branches": {
+                "Post-mount sign frame (street/parking lot)": ["construction_style", "post_count"],
+                "Monument sign frame (ground-level)": ["construction_style"],
+                "Pylon / pole sign frame (tall freestanding)": ["construction_style", "post_count"]
+            }
         },
         {
             "id": "sign_dimensions",
             "text": "Sign panel dimensions (width × height)?",
             "type": "text",
             "required": true,
-            "hint": "Example: '4 ft × 3 ft', '24\" × 36\"'. This determines the frame size and wind load.",
+            "hint": "Example: '4 ft × 3 ft', '24\" × 36\"', '5 ft circle'. This determines the frame size and wind load.",
             "depends_on": null,
+            "branches": null
+        },
+        {
+            "id": "construction_style",
+            "text": "How is the sign constructed?",
+            "type": "choice",
+            "options": ["Flat panel (single layer — vinyl/paint on face)", "Multi-layer (stacked layers with spacers between)", "Box / cabinet (enclosed frame with face panel)", "Open frame (structural frame holds separate sign panel)"],
+            "required": false,
+            "hint": "Multi-layer signs use spacers or standoffs to create depth between layers. Box/cabinet signs are enclosed with internal access.",
+            "depends_on": null,
+            "branches": {
+                "Multi-layer (stacked layers with spacers between)": ["layer_count", "spacer_method"],
+                "Box / cabinet (enclosed frame with face panel)": ["cabinet_depth"]
+            }
+        },
+        {
+            "id": "layer_count",
+            "text": "How many layers?",
+            "type": "choice",
+            "options": ["2 layers (background + foreground)", "3 layers", "4+ layers"],
+            "required": false,
+            "hint": "Each layer is a separate piece of material with spacers between. More layers = more depth and complexity.",
+            "depends_on": "construction_style",
+            "branches": null
+        },
+        {
+            "id": "spacer_method",
+            "text": "How are the layers separated?",
+            "type": "choice",
+            "options": ["Round tube standoffs (welded between layers)", "Flat bar spacers", "Threaded rod / all-thread with nuts", "Welded tabs / clips"],
+            "required": false,
+            "hint": "Round tube standoffs are common for sign work. Threaded rod allows field adjustment of spacing.",
+            "depends_on": "construction_style",
+            "branches": null
+        },
+        {
+            "id": "cabinet_depth",
+            "text": "Cabinet / box depth?",
+            "type": "text",
+            "required": false,
+            "hint": "Example: '4 inches', '6 inches'. Deeper cabinets allow more internal space for wiring.",
+            "depends_on": "construction_style",
+            "branches": null
+        },
+        {
+            "id": "post_count",
+            "text": "How many posts?",
+            "type": "choice",
+            "options": ["1 (center post)", "2 (standard)", "3+ (wide sign)"],
+            "required": false,
+            "hint": "Standard is 2 posts. Very wide signs (8 ft+) may need 3.",
+            "depends_on": "sign_type",
             "branches": null
         },
         {

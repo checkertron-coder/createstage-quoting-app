@@ -291,14 +291,18 @@ class BaseCalculator(ABC):
                 }
             profile_totals[profile]["total_ft"] += piece_total_ft
 
-            # Accumulate sheet data — keep the LARGEST sheet size and total piece area
+            # Accumulate sheet data
             if is_sheet:
                 new_size = cut.get("sheet_stock_size")
                 if new_size:
                     existing = profile_totals[profile]["sheet_stock_size"]
                     if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
                         profile_totals[profile]["sheet_stock_size"] = new_size
-                # Accumulate total piece area (sq inches) for area-based sheet count
+                # Accumulate Opus's sheets_needed per profile
+                profile_totals[profile]["sheets_needed"] += (
+                    cut.get("sheets_needed", 0) * quantity
+                )
+                # Accumulate total piece area for legacy path nesting calc
                 width_in = cut.get("width_inches", 0)
                 if width_in > 0:
                     profile_totals[profile]["total_piece_area"] = (
@@ -306,7 +310,6 @@ class BaseCalculator(ABC):
                         + length_in * width_in * quantity
                     )
                 else:
-                    # No width — assume square-ish piece
                     profile_totals[profile]["total_piece_area"] = (
                         profile_totals[profile].get("total_piece_area", 0)
                         + length_in * length_in * quantity
@@ -323,8 +326,16 @@ class BaseCalculator(ABC):
             raw_ft = info["total_ft"]
             is_sheet = info.get("is_sheet", False)
 
-            if is_sheet and info.get("total_piece_area", 0) > 0:
-                # Calculate sheets from total piece area with nesting efficiency
+            if is_sheet and trust_opus and info["sheets_needed"] > 0:
+                # Full package path: trust Opus's sheets_needed
+                sheets_needed = info["sheets_needed"]
+                stock = info["sheet_stock_size"]
+                sheet_sqft = (stock[0] * stock[1] / 144.0) if stock else 32.0
+                line_total = round(sheets_needed * sheet_sqft * info["price_ft"], 2)
+                wasted_ft = raw_ft
+                waste_factor = 0.0
+            elif is_sheet and info.get("total_piece_area", 0) > 0:
+                # Legacy path: calculate sheets from area with nesting efficiency
                 import math
                 stock = info["sheet_stock_size"]
                 if stock:
@@ -333,14 +344,13 @@ class BaseCalculator(ABC):
                 else:
                     sheet_area_sqin = 48 * 96  # fallback 4x8
                     sheet_sqft = 32.0
-                # 75% nesting efficiency — accounts for irregular shapes, kerf, offcuts
                 usable_area = sheet_area_sqin * 0.75
                 sheets_needed = max(1, int(math.ceil(
                     info["total_piece_area"] / usable_area
                 )))
                 info["sheets_needed"] = sheets_needed
                 line_total = round(sheets_needed * sheet_sqft * info["price_ft"], 2)
-                wasted_ft = raw_ft  # no separate waste for sheets
+                wasted_ft = raw_ft
                 waste_factor = 0.0
             elif trust_opus:
                 # Full package path: Opus accounts for waste — no markup

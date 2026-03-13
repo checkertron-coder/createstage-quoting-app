@@ -95,9 +95,11 @@ app.include_router(bid_parser.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
 
 # Serve uploaded photos (local fallback when R2 not configured)
+# Create directory unconditionally so the mount always exists —
+# without this, fresh deploys skip the mount and photos get 404s.
 uploads_path = os.path.join(os.path.dirname(__file__), "..", "uploads")
-if os.path.exists(uploads_path):
-    app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
+os.makedirs(os.path.join(uploads_path, "photos"), exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
 
 # Serve frontend static files
 frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
