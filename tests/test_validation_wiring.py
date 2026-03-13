@@ -300,12 +300,13 @@ class TestDecorativeStockPrepFix:
 
 class TestAICutListValidationWiring:
 
-    def test_generate_build_instructions_has_validation_import(self):
-        """ai_cut_list.py generate_build_instructions references check_banned_terms."""
+    def test_generate_build_instructions_returns_steps_unmodified(self):
+        """ai_cut_list.py generate_build_instructions returns steps without
+        banned term stripping — Opus output passes through unmodified (P43c)."""
         import backend.calculators.ai_cut_list as acl
         source = inspect.getsource(acl.AICutListGenerator.generate_build_instructions)
-        assert "check_banned_terms" in source, \
-            "generate_build_instructions must call check_banned_terms"
+        assert "check_banned_terms" not in source, \
+            "generate_build_instructions should NOT strip banned terms (P43c)"
 
     def test_banned_term_flagged_in_step(self):
         """If a build step contains a banned term, it gets flagged."""
@@ -335,16 +336,15 @@ class TestAICutListValidationWiring:
         assert "baking soda" in flagged[0]["description"].lower()
 
     def test_validation_call_sites_exist(self):
-        """check_banned_terms and validate_full_output are called in actual pipeline code."""
-        import backend.calculators.ai_cut_list as acl
+        """check_banned_terms and validate_full_output are called in quote_session.py.
+        P43c: banned term checking moved from ai_cut_list.py to quote_session.py only."""
         import backend.routers.quote_session as qs
 
-        acl_source = inspect.getsource(acl)
         qs_source = inspect.getsource(qs)
 
-        # ai_cut_list.py must call check_banned_terms (not just import)
-        assert "check_banned_terms(" in acl_source, \
-            "ai_cut_list.py must CALL check_banned_terms, not just import it"
+        # quote_session.py must call check_banned_terms (at /price validation)
+        assert "check_banned_terms(" in qs_source, \
+            "quote_session.py must CALL check_banned_terms in the hot path"
 
         # quote_session.py must call validate_full_output (not just import)
         assert "validate_full_output(" in qs_source, \

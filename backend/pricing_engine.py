@@ -55,41 +55,10 @@ class PricingEngine:
         job_type = session_data.get("job_type", "custom_fab")
         job_description = fields.get("description", "")
 
-        # --- Rebuild finishing from current fields (AC-1 fix) ---
-        # The upstream finishing from /estimate may be stale or incorrectly
-        # built as "raw". Rebuild here so finishing and consumables always
-        # derive from the same field values at the same time.
-        finish_field = fields.get("finish", fields.get("finish_type", ""))
-        if not finish_field:
-            # Fallback: extract finish from description keywords
-            desc_lower = str(job_description).lower()
-            if "powder" in desc_lower and "coat" in desc_lower:
-                finish_field = "powder_coat"
-            elif "clear coat" in desc_lower or "clearcoat" in desc_lower:
-                finish_field = "clearcoat"
-            elif "paint" in desc_lower and "powder" not in desc_lower:
-                finish_field = "paint"
-            elif "galvaniz" in desc_lower:
-                finish_field = "galvanized"
-            elif "anodiz" in desc_lower:
-                finish_field = "anodized"
-            elif "patina" in desc_lower or "blacken" in desc_lower:
-                finish_field = "patina"
-            elif "brush" in desc_lower or "polish" in desc_lower:
-                finish_field = "brushed"
-            else:
-                finish_field = "raw"
-
         labor_processes = labor_estimate.get("processes", [])
         total_sq_ft = material_list.get("total_sq_ft", 0)
         clear_coat_type = fields.get("clear_coat_type", "")
         finishing_builder = FinishingBuilder()
-        finishing = finishing_builder.build(
-            finish_type=finish_field,
-            total_sq_ft=total_sq_ft,
-            labor_processes=labor_processes,
-            clear_coat_type=clear_coat_type,
-        )
 
         # --- Check for _opus_* keys (full package path) ---
         opus_hardware = material_list.get("_opus_hardware")
@@ -98,20 +67,26 @@ class PricingEngine:
         opus_finishing_method = material_list.get("_opus_finishing_method")
 
         if opus_hardware is not None:
-            # Full package path — Opus provided hardware directly
+            # Full package path — trust Opus's output directly
             priced_hardware = list(opus_hardware)
-            consumables = self._validate_consumable_prices(
-                list(opus_consumables or [])
-            )
 
-            # Still rebuild finishing from Opus's method recommendation
-            if opus_finishing_method:
-                finishing = finishing_builder.build(
-                    finish_type=opus_finishing_method,
-                    total_sq_ft=total_sq_ft,
-                    labor_processes=labor_processes,
-                    clear_coat_type=clear_coat_type,
-                )
+            # Trust Opus's consumable prices — just ensure line_total math
+            consumables = []
+            for item in list(opus_consumables or []):
+                item = dict(item)  # don't mutate original
+                qty = max(int(item.get("quantity", 1) or 1), 1)
+                unit_price = float(item.get("unit_price", 0) or 0)
+                item["line_total"] = round(qty * unit_price, 2)
+                consumables.append(item)
+
+            # Build finishing from Opus's method recommendation
+            finish_method = opus_finishing_method or "raw"
+            finishing = finishing_builder.build(
+                finish_type=finish_method,
+                total_sq_ft=total_sq_ft,
+                labor_processes=labor_processes,
+                clear_coat_type=clear_coat_type,
+            )
 
             # Use Opus labor hours if available (multiply by user's shop rate)
             if opus_labor:
@@ -119,7 +94,34 @@ class PricingEngine:
                     opus_labor, labor_processes, user,
                 )
         else:
-            # Fallback path — existing behavior (no full package)
+            # Legacy path — rebuild finishing from fields (no Opus to trust)
+            finish_field = fields.get("finish", fields.get("finish_type", ""))
+            if not finish_field:
+                desc_lower = str(job_description).lower()
+                if "powder" in desc_lower and "coat" in desc_lower:
+                    finish_field = "powder_coat"
+                elif "clear coat" in desc_lower or "clearcoat" in desc_lower:
+                    finish_field = "clearcoat"
+                elif "paint" in desc_lower and "powder" not in desc_lower:
+                    finish_field = "paint"
+                elif "galvaniz" in desc_lower:
+                    finish_field = "galvanized"
+                elif "anodiz" in desc_lower:
+                    finish_field = "anodized"
+                elif "patina" in desc_lower or "blacken" in desc_lower:
+                    finish_field = "patina"
+                elif "brush" in desc_lower or "polish" in desc_lower:
+                    finish_field = "brushed"
+                else:
+                    finish_field = "raw"
+
+            finishing = finishing_builder.build(
+                finish_type=finish_field,
+                total_sq_ft=total_sq_ft,
+                labor_processes=labor_processes,
+                clear_coat_type=clear_coat_type,
+            )
+
             # --- Price hardware ---
             raw_hardware = material_list.get("hardware", [])
             priced_hardware = self.hardware_sourcer.price_hardware_list(raw_hardware)
@@ -132,7 +134,7 @@ class PricingEngine:
             # --- Estimate consumables ---
             weld_inches = material_list.get("weld_linear_inches", 0)
             total_sq_ft = material_list.get("total_sq_ft", 0)
-            finish_type = finish_field  # Use same corrected finish for consumables
+            finish_type = finish_field
 
             # Detect material type from description for correct consumables
             desc_lower = str(job_description).lower()
@@ -160,10 +162,9 @@ class PricingEngine:
                     if opus_bom.get("hardware"):
                         priced_hardware.extend(opus_bom["hardware"])
                     if opus_bom.get("consumables"):
-                        # Opus consumables REPLACE deterministic estimation
                         consumables = opus_bom["consumables"]
             except Exception:
-                pass  # Opus BOM failure never blocks quoting — fallback already populated
+                pass
 
         # --- BOM validation: orphan check against build instructions ---
         build_instructions = session_data.get("build_instructions", [])
@@ -510,22 +511,11 @@ class PricingEngine:
             exclusions.append("Additional damage discovered during disassembly")
             exclusions.append("Matching existing finish — exact color match not guaranteed")
 
-        # Opus exclusions from full package — filter contradictions
+        # Opus exclusions from full package — pass through unmodified
         material_list = session_data.get("material_list", {})
-        # Check if laser cutting is already priced as a hardware item
-        hw_items = material_list.get("hardware", [])
-        has_laser_hw = any(
-            "laser" in str(h.get("description", "")).lower()
-            for h in hw_items
-        )
         for e in material_list.get("_opus_exclusions", []):
-            if e in exclusions:
-                continue
-            e_lower = e.lower()
-            # Skip laser/CNC exclusions when laser is already a priced line item
-            if has_laser_hw and ("laser cut" in e_lower or "cnc rout" in e_lower):
-                continue
-            exclusions.append(e)
+            if e not in exclusions:
+                exclusions.append(e)
 
         return exclusions
 

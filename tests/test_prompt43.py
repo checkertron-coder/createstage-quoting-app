@@ -505,12 +505,12 @@ def test_laser_setup_fee_per_sheet():
         "Description should mention sheets"
 
 
-def test_laser_exclusion_filtered_when_priced():
-    """Opus 'laser cutting' exclusion should be removed when laser is already in hardware."""
+def test_opus_exclusions_passthrough():
+    """ALL Opus exclusions pass through unmodified — no filtering."""
     from backend.pricing_engine import PricingEngine
     pe = PricingEngine()
     session_data = {
-        "session_id": "test-laser-excl",
+        "session_id": "test-excl-passthrough",
         "job_type": "led_sign_custom",
         "fields": {"description": "aluminum sign", "finish": "raw"},
         "material_list": {
@@ -538,13 +538,12 @@ def test_laser_exclusion_filtered_when_priced():
             "rate_inshop": 125, "rate_onsite": 145}
     pq = pe.build_priced_quote(session_data, user)
     excl = pq.get("exclusions", [])
-    # Laser exclusion should be filtered out
+    # ALL Opus exclusions should pass through — including laser
     laser_excl = [e for e in excl if "laser cut" in e.lower()]
-    assert len(laser_excl) == 0, \
-        "Laser exclusion should be filtered when laser is in hardware, got: %s" % laser_excl
-    # Non-laser exclusion should remain
+    assert len(laser_excl) > 0, \
+        "Laser exclusion should pass through (no filtering), got: %s" % excl
     led_excl = [e for e in excl if "LED" in e or "Electrical" in e]
-    assert len(led_excl) > 0, "Non-laser exclusions should be kept"
+    assert len(led_excl) > 0, "Non-laser exclusions should also pass through"
 
 
 def test_laser_exclusion_kept_when_no_hardware():
@@ -677,3 +676,168 @@ def test_laser_setup_per_sheet_not_per_piece():
     # 5 pieces of 30x30: perimeter = 2*(30+30)*5 = 600". Cost = 75 + 600*0.35 = 285
     assert laser_cost < 400, \
         "1-sheet laser setup should be < $400, got $%.2f" % laser_cost
+
+
+# ---- P43c: Full Package Passthrough (Override Removal) ----
+
+def test_full_package_no_waste_factor():
+    """Full package path: tube footage should NOT be inflated by waste factor."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    ai_cuts = [
+        {"profile": "sq_tube_2x2_11ga", "length_inches": 30, "quantity": 4,
+         "piece_name": "legs", "material_type": "mild_steel"},
+    ]
+    fields = {"description": "table base"}
+
+    # Legacy path (trust_opus=False) — should add waste
+    legacy = calc._build_from_ai_cuts("furniture_table", ai_cuts, fields, [])
+    # Full package path (trust_opus=True) — no waste
+    trusted = calc._build_from_ai_cuts("furniture_table", ai_cuts, fields, [],
+                                        trust_opus=True)
+
+    legacy_ft = sum(m["length_inches"] for m in legacy["items"]) / 12.0
+    trusted_ft = sum(m["length_inches"] for m in trusted["items"]) / 12.0
+
+    assert trusted_ft < legacy_ft, \
+        "trust_opus path should NOT add waste (%.1f should be < %.1f)" % (
+            trusted_ft, legacy_ft)
+    # Trusted should be exact: 4 × 30in = 120in = 10ft
+    assert abs(trusted_ft - 10.0) < 0.1, \
+        "trust_opus footage should be 10.0 ft (no waste), got %.1f" % trusted_ft
+
+
+def test_full_package_no_laser_injection():
+    """Full package path: no auto-laser hardware for aluminum description."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 24,
+         "quantity": 2, "piece_name": "panel"},
+    ]
+    fields = {"description": "aluminum sign", "material_type": "Aluminum"}
+
+    # Legacy path — should inject laser
+    legacy = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    legacy_laser = [h for h in legacy.get("hardware", [])
+                    if "laser" in h["description"].lower()]
+
+    # Full package path — should NOT inject laser
+    trusted = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [],
+                                        trust_opus=True)
+    trusted_laser = [h for h in trusted.get("hardware", [])
+                     if "laser" in h["description"].lower()]
+
+    assert len(legacy_laser) == 1, "Legacy should inject laser hardware"
+    assert len(trusted_laser) == 0, \
+        "trust_opus should NOT inject laser hardware — Opus provides it if needed"
+
+
+def test_full_package_hardware_single_option():
+    """Full package hardware should have 1 option (no 'Premium' tier)."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    package = {
+        "cut_list": [
+            {"profile": "sq_tube_2x2_11ga", "length_inches": 30,
+             "quantity": 4, "piece_name": "legs"},
+        ],
+        "hardware": [
+            {"description": "Heavy duty weld-on hinges", "quantity": 2,
+             "estimated_price": 45.00},
+        ],
+        "consumables": [],
+        "labor_hours": {"cut_prep": 1.0},
+        "build_instructions": [{"step": 1, "description": "Cut legs"}],
+        "finishing_method": "raw",
+        "assumptions": [],
+        "exclusions": [],
+    }
+    result = calc._build_from_full_package("furniture_table", package,
+                                            {"description": "table"})
+    opus_hw = result.get("_opus_hardware", [])
+    assert len(opus_hw) == 1, "Should have 1 hardware item"
+    assert len(opus_hw[0]["options"]) == 1, \
+        "Hardware should have 1 option (no Premium tier), got %d" % len(opus_hw[0]["options"])
+    assert opus_hw[0]["options"][0]["supplier"] == "Estimated"
+
+
+def test_full_package_consumables_passthrough():
+    """Opus consumable prices should pass through unchanged — no override."""
+    from backend.pricing_engine import PricingEngine
+    pe = PricingEngine()
+    opus_consumables = [
+        {"description": "Welding wire ER70S-6", "quantity": 1,
+         "unit_price": 32.50, "line_total": 32.50},
+        {"description": "Grinding discs", "quantity": 3,
+         "unit_price": 0, "line_total": 0},  # $0 price — should stay $0
+    ]
+    session_data = {
+        "session_id": "test-cons-pass",
+        "job_type": "custom_fab",
+        "fields": {"description": "metal work", "finish": "raw"},
+        "material_list": {
+            "items": [],
+            "hardware": [],
+            "total_weight_lbs": 10.0,
+            "total_sq_ft": 5.0,
+            "weld_linear_inches": 0,
+            "assumptions": [],
+            "_opus_hardware": [],
+            "_opus_consumables": opus_consumables,
+            "_opus_labor_hours": {"cut_prep": 1.0},
+            "_opus_finishing_method": "raw",
+            "_opus_exclusions": [],
+        },
+        "labor_estimate": {
+            "processes": [{"process": "cut_prep", "hours": 1.0, "rate": 125, "notes": ""}],
+            "total_hours": 1.0,
+        },
+        "finishing": {"method": "raw", "area_sq_ft": 5, "hours": 0,
+                      "materials_cost": 0, "outsource_cost": 0, "total": 0},
+    }
+    user = {"id": 1, "shop_name": "Test", "markup_default": 0,
+            "rate_inshop": 125, "rate_onsite": 145}
+    pq = pe.build_priced_quote(session_data, user)
+    # Consumables with shop stock keywords get tiered into shop_stock
+    all_items = pq.get("consumables", []) + pq.get("shop_stock", [])
+    # Wire should keep its $32.50 price
+    wire = [c for c in all_items if "wire" in c.get("description", "").lower()]
+    assert len(wire) == 1
+    assert wire[0]["unit_price"] == 32.50, \
+        "Wire price should be Opus's $32.50, got $%.2f" % wire[0]["unit_price"]
+    # Grinding discs with $0 should stay $0 (no override to $5 or $12)
+    discs = [c for c in all_items if "disc" in c.get("description", "").lower()]
+    assert len(discs) == 1
+    assert discs[0]["unit_price"] == 0, \
+        "Opus $0 price should pass through unchanged, got $%.2f" % discs[0]["unit_price"]
+
+
+def test_full_package_surface_area_from_cuts():
+    """trust_opus path should calculate surface area from cut dimensions, not hardcode."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # Sheet pieces: 48×24 × 2 = 2304 sq in = 16.0 sq ft
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 24,
+         "quantity": 2, "piece_name": "panel"},
+    ]
+    fields = {"description": "sign panels"}
+
+    trusted = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [],
+                                        trust_opus=True)
+    sq_ft = trusted.get("total_sq_ft", 0)
+    # 2 panels of 48×24 = 2304 sq in / 144 = 16.0 sq ft
+    assert abs(sq_ft - 16.0) < 1.0, \
+        "Surface area should be ~16.0 sqft from cut dims, got %.1f" % sq_ft
+
+
+def test_no_banned_term_stripping():
+    """Build instructions should not strip or annotate banned terms."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    import inspect
+    source = inspect.getsource(AICutListGenerator.generate_build_instructions)
+    assert "_strip_banned_terms" not in source, \
+        "generate_build_instructions should not call _strip_banned_terms_from_steps"
+    assert "check_banned_terms" not in source, \
+        "generate_build_instructions should not call check_banned_terms"

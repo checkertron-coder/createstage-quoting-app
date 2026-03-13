@@ -336,31 +336,6 @@ class AICutListGenerator:
                         len(response_text) if response_text else 0)
             steps = self._parse_instructions_response(response_text)
             if steps and len(steps) > 0:
-                # 1. Strip banned terms from customer-facing text FIRST
-                _strip_banned_terms_from_steps(steps)
-
-                # 2. THEN check for any remaining banned terms the stripping missed
-                from ..knowledge.validation import check_banned_terms
-                full_text = " ".join(
-                    s.get("description", "") + " " + s.get("safety_notes", "")
-                    for s in steps
-                )
-                for context in ["vinegar_bath_cleanup", "decorative_stock_prep",
-                                "decorative_assembly", "leveler_install"]:
-                    violations = check_banned_terms(full_text, context)
-                    if violations:
-                        logger.warning(
-                            "BUILD SEQUENCE — banned terms remain after "
-                            "stripping [%s]: %s", context, violations)
-                        for step in steps:
-                            desc = step.get("description", "")
-                            for v in violations:
-                                if v.lower() in desc.lower():
-                                    step["description"] = (
-                                        desc + " [REVIEW: contains banned "
-                                        "term '%s']" % v
-                                    )
-
                 return steps
             logger.warning("AI build instructions returned empty — skipping")
             return None
