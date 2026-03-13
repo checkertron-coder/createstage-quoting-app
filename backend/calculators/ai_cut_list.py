@@ -1444,6 +1444,15 @@ Return ONLY valid JSON — an array of step objects:
 
 Think through this like you're planning the entire job from raw material to delivery.
 
+SCOPE BOUNDARY (CRITICAL):
+Only include materials, hardware, and processes that the user EXPLICITLY described or that are essential to fabricate what they described.
+- If the user describes a sign but not posts or footings, do NOT add posts, concrete, or footings — put them in "exclusions".
+- If the user doesn't mention concrete, anchors, or site installation, do NOT add them.
+- Anything the user didn't describe goes in "exclusions" with a note like "Not included: mounting posts and footings — add if needed."
+- Do NOT invent mounting infrastructure, site work, or installation materials unless specifically requested.
+- Do NOT add materials in gauges or thicknesses the user didn't specify — use the gauge they gave for ALL parts.
+- The user is a fabricator — they know what they need. Quote what they asked for, nothing more.
+
 JOB TYPE: %s
 %s%s
 PROJECT INFO:

@@ -482,25 +482,27 @@ def test_laser_rate_realistic():
 
 
 def test_laser_setup_fee_per_sheet():
-    """Multiple sheet pieces should each incur setup fee."""
+    """3 small pieces fitting on 1 sheet should use 1-sheet setup, not 3-piece setup."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
     ai_cuts = [
         {"profile": "al_sheet_0.125", "length_inches": 24, "width_inches": 12,
-         "quantity": 3, "piece_name": "small panel"},
+         "quantity": 3, "piece_name": "small panel",
+         "sheet_stock_size": [60, 120]},
     ]
     fields = {"description": "aluminum box", "material_type": "Aluminum"}
     result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
     hw = result.get("hardware", [])
     laser_items = [h for h in hw if "laser" in h["description"].lower()]
     assert len(laser_items) == 1
-    # 3 pieces: setup = 3*75 = 225, perimeter = 2*(24+12)*3 = 216", cut = 216*0.35 = 75.60
-    # Total = 225 + 75.60 = 300.60
+    # 3 pieces of 24x12 = 864 sq in total, 1 sheet (5x10') = 5400 usable → 1 sheet
+    # Setup = 1*75 = 75, perimeter = 2*(24+12)*3 = 216", cut = 216*0.35 = 75.60
+    # Total = 75 + 75.60 = 150.60
     laser_cost = laser_items[0]["options"][0]["price"]
-    assert laser_cost >= 300, \
-        "3-piece laser should be >= $300 (setup + cut), got $%.2f" % laser_cost
-    assert "3 pieces" in laser_items[0]["description"], \
-        "Description should mention piece count"
+    assert laser_cost < 200, \
+        "1-sheet laser should be < $200 (not per-piece), got $%.2f" % laser_cost
+    assert "sheet" in laser_items[0]["description"].lower(), \
+        "Description should mention sheets"
 
 
 def test_laser_exclusion_filtered_when_priced():
@@ -575,3 +577,103 @@ def test_laser_exclusion_kept_when_no_hardware():
     laser_excl = [e for e in excl if "laser" in e.lower()]
     assert len(laser_excl) > 0, \
         "Laser exclusion should be kept when no laser hardware present"
+
+
+# ---- Fix A: Sheet Counting (Area-Based) ----
+
+def test_sheet_count_area_based():
+    """3 pieces that fit on one 5x10' sheet should give sheets_needed=1, not 3."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # 3 pieces: 24x24 each = 576 sq in each = 1728 total
+    # One 5x10' sheet = 60x120 = 7200 sq in, 75% usable = 5400
+    # 1728 / 5400 = 0.32 → 1 sheet
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 24, "width_inches": 24,
+         "quantity": 1, "piece_name": "panel_a",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+        {"profile": "al_sheet_0.125", "length_inches": 24, "width_inches": 24,
+         "quantity": 1, "piece_name": "panel_b",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+        {"profile": "al_sheet_0.125", "length_inches": 24, "width_inches": 24,
+         "quantity": 1, "piece_name": "panel_c",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+    ]
+    fields = {"description": "aluminum sign", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    # Find the sheet material item
+    sheet_items = [m for m in result["items"]
+                   if "sheet" in m.get("profile", "").lower()]
+    assert len(sheet_items) == 1
+    # Should be 1 sheet, not 3 (old bug: summed per-piece)
+    assert sheet_items[0].get("sheets_needed", 0) == 1, \
+        "3 small pieces on one 5x10' sheet should be 1 sheet, got %d" \
+        % sheet_items[0].get("sheets_needed", 0)
+
+
+def test_sheet_count_exceeds_one_sheet():
+    """Pieces exceeding one sheet's area should give sheets_needed=2+."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # 2 pieces: 60x60 each = 3600 sq in each = 7200 total
+    # One 5x10' sheet = 7200 sq in, 75% usable = 5400
+    # 7200 / 5400 = 1.33 → 2 sheets
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 60, "width_inches": 60,
+         "quantity": 1, "piece_name": "disc_front",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+        {"profile": "al_sheet_0.125", "length_inches": 60, "width_inches": 60,
+         "quantity": 1, "piece_name": "disc_back",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+    ]
+    fields = {"description": "aluminum sign", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    sheet_items = [m for m in result["items"]
+                   if "sheet" in m.get("profile", "").lower()]
+    assert len(sheet_items) == 1
+    assert sheet_items[0].get("sheets_needed", 0) == 2, \
+        "Two 60x60 circles on 5x10' sheets should need 2, got %d" \
+        % sheet_items[0].get("sheets_needed", 0)
+
+
+# ---- Fix B: Opus Scope Constraint ----
+
+def test_opus_scope_constraint_in_prompt():
+    """Full package prompt must contain SCOPE BOUNDARY rule."""
+    from backend.calculators.ai_cut_list import AICutListGenerator
+    gen = AICutListGenerator.__new__(AICutListGenerator)
+    fields = {"description": "aluminum sign 5ft circle"}
+    prompt = gen._build_full_package_prompt("sign_frame", fields)
+    assert "SCOPE BOUNDARY" in prompt, \
+        "Full package prompt should contain SCOPE BOUNDARY constraint"
+    assert "exclusions" in prompt.lower(), \
+        "Scope constraint should mention putting extra items in exclusions"
+
+
+# ---- Fix C: Laser Setup Per-Sheet ----
+
+def test_laser_setup_per_sheet_not_per_piece():
+    """5 pieces on 2 sheets should use 2×$75 setup, not 5×$75."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # 5 pieces: 30x30 each = 900 sq in each = 4500 total
+    # One 5x10' sheet = 7200, 75% usable = 5400
+    # 4500 / 5400 = 0.83 → 1 sheet
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 30, "width_inches": 30,
+         "quantity": 5, "piece_name": "panel",
+         "sheet_stock_size": [60, 120], "sheets_needed": 1},
+    ]
+    fields = {"description": "aluminum sign laser cut", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    hw = result.get("hardware", [])
+    laser_items = [h for h in hw if "laser" in h["description"].lower()]
+    assert len(laser_items) == 1
+    desc = laser_items[0]["description"]
+    # Should say "1 sheets" (area-based), not "5 pieces"
+    assert "sheets" in desc, "Laser description should mention sheets, not pieces"
+    # Setup = 1 sheet × $75 = $75, not 5 × $75 = $375
+    laser_cost = laser_items[0]["options"][0]["price"]
+    # 5 pieces of 30x30: perimeter = 2*(30+30)*5 = 600". Cost = 75 + 600*0.35 = 285
+    assert laser_cost < 400, \
+        "1-sheet laser setup should be < $400, got $%.2f" % laser_cost

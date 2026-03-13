@@ -290,14 +290,26 @@ class BaseCalculator(ABC):
                 }
             profile_totals[profile]["total_ft"] += piece_total_ft
 
-            # Accumulate sheet data from Opus — keep the LARGEST sheet size
+            # Accumulate sheet data — keep the LARGEST sheet size and total piece area
             if is_sheet:
                 new_size = cut.get("sheet_stock_size")
                 if new_size:
                     existing = profile_totals[profile]["sheet_stock_size"]
                     if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
                         profile_totals[profile]["sheet_stock_size"] = new_size
-                profile_totals[profile]["sheets_needed"] += cut.get("sheets_needed", 0) * quantity
+                # Accumulate total piece area (sq inches) for area-based sheet count
+                width_in = cut.get("width_inches", 0)
+                if width_in > 0:
+                    profile_totals[profile]["total_piece_area"] = (
+                        profile_totals[profile].get("total_piece_area", 0)
+                        + length_in * width_in * quantity
+                    )
+                else:
+                    # No width — assume square-ish piece
+                    profile_totals[profile]["total_piece_area"] = (
+                        profile_totals[profile].get("total_piece_area", 0)
+                        + length_in * length_in * quantity
+                    )
                 if cut.get("seaming_required"):
                     profile_totals[profile]["seaming_required"] = True
 
@@ -309,14 +321,23 @@ class BaseCalculator(ABC):
             raw_ft = info["total_ft"]
             is_sheet = info.get("is_sheet", False)
 
-            if is_sheet and info["sheets_needed"] > 0:
-                # Sheet pricing: use Opus's sheet count × sheet area × price/sqft
+            if is_sheet and info.get("total_piece_area", 0) > 0:
+                # Calculate sheets from total piece area with nesting efficiency
+                import math
                 stock = info["sheet_stock_size"]
                 if stock:
-                    sheet_sqft = (stock[0] * stock[1]) / 144.0
+                    sheet_area_sqin = stock[0] * stock[1]
+                    sheet_sqft = sheet_area_sqin / 144.0
                 else:
-                    sheet_sqft = 32.0  # fallback 4x8
-                line_total = round(info["sheets_needed"] * sheet_sqft * info["price_ft"], 2)
+                    sheet_area_sqin = 48 * 96  # fallback 4x8
+                    sheet_sqft = 32.0
+                # 75% nesting efficiency — accounts for irregular shapes, kerf, offcuts
+                usable_area = sheet_area_sqin * 0.75
+                sheets_needed = max(1, int(math.ceil(
+                    info["total_piece_area"] / usable_area
+                )))
+                info["sheets_needed"] = sheets_needed
+                line_total = round(sheets_needed * sheet_sqft * info["price_ft"], 2)
                 wasted_ft = raw_ft  # no separate waste for sheets
                 waste_factor = 0.0
             else:
@@ -369,31 +390,45 @@ class BaseCalculator(ABC):
         needs_laser = is_aluminum or "laser" in description or "cnc" in description
 
         if needs_laser:
-            # Sum perimeter and count distinct sheet pieces for setup fee
+            # Sum perimeter from sheet items; use area-based sheet count for setup fee
+            import math as _math
             sheet_perim_inches = 0.0
-            sheet_piece_count = 0
+            laser_piece_area = 0.0
+            laser_sheet_size = None
             for cut in ai_cuts:
                 prof = cut.get("profile", "")
                 if "sheet" in prof or "plate" in prof:
                     length_in = cut.get("length_inches", 0)
                     width_in = cut.get("width_inches", 0)
                     qty = cut.get("quantity", 1)
-                    sheet_piece_count += qty
                     if width_in > 0:
                         sheet_perim_inches += 2 * (length_in + width_in) * qty
+                        laser_piece_area += length_in * width_in * qty
                     else:
                         sheet_perim_inches += length_in * qty * 4
+                        laser_piece_area += length_in * length_in * qty
+                    ss = cut.get("sheet_stock_size")
+                    if ss and (not laser_sheet_size or ss[0] * ss[1] > laser_sheet_size[0] * laser_sheet_size[1]):
+                        laser_sheet_size = ss
 
             if sheet_perim_inches > 0:
-                # $0.35/inch cut rate + $75 setup per sheet piece
-                setup_fee = sheet_piece_count * 75.0
+                # Calculate sheets from area (same 75% nesting as material counting)
+                if laser_sheet_size:
+                    laser_sheet_area = laser_sheet_size[0] * laser_sheet_size[1]
+                else:
+                    laser_sheet_area = 48 * 96  # fallback 4x8
+                laser_sheets = max(1, int(_math.ceil(
+                    laser_piece_area / (laser_sheet_area * 0.75)
+                )))
+                # $0.35/inch cut rate + $75 setup per sheet (one CNC program per sheet)
+                setup_fee = laser_sheets * 75.0
                 laser_cost = max(round(setup_fee + sheet_perim_inches * 0.35, 2), 150.00)
                 laser_online = round(laser_cost * 1.20, 2)
                 if hardware is None:
                     hardware = []
                 hardware.append(self.make_hardware_item(
-                    description="Laser cutting service — %.0f\" perimeter, %d pieces"
-                                % (sheet_perim_inches, sheet_piece_count),
+                    description="Laser cutting service — %.0f\" perimeter, %d sheets"
+                                % (sheet_perim_inches, laser_sheets),
                     quantity=1,
                     options=[
                         self.make_pricing_option("Local laser shop", laser_cost),
@@ -401,8 +436,8 @@ class BaseCalculator(ABC):
                     ],
                 ))
                 assumptions.append(
-                    "Laser cutting: $%.2f (%d pieces × $75 setup + %.0f\" × $0.35/in)."
-                    % (laser_cost, sheet_piece_count, sheet_perim_inches)
+                    "Laser cutting: $%.2f (%d sheets × $75 setup + %.0f\" × $0.35/in)."
+                    % (laser_cost, laser_sheets, sheet_perim_inches)
                 )
 
         assumptions.append("Cut list generated by AI from project description.")
