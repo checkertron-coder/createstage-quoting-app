@@ -123,9 +123,10 @@ class _DummyCalculator(BaseCalculator):
         return {}
 
 
-class TestLaserCutting:
-    def test_laser_cutting_added_for_aluminum(self):
-        """Aluminum + sheet items → hardware includes laser cutting."""
+class TestNoLaserInjection:
+    def test_no_laser_injection_for_aluminum(self):
+        """Aluminum sheet items — NO auto-laser injection. If Opus didn't
+        include laser, don't add it."""
         calc = _DummyCalculator()
         ai_cuts = [
             {"profile": "al_sheet_0.125", "length_inches": 48.0,
@@ -136,11 +137,11 @@ class TestLaserCutting:
         fields = {"description": "Aluminum sign cabinet", "material": "aluminum 6061"}
         result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
         hw_descs = [h["description"].lower() for h in result.get("hardware", [])]
-        assert any("laser" in d for d in hw_descs), \
-            "Expected laser cutting hardware for aluminum sheet items"
+        assert not any("laser" in d for d in hw_descs), \
+            "No auto-laser injection — if Opus didn't include it, don't add it"
 
-    def test_laser_cutting_not_for_steel(self):
-        """Steel sheet items (no aluminum/laser keyword) → no laser cutting."""
+    def test_no_laser_injection_for_steel(self):
+        """Steel sheet items — no auto-laser injection either."""
         calc = _DummyCalculator()
         ai_cuts = [
             {"profile": "sheet_14ga", "length_inches": 48.0,

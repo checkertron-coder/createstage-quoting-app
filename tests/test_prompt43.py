@@ -460,29 +460,25 @@ def test_clearcoat_default_is_2k():
 
 # ---- Fix 8: Laser Cutting Pricing ----
 
-def test_laser_rate_realistic():
-    """1000" perimeter should cost > $350 at the new $0.35/inch rate."""
+def test_no_auto_laser_for_aluminum_cuts():
+    """AI cut list path: no auto-laser injection for aluminum.
+    If Opus didn't include laser cutting, don't add it."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
-    # Simulate _build_from_ai_cuts with sheet items
     ai_cuts = [
         {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 24,
          "quantity": 4, "piece_name": "panel"},
     ]
     fields = {"description": "aluminum sign", "material_type": "Aluminum"}
     result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
-    # Find laser hardware item
     hw = result.get("hardware", [])
     laser_items = [h for h in hw if "laser" in h["description"].lower()]
-    assert len(laser_items) == 1, "Should have exactly one laser cutting hardware item"
-    # 4 panels: perimeter = 2*(48+24)*4 = 576". Cost = 4*75 + 576*0.35 = 501.60
-    laser_cost = laser_items[0]["options"][0]["price"]
-    assert laser_cost > 350, \
-        "Laser cost should be > $350 for 576\" perimeter, got $%.2f" % laser_cost
+    assert len(laser_items) == 0, \
+        "No auto-laser injection — if Opus didn't include it, don't add it"
 
 
-def test_laser_setup_fee_per_sheet():
-    """3 small pieces fitting on 1 sheet should use 1-sheet setup, not 3-piece setup."""
+def test_surface_area_from_cut_dimensions():
+    """Surface area calculated from actual cut dimensions, not magic number."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
     ai_cuts = [
@@ -492,17 +488,10 @@ def test_laser_setup_fee_per_sheet():
     ]
     fields = {"description": "aluminum box", "material_type": "Aluminum"}
     result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
-    hw = result.get("hardware", [])
-    laser_items = [h for h in hw if "laser" in h["description"].lower()]
-    assert len(laser_items) == 1
-    # 3 pieces of 24x12 = 864 sq in total, 1 sheet (5x10') = 5400 usable → 1 sheet
-    # Setup = 1*75 = 75, perimeter = 2*(24+12)*3 = 216", cut = 216*0.35 = 75.60
-    # Total = 75 + 75.60 = 150.60
-    laser_cost = laser_items[0]["options"][0]["price"]
-    assert laser_cost < 200, \
-        "1-sheet laser should be < $200 (not per-piece), got $%.2f" % laser_cost
-    assert "sheet" in laser_items[0]["description"].lower(), \
-        "Description should mention sheets"
+    # 3 pieces of 24x12 = 864 sq in / 144 = 6.0 sq ft
+    sq_ft = result.get("total_sq_ft", 0)
+    assert abs(sq_ft - 6.0) < 1.0, \
+        "Surface area should be ~6.0 sqft from cut dims, got %.1f" % sq_ft
 
 
 def test_opus_exclusions_passthrough():
@@ -651,13 +640,10 @@ def test_opus_scope_constraint_in_prompt():
 
 # ---- Fix C: Laser Setup Per-Sheet ----
 
-def test_laser_setup_per_sheet_not_per_piece():
-    """5 pieces on 2 sheets should use 2×$75 setup, not 5×$75."""
+def test_no_laser_injection_any_path():
+    """No auto-laser injection on any path — aluminum or not."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
-    # 5 pieces: 30x30 each = 900 sq in each = 4500 total
-    # One 5x10' sheet = 7200, 75% usable = 5400
-    # 4500 / 5400 = 0.83 → 1 sheet
     ai_cuts = [
         {"profile": "al_sheet_0.125", "length_inches": 30, "width_inches": 30,
          "quantity": 5, "piece_name": "panel",
@@ -667,15 +653,8 @@ def test_laser_setup_per_sheet_not_per_piece():
     result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
     hw = result.get("hardware", [])
     laser_items = [h for h in hw if "laser" in h["description"].lower()]
-    assert len(laser_items) == 1
-    desc = laser_items[0]["description"]
-    # Should say "1 sheets" (area-based), not "5 pieces"
-    assert "sheets" in desc, "Laser description should mention sheets, not pieces"
-    # Setup = 1 sheet × $75 = $75, not 5 × $75 = $375
-    laser_cost = laser_items[0]["options"][0]["price"]
-    # 5 pieces of 30x30: perimeter = 2*(30+30)*5 = 600". Cost = 75 + 600*0.35 = 285
-    assert laser_cost < 400, \
-        "1-sheet laser setup should be < $400, got $%.2f" % laser_cost
+    assert len(laser_items) == 0, \
+        "No auto-laser injection — even with 'laser' in description"
 
 
 # ---- P43c: Full Package Passthrough (Override Removal) ----
@@ -707,8 +686,8 @@ def test_full_package_no_waste_factor():
         "trust_opus footage should be 10.0 ft (no waste), got %.1f" % trusted_ft
 
 
-def test_full_package_no_laser_injection():
-    """Full package path: no auto-laser hardware for aluminum description."""
+def test_no_laser_injection_either_path():
+    """Neither AI path auto-injects laser hardware — Opus provides it if needed."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
     ai_cuts = [
@@ -717,20 +696,21 @@ def test_full_package_no_laser_injection():
     ]
     fields = {"description": "aluminum sign", "material_type": "Aluminum"}
 
-    # Legacy path — should inject laser
+    # Legacy path — no laser injection
     legacy = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
     legacy_laser = [h for h in legacy.get("hardware", [])
                     if "laser" in h["description"].lower()]
 
-    # Full package path — should NOT inject laser
+    # Full package path — no laser injection
     trusted = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [],
                                         trust_opus=True)
     trusted_laser = [h for h in trusted.get("hardware", [])
                      if "laser" in h["description"].lower()]
 
-    assert len(legacy_laser) == 1, "Legacy should inject laser hardware"
+    assert len(legacy_laser) == 0, \
+        "Legacy path: no auto-laser injection — if Opus didn't include it, don't add it"
     assert len(trusted_laser) == 0, \
-        "trust_opus should NOT inject laser hardware — Opus provides it if needed"
+        "Full package path: no auto-laser injection"
 
 
 def test_full_package_hardware_single_option():

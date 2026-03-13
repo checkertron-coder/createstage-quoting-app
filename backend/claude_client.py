@@ -86,9 +86,31 @@ def call_vision(prompt, image_b64, mime_type, temperature=0.1, timeout=60,
                         image_b64=image_b64, image_mime=mime_type)
 
 
+def call_vision_multi(prompt, images, temperature=0.1, timeout=90,
+                      json_mode=True):
+    # type: (str, list, float, int, bool) -> Optional[str]
+    """Call Claude Vision with multiple images in one request.
+
+    Args:
+        images: list of {"b64": str, "mime": str} dicts
+    Returns response text or None.
+    """
+    if not images:
+        logger.error("call_vision_multi: no images provided")
+        return None
+
+    logger.info("call_vision_multi: %d images, prompt_len=%d",
+                len(images), len(prompt) if prompt else 0)
+
+    return _call_claude(prompt, tier="fast", temperature=temperature,
+                        timeout=timeout, json_mode=json_mode,
+                        images=images)
+
+
 def _call_claude(prompt, tier="deep", temperature=0.1, timeout=120,
-                 json_mode=True, image_b64=None, image_mime=None):
-    # type: (str, str, float, int, bool, Optional[str], Optional[str]) -> Optional[str]
+                 json_mode=True, image_b64=None, image_mime=None,
+                 images=None):
+    # type: (str, str, float, int, bool, Optional[str], Optional[str], Optional[list]) -> Optional[str]
     """Execute a Claude API call via httpx."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
@@ -96,12 +118,24 @@ def _call_claude(prompt, tier="deep", temperature=0.1, timeout=120,
         return None
 
     model = _resolve_model(tier)
+    has_images = bool(image_b64) or bool(images)
     print(f"[VISION-DEBUG] _call_claude: model={model}, tier={tier}, "
-          f"has_image={bool(image_b64)}, timeout={timeout}", flush=True)
+          f"has_image={has_images}, timeout={timeout}", flush=True)
 
     # Build message content
     content = []
-    if image_b64 and image_mime:
+    # Multi-image support
+    if images:
+        for img in images:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": img["mime"],
+                    "data": img["b64"],
+                }
+            })
+    elif image_b64 and image_mime:
         content.append({
             "type": "image",
             "source": {
@@ -135,7 +169,7 @@ def _call_claude(prompt, tier="deep", temperature=0.1, timeout=120,
         "content-type": "application/json",
     }
 
-    is_vision = bool(image_b64)
+    is_vision = has_images
     start = time.time()
 
     try:

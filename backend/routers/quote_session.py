@@ -112,18 +112,14 @@ def start_session(
             list(extracted_fields.keys()),
         )
 
-        # Extract fields from photos (if any)
+        # Extract fields from photos (if any) — single API call for all photos
         photo_extracted_fields = {}
         photo_observations = ""
         if photo_urls:
-            print(f"[VISION-DEBUG] Processing {len(photo_urls)} photos for vision", flush=True)
-        else:
-            print("[VISION-DEBUG] No photos to process — photo_urls is empty", flush=True)
-        for photo_url in photo_urls:
+            print(f"[VISION-DEBUG] Processing {len(photo_urls)} photos in single vision call", flush=True)
             try:
-                print(f"[VISION-DEBUG] Calling extract_from_photo('{photo_url}')", flush=True)
-                photo_result = engine.extract_from_photo(
-                    job_type, photo_url, request.description
+                photo_result = engine.extract_from_photos(
+                    job_type, photo_urls, request.description
                 )
                 print(f"[VISION-DEBUG] Photo result: confidence={photo_result.get('confidence', 0)}, "
                       f"obs='{(photo_result.get('photo_observations', '') or '')[:100]}'", flush=True)
@@ -131,14 +127,13 @@ def start_session(
                 for field_id, value in photo_result.get("extracted_fields", {}).items():
                     if field_id not in extracted_fields:
                         photo_extracted_fields[field_id] = value
-                # Collect observations
-                obs = photo_result.get("photo_observations", "")
-                if obs:
-                    photo_observations = (photo_observations + "\n" + obs).strip()
+                photo_observations = photo_result.get("photo_observations", "")
             except Exception as e:
-                logger.error("Photo extraction failed for '%s': %s: %s",
-                             photo_url, type(e).__name__, e)
+                logger.error("Photo extraction failed: %s: %s",
+                             type(e).__name__, e)
                 # Photo extraction failure should never block session start
+        else:
+            print("[VISION-DEBUG] No photos to process — photo_urls is empty", flush=True)
 
         # Merge: text fields first, then photo fields (text wins)
         merged_fields = dict(extracted_fields)

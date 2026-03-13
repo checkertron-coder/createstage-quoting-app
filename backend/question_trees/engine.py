@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from ..claude_client import call_fast, call_vision as _claude_vision
+from ..claude_client import call_fast, call_vision as _claude_vision, call_vision_multi as _claude_vision_multi
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,69 @@ class QuestionTreeEngine:
         )
 
         result = _call_claude_vision(vision_prompt, image_b64, mime_type)
+        return result
+
+    def extract_from_photos(self, job_type: str, photo_urls: list,
+                            description: str = "") -> dict:
+        """
+        Send ALL photos in ONE Claude Vision API call.
+
+        Returns same structure as extract_from_photo() but with observations
+        from all photos combined.
+        """
+        if not photo_urls:
+            return _empty_photo_result()
+
+        tree = self.load_tree(job_type)
+        questions = tree.get("questions", [])
+
+        # Build field descriptions for the prompt
+        field_descriptions = []
+        for q in questions:
+            field_desc = "- %s: %s" % (q["id"], q["text"])
+            if q.get("type") == "choice" and q.get("options"):
+                field_desc += " Options: %s" % ", ".join(q["options"])
+            elif q.get("type") == "measurement":
+                field_desc += " (numeric value in %s)" % q.get("unit", "units")
+            field_descriptions.append(field_desc)
+
+        # Read all images and build content blocks
+        images = []
+        for photo_url in photo_urls:
+            try:
+                image_data = _read_image(photo_url)
+                if not image_data:
+                    logger.warning("extract_from_photos: skipping unreadable '%s'",
+                                   photo_url)
+                    continue
+                image_b64 = base64.b64encode(image_data).decode("utf-8")
+                ext = photo_url.rsplit(".", 1)[-1].lower() if "." in photo_url else "jpg"
+                mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                            "png": "image/png", "webp": "image/webp"}
+                mime_type = mime_map.get(ext, "image/jpeg")
+                images.append({"b64": image_b64, "mime": mime_type})
+            except Exception as e:
+                logger.error("extract_from_photos: failed to read '%s': %s",
+                             photo_url, e)
+
+        if not images:
+            logger.warning("extract_from_photos: no readable images from %d URLs",
+                           len(photo_urls))
+            return _empty_photo_result()
+
+        vision_prompt = _build_vision_prompt(
+            job_type=job_type,
+            description=description,
+            field_descriptions="\n".join(field_descriptions),
+        )
+        # Prepend multi-image instruction
+        vision_prompt = (
+            "You are analyzing %d photos of the same project. "
+            "Extract information from ALL photos combined.\n\n%s"
+            % (len(images), vision_prompt)
+        )
+
+        result = _call_claude_vision_multi(vision_prompt, images)
         return result
 
     def get_next_questions(self, job_type: str, answered_fields: dict) -> list[dict]:
@@ -514,7 +577,11 @@ RULES:
 3. BOOLEAN/YES-NO: "with motor" -> "Yes". "no motor" -> "No — manual operation" (use exact option string).
 4. If the field is NOT mentioned at all, omit it. But if mentioned even briefly, EXTRACT it.
 5. Return ONLY a JSON object with field_id: extracted_value pairs. Empty object {{{{}}}} if nothing found.
-6. FINISH FIELD: If the customer mentions ANY finish/coating term, extract the "finish" field. Map these terms:
+6. MATERIAL FIELD: If the customer says a generic material like "aluminum", "steel", or "stainless" WITHOUT
+   specifying a grade or alloy (e.g., "6061", "5052", "304", "316", "11ga"), do NOT extract the material field.
+   Let the material question be asked so the user can choose the specific grade.
+   ONLY extract material when the customer explicitly specifies a grade: "6061 aluminum" -> extract, "aluminum" -> do NOT extract.
+7. FINISH FIELD: If the customer mentions ANY finish/coating term, extract the "finish" field. Map these terms:
    - "clear coat", "clear coated", "clearcoat", "clear-coat", "permalac", "lacquer" -> closest clear coat option, or "clearcoat" if no exact match
    - "powder coat", "powdercoat" -> closest powder coat option
    - "anodize", "anodized" -> "anodized"
@@ -640,16 +707,21 @@ def _match_option(value: str, options: list) -> Optional[str]:
         return reverse_matches[0]
 
     # 5. Word overlap — find the option with the most shared words
+    #    If multiple options tie for best overlap, it's ambiguous → return None
     val_words = set(val_lower.split())
     best_opt = None
     best_overlap = 0
+    tie = False
     for opt in options:
         opt_words = set(opt.lower().split())
         overlap = len(val_words & opt_words)
         if overlap > best_overlap:
             best_overlap = overlap
             best_opt = opt
-    if best_overlap >= 1 and best_opt is not None:
+            tie = False
+        elif overlap == best_overlap and overlap > 0 and opt != best_opt:
+            tie = True
+    if best_overlap >= 1 and best_opt is not None and not tie:
         return best_opt
 
     return None
@@ -809,6 +881,45 @@ def _call_claude_vision(prompt: str, image_b64: str, mime_type: str) -> dict:
     except Exception as e:
         print(f"[VISION-DEBUG] _call_claude_vision: EXCEPTION {type(e).__name__}: {e}",
               flush=True)
+        return _empty_photo_result()
+
+
+def _call_claude_vision_multi(prompt, images):
+    # type: (str, list) -> dict
+    """Call Claude Vision with multiple images. Returns parsed photo result."""
+    try:
+        text = _claude_vision_multi(prompt, images, timeout=90)
+        if text is None:
+            print("[VISION-DEBUG] _call_claude_vision_multi: API returned None", flush=True)
+            return _empty_photo_result()
+
+        print("[VISION-DEBUG] _call_claude_vision_multi: got %d chars" % len(text), flush=True)
+
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            first_newline = cleaned.find("\n")
+            if first_newline != -1:
+                cleaned = cleaned[first_newline + 1:]
+            if cleaned.rstrip().endswith("```"):
+                cleaned = cleaned.rstrip()[:-3].rstrip()
+
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return {
+                "extracted_fields": parsed.get("extracted_fields", {}),
+                "photo_observations": parsed.get("photo_observations", ""),
+                "material_detected": parsed.get("material_detected", "unknown"),
+                "dimensions_detected": parsed.get("dimensions_detected", {}),
+                "damage_assessment": parsed.get("damage_assessment", "N/A"),
+                "confidence": float(parsed.get("confidence", 0.0)),
+            }
+        return _empty_photo_result()
+    except json.JSONDecodeError as e:
+        print("[VISION-DEBUG] _call_claude_vision_multi: JSON PARSE FAILED: %s" % e, flush=True)
+        return _empty_photo_result()
+    except Exception as e:
+        print("[VISION-DEBUG] _call_claude_vision_multi: EXCEPTION %s: %s"
+              % (type(e).__name__, e), flush=True)
         return _empty_photo_result()
 
 

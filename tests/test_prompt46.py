@@ -181,8 +181,8 @@ class TestBuildFromAiCutsSheets:
         assert sheet_item[0].get("sheet_stock_size") == [48, 144]
         assert sheet_item[0].get("sheets_needed") == 1
 
-    def test_laser_perimeter_uses_geometry(self):
-        """Laser perimeter uses 2*(L+W)*qty, not L*qty*2."""
+    def test_no_auto_laser_injection(self):
+        """No auto-laser injection — if Opus didn't include laser, don't add it."""
         calc = _DummyCalculator()
         ai_cuts = [{
             "profile": "al_sheet_0.063",
@@ -195,14 +195,10 @@ class TestBuildFromAiCutsSheets:
         }]
         fields = {"description": "Aluminum LED sign", "material": "aluminum 6061"}
         result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
-        # Should have laser cutting hardware
         hw_descs = [h["description"].lower() for h in result.get("hardware", [])]
         laser_items = [d for d in hw_descs if "laser" in d]
-        assert len(laser_items) > 0
-        # Perimeter should be 2*(138+28)*1 = 332"
-        laser_desc = laser_items[0]
-        assert "332" in laser_desc, \
-            "Expected 332\" perimeter (2*(138+28)), got: %s" % laser_desc
+        assert len(laser_items) == 0, \
+            "No auto-laser injection — Opus provides laser if needed"
 
     def test_non_sheet_items_unchanged(self):
         """Tube items don't get sheet metadata."""
