@@ -9,6 +9,7 @@ re-asking questions already answered in the user's initial description.
 import base64
 import json
 import logging
+import re
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -102,6 +103,18 @@ class QuestionTreeEngine:
                 "Field extraction normalization dropped %d fields: %s",
                 len(dropped), dropped,
             )
+
+        # ENFORCEMENT: Drop choice fields Opus guessed but user never stated
+        # Prompt says "be conservative" but Opus ignores it. Python enforces.
+        before_count = len(extracted)
+        extracted = _enforce_conservative_extraction(extracted, questions, description)
+        if len(extracted) != before_count:
+            enforced_drops = before_count - len(extracted)
+            logger.info(
+                "Conservative enforcement dropped %d guessed choice fields",
+                enforced_drops,
+            )
+
         return extracted
 
     def extract_from_photo(self, job_type: str, photo_url_or_path: str,
@@ -725,6 +738,86 @@ def _call_claude_extract(prompt: str) -> dict:
     except Exception as e:
         logger.warning("Claude extraction failed: %s", e)
         return {}
+
+
+def _enforce_conservative_extraction(extracted: dict, questions: list,
+                                     description: str) -> dict:
+    """
+    Python-level enforcement: drop choice fields where the user's description
+    doesn't contain distinctive words from the selected option.
+
+    Opus ignores "be conservative" prompt instructions and fills in everything.
+    This function is the hard gate — if the user didn't clearly say it, drop it.
+
+    Example:
+      User says "with mounting" → Opus picks "Monument / ground sign structure"
+      "monument" and "ground" are NOT in the user's description → DROPPED
+      The field becomes unanswered → a question gets asked → user picks correctly
+    """
+    # Common words that don't indicate a specific choice
+    STOP_WORDS = {
+        "the", "a", "an", "is", "it", "in", "on", "of", "to", "for", "and",
+        "or", "with", "from", "by", "at", "as", "be", "this", "that", "will",
+        "sign", "metal", "fabrication", "custom", "need", "want", "like",
+        "would", "should", "can", "my", "our", "we", "i", "me", "most",
+        "common", "standard", "typical", "option", "type", "style",
+    }
+
+    # Build question lookup
+    q_map = {q["id"]: q for q in questions}
+    desc_lower = description.lower()
+    desc_words = set(desc_lower.split())
+
+    result = {}
+    for field_id, value in extracted.items():
+        q = q_map.get(field_id)
+        if q is None:
+            result[field_id] = value
+            continue
+
+        field_type = q.get("type", "text")
+
+        # Only filter choice fields — text/measurement/boolean pass through
+        if field_type not in ("choice", "multi_choice"):
+            result[field_id] = value
+            continue
+
+        # Check: does the description contain distinctive words from this option?
+        option_words = set(str(value).lower().split()) - STOP_WORDS
+        if not option_words:
+            # All words are stop words — can't validate, keep it
+            result[field_id] = value
+            continue
+
+        # Count how many distinctive option words appear in the description
+        matches = option_words & desc_words
+        match_ratio = len(matches) / len(option_words) if option_words else 0
+
+        # Also check for substring presence of key phrases
+        value_lower = str(value).lower()
+        # Strip parenthetical hints like "(most common)" or "(standard)"
+        clean_value = re.sub(r'\([^)]*\)', '', value_lower).strip()
+        clean_words = set(clean_value.split()) - STOP_WORDS
+
+        # If the clean value (without parenthetical) has words in the description
+        clean_matches = clean_words & desc_words
+        clean_ratio = len(clean_matches) / len(clean_words) if clean_words else 0
+
+        best_ratio = max(match_ratio, clean_ratio)
+
+        if best_ratio >= 0.5:
+            # At least half the distinctive words are in the description — keep
+            result[field_id] = value
+        else:
+            # User didn't say this — drop it so it becomes a question
+            logger.info(
+                "ENFORCEMENT DROP: field '%s' = '%s' — only %.0f%% word match "
+                "with description (words: %s, found: %s)",
+                field_id, value, best_ratio * 100,
+                option_words, matches | clean_matches,
+            )
+
+    return result
 
 
 def _normalize_extracted_fields(extracted: dict, questions: list) -> dict:
