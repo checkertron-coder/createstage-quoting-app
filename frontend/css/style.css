@@ -267,6 +267,10 @@ body {
 }
 .choice-btn:hover { border-color: var(--accent); }
 .choice-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
+.choice-btn-other { border-style: dashed; color: var(--text-secondary); }
+.choice-btn-other.selected { border-style: solid; }
+.other-input-wrap { margin-top: 8px; }
+.other-text-input { margin-top: 0; }
 
 .multi-choice-group { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .checkbox-label {

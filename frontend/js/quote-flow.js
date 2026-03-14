@@ -295,22 +295,36 @@ const QuoteFlow = {
     },
 
     editExtractedField(fieldId) {
+        const oldValue = this.extractedFields[fieldId];
         delete this.extractedFields[fieldId];
-        // Re-fetch session status to get updated questions
-        if (this.sessionId) {
-            API.submitAnswers(this.sessionId, {}).then(data => {
-                // The field will now appear in next_questions since we remove it client-side
-                // For now, just reload the clarify step
-                this._renderClarifyStep({
-                    job_type: document.querySelector('.clarify-header h2')?.textContent || '',
-                    completion: data.completion,
-                    extracted_fields: this.extractedFields,
-                    photo_extracted_fields: {},
-                    next_questions: data.next_questions,
-                });
-                this._showStep('clarify');
-            }).catch(() => {});
+
+        // Find the question definition from previously seen questions
+        let question = this.allQuestions.find(q => q.id === fieldId);
+        if (!question) {
+            // Construct a generic text question for this field
+            question = {
+                id: fieldId,
+                text: fieldId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + '?',
+                type: 'text',
+                required: true,
+                hint: oldValue ? 'Previously: ' + oldValue : null,
+            };
         }
+
+        // Re-render clarify step with this field shown as an editable question
+        const nKnown = Object.keys(this.extractedFields).length;
+        this._renderClarifyStep({
+            job_type: document.querySelector('.clarify-header h2')?.textContent || '',
+            completion: {
+                completion_pct: Math.round(nKnown / (nKnown + 1) * 100),
+                required_answered: nKnown,
+                required_total: nKnown + 1,
+            },
+            extracted_fields: this.extractedFields,
+            photo_extracted_fields: {},
+            next_questions: [question],
+        });
+        this._showStep('clarify');
     },
 
     _renderQuestions(questions) {
@@ -336,6 +350,12 @@ const QuoteFlow = {
                                 ${opt}
                             </button>
                         `).join('')}
+                        <button class="choice-btn choice-btn-other" onclick="QuoteFlow.selectOther(this, '${q.id}')" data-value="__other__">
+                            Other
+                        </button>
+                    </div>
+                    <div class="other-input-wrap" id="other-wrap-${q.id}" style="display:none">
+                        <input type="text" class="text-input other-text-input" id="other-${q.id}" placeholder="Type your answer...">
                     </div>`;
                     break;
                 case 'multi_choice':
@@ -400,6 +420,22 @@ const QuoteFlow = {
         const group = btn.closest('.choice-group');
         group.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
+        // Hide "Other" text input when a regular option is selected
+        const wrap = document.getElementById('other-wrap-' + qid);
+        if (wrap) wrap.style.display = 'none';
+    },
+
+    selectOther(btn, qid) {
+        const group = btn.closest('.choice-group');
+        group.querySelectorAll('.choice-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        // Show the "Other" text input and focus it
+        const wrap = document.getElementById('other-wrap-' + qid);
+        if (wrap) {
+            wrap.style.display = 'block';
+            const input = wrap.querySelector('input');
+            if (input) input.focus();
+        }
     },
 
     _collectAnswers() {
@@ -411,7 +447,16 @@ const QuoteFlow = {
         container.querySelectorAll('.choice-group').forEach(group => {
             const qid = group.dataset.qid;
             const selected = group.querySelector('.choice-btn.selected');
-            if (selected) answers[qid] = selected.dataset.value;
+            if (selected) {
+                if (selected.dataset.value === '__other__') {
+                    const otherInput = document.getElementById('other-' + qid);
+                    if (otherInput && otherInput.value.trim()) {
+                        answers[qid] = otherInput.value.trim();
+                    }
+                } else {
+                    answers[qid] = selected.dataset.value;
+                }
+            }
         });
 
         // Multi-choice

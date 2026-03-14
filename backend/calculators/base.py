@@ -326,16 +326,8 @@ class BaseCalculator(ABC):
             raw_ft = info["total_ft"]
             is_sheet = info.get("is_sheet", False)
 
-            if is_sheet and trust_opus and info["sheets_needed"] > 0:
-                # Full package path: trust Opus's sheets_needed
-                sheets_needed = info["sheets_needed"]
-                stock = info["sheet_stock_size"]
-                sheet_sqft = (stock[0] * stock[1] / 144.0) if stock else 32.0
-                line_total = round(sheets_needed * sheet_sqft * info["price_ft"], 2)
-                wasted_ft = raw_ft
-                waste_factor = 0.0
-            elif is_sheet and info.get("total_piece_area", 0) > 0:
-                # Legacy path: calculate sheets from area with nesting efficiency
+            if is_sheet and info.get("total_piece_area", 0) > 0:
+                # Area-based nesting: calculate sheets from total piece area
                 import math
                 stock = info["sheet_stock_size"]
                 if stock:
@@ -344,7 +336,7 @@ class BaseCalculator(ABC):
                 else:
                     sheet_area_sqin = 48 * 96  # fallback 4x8
                     sheet_sqft = 32.0
-                usable_area = sheet_area_sqin * 0.75
+                usable_area = sheet_area_sqin * 0.85  # 85% nesting efficiency
                 sheets_needed = max(1, int(math.ceil(
                     info["total_piece_area"] / usable_area
                 )))
