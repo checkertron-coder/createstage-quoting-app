@@ -681,8 +681,10 @@ def test_calculate_endpoint_with_complete_session(client, auth_headers):
     assert data["material_list"]["total_weight_lbs"] > 0
 
 
-def test_calculate_endpoint_rejects_incomplete_session(client, auth_headers):
-    """Incomplete session → 400 error."""
+def test_calculate_endpoint_proceeds_with_partial_info(client, auth_headers):
+    """Universal intake: calculate proceeds with partial info — calculator
+    does its best with what it has (AI-first pattern + template fallback).
+    Tree-based completion check was removed in favor of AI readiness evaluation."""
     # Start session but don't answer all required fields
     start_resp = client.post("/api/session/start", json={
         "description": "Need a railing",
@@ -695,7 +697,8 @@ def test_calculate_endpoint_rejects_incomplete_session(client, auth_headers):
         "answers": {"linear_footage": "20"},
     }, headers=auth_headers)
 
-    # Try to calculate — should fail
+    # Calculate proceeds — calculator uses template fallback with available fields
     calc_resp = client.post(f"/api/session/{session_id}/calculate", headers=auth_headers)
-    assert calc_resp.status_code == 400
-    assert "missing" in calc_resp.json()["detail"].lower() or "not complete" in calc_resp.json()["detail"].lower()
+    assert calc_resp.status_code == 200
+    data = calc_resp.json()
+    assert "material_list" in data

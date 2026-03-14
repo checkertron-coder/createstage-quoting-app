@@ -23,6 +23,12 @@ from .. import models
 from ..auth import get_current_user
 from ..database import get_db
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
+from ..question_trees.universal_intake import (
+    generate_intake_questions,
+    generate_followup_questions,
+    build_completion_from_readiness,
+    build_extracted_fields_from_known,
+)
 from ..calculators.registry import get_calculator, has_calculator
 from ..knowledge.validation import (
     build_instructions_to_text,
@@ -34,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["quote-session"])
 
-# Singleton engine — cached trees, no state
+# Engine kept for detect_job_type, get_quote_params, and legacy methods
 engine = QuestionTreeEngine()
 
 
@@ -68,17 +74,17 @@ def start_session(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Start a new quote session.
+    Start a new quote session using Universal Intake.
 
-    1. If job_type not provided, uses Claude to detect it from description
-    2. Runs extract_from_description to pull fields from initial text
-    3. Returns session_id, detected job_type, extracted fields, and next questions
+    1. Detects job_type (for calculator routing only)
+    2. Runs vision on photos (if any) to get observations
+    3. Calls Universal Intake AI to extract known facts + generate questions
+    4. Returns session_id, job_type, extracted fields, and AI-generated questions
     """
-    # Diagnostic: print() bypasses any logging config issues
-    print(f"[VISION-DEBUG] /start called: photo_urls={request.photo_urls}, "
-          f"photos={request.photos}, desc_len={len(request.description)}", flush=True)
+    logger.info("/start called: desc_len=%d, photo_urls=%s",
+                len(request.description), request.photo_urls or request.photos)
 
-    # Detect job type if not provided
+    # --- Step 1: Detect job type (kept for calculator routing) ---
     if request.job_type:
         job_type = request.job_type
         detection_confidence = 1.0
@@ -91,199 +97,92 @@ def start_session(
 
     # Merge photo_urls from both fields (backward compat + new field)
     photo_urls = list(request.photo_urls or request.photos or [])
-    print(f"[VISION-DEBUG] /start merged: photo_urls={photo_urls}, count={len(photo_urls)}, "
-          f"job_type={job_type}", flush=True)
 
-    # Validate that we have a question tree for this job type
-    available = engine.list_available_trees()
-    if job_type not in available:
-        tree_loaded = False
-        extracted_fields = {}
-        photo_extracted_fields = {}
-        photo_observations = ""
-        next_questions = []
-    else:
-        tree_loaded = True
-        # Extract fields from the description
-        extracted_fields = engine.extract_from_description(job_type, request.description)
-        logger.info(
-            "SESSION START extraction: job_type=%s, desc_len=%d, extracted=%d fields: %s",
-            job_type, len(request.description), len(extracted_fields),
-            list(extracted_fields.keys()),
-        )
-
-        # Extract fields from photos (if any) — single API call for all photos
-        photo_extracted_fields = {}
-        photo_observations = ""
-        if photo_urls:
-            print(f"[VISION-DEBUG] Processing {len(photo_urls)} photos in single vision call", flush=True)
-            try:
-                photo_result = engine.extract_from_photos(
-                    job_type, photo_urls, request.description
-                )
-                print(f"[VISION-DEBUG] Photo result: confidence={photo_result.get('confidence', 0)}, "
-                      f"obs='{(photo_result.get('photo_observations', '') or '')[:100]}'", flush=True)
-                # Merge photo-extracted fields (text wins on conflict)
-                # Apply same conservative enforcement as text extraction
-                from backend.question_trees.engine import _enforce_conservative_extraction
-                photo_raw = photo_result.get("extracted_fields", {})
-                tree = engine.load_tree(job_type)
-                photo_raw = _enforce_conservative_extraction(
-                    photo_raw, tree.get("questions", []), request.description
-                )
-                for field_id, value in photo_raw.items():
-                    if field_id not in extracted_fields:
-                        photo_extracted_fields[field_id] = value
-                photo_observations = photo_result.get("photo_observations", "")
-            except Exception as e:
-                logger.error("Photo extraction failed: %s: %s",
-                             type(e).__name__, e)
-                # Photo extraction failure should never block session start
-        else:
-            print("[VISION-DEBUG] No photos to process — photo_urls is empty", flush=True)
-
-        # Merge: text fields first, then photo fields (text wins)
-        merged_fields = dict(extracted_fields)
-        merged_fields.update({k: v for k, v in photo_extracted_fields.items()
-                              if k not in merged_fields})
-
-        # Get next questions (skipping all extracted)
-        next_questions = engine.get_next_questions(job_type, merged_fields)
-
-        # Ask AI to suggest additional questions not covered by the tree
+    # --- Step 2: Vision extraction (if photos) ---
+    photo_observations = ""
+    photo_extracted_fields = {}
+    if photo_urls:
         try:
-            tree_question_ids = [q["id"] for q in next_questions]
-            ai_questions = engine.suggest_additional_questions(
-                job_type, request.description, merged_fields, tree_question_ids
+            photo_result = engine.extract_from_photos(
+                job_type, photo_urls, request.description
             )
-            if ai_questions:
-                next_questions.extend(ai_questions)
-                logger.info("AI suggested %d additional questions", len(ai_questions))
-        except Exception:
-            pass  # AI suggestion failure never blocks session start
+            photo_observations = photo_result.get("photo_observations", "")
+            photo_extracted_fields = photo_result.get("extracted_fields", {})
+        except Exception as e:
+            logger.error("Photo extraction failed: %s: %s",
+                         type(e).__name__, e)
 
-        # Electronics keyword detection — guarantee an electronics question
-        # when description mentions LED/neon/illumination terms
-        _electronics_kw = ("led", "neon", "illuminat", "backlit", "back-lit",
-                           "controller", "driver", "rgb", "pixel")
-        desc_lower = request.description.lower()
-        if any(kw in desc_lower for kw in _electronics_kw):
-            all_qids = {q.get("id", "") for q in next_questions}
-            has_electronics_q = any("electron" in qid or "power" in qid
-                                    or "voltage" in qid or "led" in qid
-                                    for qid in all_qids)
-            if not has_electronics_q:
-                next_questions.append({
-                    "id": "_ai_electronics_spec",
-                    "text": "What electronics are needed? (power supply, LED driver, controller, voltage)",
-                    "type": "text",
-                    "required": False,
-                    "hint": "e.g. 12V LED modules with Mean Well power supply, or 'not sure'",
-                    "source": "electronics_keyword_detection",
-                })
-                logger.info("Injected electronics question for LED/illumination keywords")
+    # --- Step 3: Universal Intake AI call ---
+    intake_result = generate_intake_questions(
+        description=request.description,
+        photo_observations=photo_observations,
+    )
 
-        # Material type question — ALWAYS ask if not extracted from description
-        _material_field_names = ("material", "frame_material", "material_type")
-        has_material = any(merged_fields.get(f) for f in _material_field_names)
-        all_qids = {q.get("id", "") for q in next_questions}
-        has_material_q = any(f in all_qids for f in _material_field_names)
-        if not has_material and not has_material_q:
-            next_questions.insert(0, {
-                "id": "material",
-                "text": "What material is this project made from?",
-                "type": "choice",
-                "options": [
-                    "Mild steel",
-                    "Aluminum (6061-T6)",
-                    "Aluminum (5052-H32)",
-                    "Stainless steel (304)",
-                    "Stainless steel (316)",
-                    "Other (specify in notes)",
-                ],
-                "required": True,
-                "hint": "This determines profile keys, weld process, and consumables",
-                "source": "material_always_required",
-            })
-            logger.info("Injected required material question — not specified in description")
+    known_facts = intake_result.get("known_facts", {})
+    questions = intake_result.get("questions", [])
+    readiness = intake_result.get("readiness", "needs_questions")
 
-        # Finish question — ALWAYS ask if not extracted from description
-        _finish_field_names = ("finish", "finish_type")
-        has_finish = any(merged_fields.get(f) for f in _finish_field_names)
-        all_qids = {q.get("id", "") for q in next_questions}
-        has_finish_q = any(f in all_qids for f in _finish_field_names)
-        if not has_finish and not has_finish_q:
-            # Insert after material question if it was injected, else at position 0
-            insert_pos = 1 if not has_material and not has_material_q else 0
-            next_questions.insert(insert_pos, {
-                "id": "finish",
-                "text": "What finish do you want on this project?",
-                "type": "choice",
-                "options": [
-                    "Powder coat",
-                    "Paint",
-                    "Clear coat",
-                    "Galvanized",
-                    "Anodized",
-                    "Brushed / polished",
-                    "Patina / blackened",
-                    "Raw (no finish)",
-                ],
-                "required": True,
-                "hint": "Finish affects both appearance and durability — powder coat is most popular for outdoor projects",
-                "source": "finish_always_required",
-            })
-            logger.info("Injected required finish question — not specified in description")
+    # Merge photo-extracted fields into known facts (AI text wins on conflict)
+    for k, v in photo_extracted_fields.items():
+        if k not in known_facts:
+            known_facts[k] = v
 
-    # Create session record
+    # Build frontend-compatible response shapes
+    extracted_fields = build_extracted_fields_from_known(known_facts)
+    completion = build_completion_from_readiness(readiness, known_facts, questions)
+
+    # --- Step 4: Create session record ---
     session_id = str(uuid.uuid4())
-    merged_for_storage = dict(extracted_fields)
-    merged_for_storage.update({k: v for k, v in photo_extracted_fields.items()
-                               if k not in merged_for_storage})
-    # Preserve the original description so calculators can use it for AI cut lists
-    merged_for_storage["description"] = request.description
+    params_for_storage = dict(known_facts)
+    params_for_storage["description"] = request.description
     if photo_observations:
-        merged_for_storage["photo_observations"] = photo_observations
+        params_for_storage["photo_observations"] = photo_observations
+    # Store intake state for followup calls
+    params_for_storage["_known_facts"] = known_facts
+    params_for_storage["_qa_history"] = []
+    params_for_storage["_readiness"] = readiness
+
+    initial_messages = [{
+        "role": "user",
+        "content": request.description,
+        "timestamp": datetime.utcnow().isoformat(),
+    }]
+    # Store questions so /answer can match field IDs to question text
+    if questions:
+        initial_messages.append({
+            "role": "ai_questions",
+            "content": questions,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
+
     session = models.QuoteSession(
         id=session_id,
         user_id=current_user.id,
         job_type=job_type,
-        stage="clarify" if tree_loaded else "intake",
-        params_json=merged_for_storage,
-        messages_json=[{
-            "role": "user",
-            "content": request.description,
-            "timestamp": datetime.utcnow().isoformat(),
-        }],
+        stage="clarify" if questions else "calculate",
+        params_json=params_for_storage,
+        messages_json=initial_messages,
         photo_urls=photo_urls,
         status="active",
     )
     db.add(session)
     db.commit()
 
-    # Build completion status
-    if tree_loaded:
-        completion = engine.get_completion_status(job_type, merged_for_storage)
-    else:
-        completion = {
-            "is_complete": False,
-            "required_total": 0,
-            "required_answered": 0,
-            "required_missing": [],
-            "total_answered": 0,
-            "completion_pct": 0.0,
-        }
+    logger.info(
+        "SESSION START (universal): job_type=%s, known=%d facts, %d questions, readiness=%s",
+        job_type, len(known_facts), len(questions), readiness,
+    )
 
     return {
         "session_id": session_id,
         "job_type": job_type,
         "detection_confidence": detection_confidence,
         "ambiguous": ambiguous,
-        "tree_loaded": tree_loaded,
+        "tree_loaded": True,  # Always true — universal intake handles all types
         "extracted_fields": extracted_fields,
         "photo_extracted_fields": photo_extracted_fields,
         "photo_observations": photo_observations,
-        "next_questions": _serialize_questions(next_questions),
+        "next_questions": _serialize_questions(questions),
         "completion": completion,
     }
 
@@ -296,7 +195,8 @@ def answer_questions(
     current_user: models.User = Depends(get_current_user),
 ):
     """
-    Submit answers to questions. Returns next unanswered questions.
+    Submit answers to questions. Uses Universal Intake AI to generate
+    follow-up questions based on accumulated Q&A history.
     """
     session = db.query(models.QuoteSession).filter(
         models.QuoteSession.id == session_id,
@@ -308,57 +208,106 @@ def answer_questions(
     if session.status != "active":
         raise HTTPException(status_code=400, detail=f"Session is {session.status}, not active")
 
-    job_type = session.job_type
-    if job_type not in engine.list_available_trees():
-        raise HTTPException(status_code=400, detail=f"No question tree for job type: {job_type}")
-
     # Merge new answers into existing params
     current_params = dict(session.params_json or {})
     current_params.update(request.answers)
 
+    # Retrieve intake state
+    known_facts = dict(current_params.get("_known_facts", {}))
+    qa_history = list(current_params.get("_qa_history", []))
+    description = current_params.get("description", "")
+    photo_observations_text = current_params.get("photo_observations", "")
+
+    # Merge new answers into known facts
+    for field_id, value in request.answers.items():
+        if not str(field_id).startswith("_"):
+            known_facts[field_id] = value
+
+    # Build QA history entries from the answers
+    # Match answer values to the questions that were asked
+    messages = list(session.messages_json or [])
+    last_questions = []
+    for msg in reversed(messages):
+        if msg.get("role") == "ai_questions":
+            last_questions = msg.get("content", [])
+            break
+
+    for field_id, value in request.answers.items():
+        q_text = field_id  # default
+        for q in last_questions:
+            if isinstance(q, dict) and q.get("id") == field_id:
+                q_text = q.get("text", field_id)
+                break
+        qa_history.append({"question": q_text, "answer": str(value)})
+
     # Handle photo answer if provided
-    photo_observations = ""
     photo_extracted_fields = {}
     if request.photo_url:
-        # Store the photo URL
         current_photos = list(session.photo_urls or [])
         current_photos.append(request.photo_url)
         session.photo_urls = current_photos
 
-        # Run vision extraction on the new photo
         try:
             photo_result = engine.extract_from_photo(
-                job_type, request.photo_url,
-                description=str(request.answers.get("description", "")),
+                session.job_type, request.photo_url,
+                description=description,
             )
-            photo_observations = photo_result.get("photo_observations", "")
-            # Apply conservative enforcement — drop guessed choice fields
-            from backend.question_trees.engine import _enforce_conservative_extraction
-            photo_raw = photo_result.get("extracted_fields", {})
-            desc = str(session.params_json.get("description", "") or "")
-            tree = engine.load_tree(job_type)
-            photo_raw = _enforce_conservative_extraction(
-                photo_raw, tree.get("questions", []), desc
-            )
-            for field_id, value in photo_raw.items():
-                if field_id not in current_params:
-                    current_params[field_id] = value
+            new_photo_obs = photo_result.get("photo_observations", "")
+            if new_photo_obs:
+                photo_observations_text = (
+                    (photo_observations_text + "\n" + new_photo_obs).strip()
+                )
+            for field_id, value in photo_result.get("extracted_fields", {}).items():
+                if field_id not in known_facts:
+                    known_facts[field_id] = value
                     photo_extracted_fields[field_id] = value
         except Exception as e:
-            logger.error("Photo extraction failed in /answer for '%s': %s: %s",
-                         request.photo_url, type(e).__name__, e)
-            # Photo extraction failure should not block answer submission
+            logger.error("Photo extraction failed in /answer: %s: %s",
+                         type(e).__name__, e)
+
+    # --- Universal Intake followup AI call ---
+    followup_result = generate_followup_questions(
+        description=description,
+        known_facts=known_facts,
+        qa_history=qa_history,
+        photo_observations=photo_observations_text,
+    )
+
+    # Update known facts from AI response (AI may have merged/refined)
+    ai_known = followup_result.get("known_facts", {})
+    if ai_known:
+        known_facts.update(ai_known)
+
+    questions = followup_result.get("questions", [])
+    readiness = followup_result.get("readiness", "ready")
+
+    # Build completion
+    completion = build_completion_from_readiness(readiness, known_facts, questions)
 
     # Log answers in message history
-    messages = list(session.messages_json or [])
     messages.append({
         "role": "user_answers",
         "content": request.answers,
         "timestamp": datetime.utcnow().isoformat(),
     })
+    # Store questions for next QA matching
+    if questions:
+        messages.append({
+            "role": "ai_questions",
+            "content": questions,
+            "timestamp": datetime.utcnow().isoformat(),
+        })
 
-    # Update session — use flag_modified for JSON columns on SQLite
+    # Update session state
     from sqlalchemy.orm.attributes import flag_modified
+    current_params.update({k: v for k, v in known_facts.items()
+                           if not str(k).startswith("_")})
+    current_params["_known_facts"] = known_facts
+    current_params["_qa_history"] = qa_history
+    current_params["_readiness"] = readiness
+    if photo_observations_text:
+        current_params["photo_observations"] = photo_observations_text
+
     session.params_json = current_params
     session.messages_json = messages
     session.updated_at = datetime.utcnow()
@@ -366,27 +315,25 @@ def answer_questions(
     flag_modified(session, "messages_json")
     flag_modified(session, "photo_urls")
 
-    # Check completion
-    completion = engine.get_completion_status(job_type, current_params)
     if completion["is_complete"]:
         session.stage = "calculate"
 
     db.commit()
 
-    # Get next questions
-    next_questions = engine.get_next_questions(job_type, current_params)
+    logger.info(
+        "ANSWER (universal): session=%s, %d new answers, %d known, %d followup qs, readiness=%s",
+        session_id, len(request.answers), len(known_facts), len(questions), readiness,
+    )
 
     response = {
         "session_id": session_id,
-        "answered_count": completion["total_answered"],
+        "answered_count": len(known_facts),
         "required_total": completion["required_total"],
-        "next_questions": _serialize_questions(next_questions),
+        "next_questions": _serialize_questions(questions),
         "is_complete": completion["is_complete"],
         "completion": completion,
     }
 
-    if photo_observations:
-        response["photo_observations"] = photo_observations
     if photo_extracted_fields:
         response["photo_extracted_fields"] = photo_extracted_fields
 
@@ -410,30 +357,23 @@ def get_session_status(
     if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your session")
 
-    job_type = session.job_type
     current_params = dict(session.params_json or {})
 
-    if job_type in engine.list_available_trees():
-        completion = engine.get_completion_status(job_type, current_params)
-        next_questions = engine.get_next_questions(job_type, current_params)
-    else:
-        completion = {
-            "is_complete": False,
-            "required_total": 0,
-            "required_answered": 0,
-            "required_missing": [],
-            "total_answered": len(current_params),
-            "completion_pct": 0.0,
-        }
-        next_questions = []
+    # Universal intake: use stored readiness state
+    known_facts = current_params.get("_known_facts", {})
+    readiness = current_params.get("_readiness", "needs_questions")
+    completion = build_completion_from_readiness(readiness, known_facts, [])
+    # Answered fields = everything except internal keys
+    answered_fields = {k: v for k, v in current_params.items()
+                       if not str(k).startswith("_")}
 
     return {
         "session_id": session_id,
-        "job_type": job_type,
+        "job_type": session.job_type,
         "stage": session.stage,
         "status": session.status,
-        "answered_fields": current_params,
-        "next_questions": _serialize_questions(next_questions),
+        "answered_fields": answered_fields,
+        "next_questions": [],  # Questions only generated on /answer calls
         "completion": completion,
         "photo_urls": session.photo_urls or [],
         "created_at": session.created_at.isoformat() if session.created_at else None,
@@ -462,18 +402,15 @@ def calculate_materials(
         raise HTTPException(status_code=403, detail="Not your session")
 
     job_type = session.job_type
+    current_params = dict(session.params_json or {})
 
-    # Check completion
-    if job_type in engine.list_available_trees():
-        current_params = dict(session.params_json or {})
-        completion = engine.get_completion_status(job_type, current_params)
-        if not completion["is_complete"]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Session is not complete. Missing required fields: {completion['required_missing']}",
-            )
-    else:
-        raise HTTPException(status_code=400, detail=f"No question tree for job type: {job_type}")
+    # Universal intake: check AI readiness state (not tree completion)
+    readiness = current_params.get("_readiness", "ready")
+    if readiness == "needs_critical_info":
+        raise HTTPException(
+            status_code=400,
+            detail="Session is missing critical information. Answer more questions first.",
+        )
 
     # Check calculator exists
     if not has_calculator(job_type):
