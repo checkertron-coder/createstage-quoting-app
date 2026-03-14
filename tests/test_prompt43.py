@@ -599,13 +599,43 @@ def test_sheet_count_area_based():
         % sheet_items[0].get("sheets_needed", 0)
 
 
-def test_sheet_count_exceeds_one_sheet():
-    """Pieces exceeding one sheet's area should give sheets_needed=2+."""
+def test_nest_sheets_bin_packing():
+    """Direct test of _nest_sheets bin packing algorithm."""
+    from backend.calculators.base import BaseCalculator
+
+    # Case 1: 3 small pieces on one big sheet
+    assert BaseCalculator._nest_sheets(
+        [(24, 24, 3)], 60, 120
+    ) == 1, "3x 24x24 on 60x120 = 1 sheet"
+
+    # Case 2: Two 60x60 fit side-by-side on 60x120
+    assert BaseCalculator._nest_sheets(
+        [(60, 60, 2)], 60, 120
+    ) == 1, "2x 60x60 on 60x120 = 1 sheet (side by side)"
+
+    # Case 3: Three 48x48 on 48x96 — two fit, third needs new sheet
+    assert BaseCalculator._nest_sheets(
+        [(48, 48, 3)], 48, 96
+    ) == 2, "3x 48x48 on 48x96 = 2 sheets"
+
+    # Case 4: Oversized piece — doesn't fit on sheet
+    assert BaseCalculator._nest_sheets(
+        [(72, 72, 1)], 48, 96
+    ) == 1, "1x 72x72 on 48x96 = 1 sheet (oversized, needs seaming)"
+
+    # Case 5: Mixed sizes
+    assert BaseCalculator._nest_sheets(
+        [(48, 48, 1), (24, 24, 2)], 48, 96
+    ) == 1, "1x 48x48 + 2x 24x24 on 48x96 = 1 sheet"
+
+    # Case 6: Empty pieces list
+    assert BaseCalculator._nest_sheets([], 60, 120) == 1, "No pieces = 1 sheet"
+
+
+def test_sheet_count_two_60x60_on_5x10():
+    """Two 60x60 pieces fit side-by-side on one 60x120 sheet — bin packing."""
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
-    # 2 pieces: 60x60 each = 3600 sq in each = 7200 total
-    # One 5x10' sheet = 7200 sq in, 75% usable = 5400
-    # 7200 / 5400 = 1.33 → 2 sheets
     ai_cuts = [
         {"profile": "al_sheet_0.125", "length_inches": 60, "width_inches": 60,
          "quantity": 1, "piece_name": "disc_front",
@@ -619,8 +649,35 @@ def test_sheet_count_exceeds_one_sheet():
     sheet_items = [m for m in result["items"]
                    if "sheet" in m.get("profile", "").lower()]
     assert len(sheet_items) == 1
+    assert sheet_items[0].get("sheets_needed", 0) == 1, \
+        "Two 60x60 pieces fit side-by-side on 60x120 sheet, got %d" \
+        % sheet_items[0].get("sheets_needed", 0)
+
+
+def test_sheet_count_exceeds_one_sheet():
+    """Pieces exceeding one sheet's capacity should give sheets_needed=2+."""
+    from backend.calculators.custom_fab import CustomFabCalculator
+    calc = CustomFabCalculator()
+    # 3 pieces of 48x48 each on 48x96 sheet = need 2 sheets
+    # (two fit side by side, third needs new sheet)
+    ai_cuts = [
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 48,
+         "quantity": 1, "piece_name": "panel_a",
+         "sheet_stock_size": [48, 96], "sheets_needed": 1},
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 48,
+         "quantity": 1, "piece_name": "panel_b",
+         "sheet_stock_size": [48, 96], "sheets_needed": 1},
+        {"profile": "al_sheet_0.125", "length_inches": 48, "width_inches": 48,
+         "quantity": 1, "piece_name": "panel_c",
+         "sheet_stock_size": [48, 96], "sheets_needed": 1},
+    ]
+    fields = {"description": "aluminum sign", "material_type": "Aluminum"}
+    result = calc._build_from_ai_cuts("led_sign_custom", ai_cuts, fields, [])
+    sheet_items = [m for m in result["items"]
+                   if "sheet" in m.get("profile", "").lower()]
+    assert len(sheet_items) == 1
     assert sheet_items[0].get("sheets_needed", 0) == 2, \
-        "Two 60x60 circles on 5x10' sheets should need 2, got %d" \
+        "Three 48x48 panels on 48x96 sheets need 2, got %d" \
         % sheet_items[0].get("sheets_needed", 0)
 
 
@@ -824,10 +881,10 @@ def test_no_banned_term_stripping():
 
 
 def test_sheet_nesting_unified_both_paths():
-    """Both trust_opus and legacy paths use area-based nesting at 85% efficiency.
+    """Both trust_opus and legacy paths use bin-packing nesting.
 
-    Two 60x60 pieces on a 60x120 sheet — area-based at 85%:
-    7200 sq in total / 6120 usable = 1.18 → 2 sheets.
+    Two 60x60 pieces on a 60x120 sheet — bin packing places them
+    side by side: 1 sheet.
     """
     from backend.calculators.custom_fab import CustomFabCalculator
     calc = CustomFabCalculator()
@@ -841,20 +898,20 @@ def test_sheet_nesting_unified_both_paths():
     ]
     fields = {"description": "aluminum sign"}
 
-    # Full package path (trust_opus=True) — area-based nesting
+    # Full package path (trust_opus=True) — bin-packing nesting
     trusted = calc._build_from_ai_cuts("sign_frame", ai_cuts, fields, [],
                                         trust_opus=True)
     sheet_items = [m for m in trusted["items"]
                    if "sheet" in m.get("profile", "").lower()]
     assert len(sheet_items) == 1
-    assert sheet_items[0].get("sheets_needed", 0) == 2, \
-        "Area-based nesting should give 2 sheets, got %d" \
+    assert sheet_items[0].get("sheets_needed", 0) == 1, \
+        "Bin packing: two 60x60 on 60x120 = 1 sheet, got %d" \
         % sheet_items[0].get("sheets_needed", 0)
 
-    # Legacy path — same area-based nesting
+    # Legacy path — same bin-packing nesting
     legacy = calc._build_from_ai_cuts("sign_frame", ai_cuts, fields, [])
     legacy_sheets = [m for m in legacy["items"]
                      if "sheet" in m.get("profile", "").lower()]
     assert len(legacy_sheets) == 1
-    assert legacy_sheets[0].get("sheets_needed", 0) == 2, \
-        "Both paths should give 2 sheets via unified nesting"
+    assert legacy_sheets[0].get("sheets_needed", 0) == 1, \
+        "Both paths should give 1 sheet via bin packing"

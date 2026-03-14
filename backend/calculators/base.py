@@ -190,6 +190,75 @@ class BaseCalculator(ABC):
             result["cut_list"] = cut_list
         return result
 
+    # --- Sheet nesting ---
+
+    @staticmethod
+    def _nest_sheets(pieces, sheet_w, sheet_h):
+        """Shelf-based first-fit-decreasing bin packing for sheet pieces.
+
+        Args:
+            pieces: list of (length_in, width_in, quantity) tuples
+            sheet_w, sheet_h: stock sheet dimensions in inches
+        Returns:
+            Number of sheets needed
+        """
+        # Normalize sheet to (short, long) orientation
+        sw, sh = min(sheet_w, sheet_h), max(sheet_w, sheet_h)
+
+        # Expand pieces by quantity into individual rectangles
+        rects = []
+        for l, w, qty in pieces:
+            for _ in range(qty):
+                rects.append((min(l, w), max(l, w)))
+
+        if not rects:
+            return 1
+
+        # Sort by area descending (largest pieces first)
+        rects.sort(key=lambda r: r[0] * r[1], reverse=True)
+
+        # Each sheet tracks shelves: list of (shelf_height, remaining_width)
+        sheets = []
+
+        for rs, rl in rects:
+            placed = False
+
+            for shelves in sheets:
+                # Try to fit on an existing shelf
+                for i, (s_h, s_rem) in enumerate(shelves):
+                    if rs <= s_rem and rl <= s_h:
+                        shelves[i] = (s_h, s_rem - rs)
+                        placed = True
+                        break
+                    if rl <= s_rem and rs <= s_h:
+                        shelves[i] = (s_h, s_rem - rl)
+                        placed = True
+                        break
+                if placed:
+                    break
+
+                # Try new shelf on this sheet
+                used_h = sum(s[0] for s in shelves)
+                if rl + used_h <= sh and rs <= sw:
+                    shelves.append((rl, sw - rs))
+                    placed = True
+                elif rs + used_h <= sh and rl <= sw:
+                    shelves.append((rs, sw - rl))
+                    placed = True
+                if placed:
+                    break
+
+            if not placed:
+                # New sheet
+                if rs <= sw and rl <= sh:
+                    sheets.append([(rl, sw - rs)])
+                elif rl <= sw and rs <= sh:
+                    sheets.append([(rs, sw - rl)])
+                else:
+                    sheets.append([(max(rs, rl), 0)])
+
+        return max(1, len(sheets))
+
     # --- AI cut list integration (default implementations) ---
 
     def _has_description(self, fields: dict) -> bool:
@@ -288,6 +357,7 @@ class BaseCalculator(ABC):
                     "sheet_stock_size": None,
                     "sheets_needed": 0,
                     "seaming_required": False,
+                    "pieces": [],
                 }
             profile_totals[profile]["total_ft"] += piece_total_ft
 
@@ -316,6 +386,16 @@ class BaseCalculator(ABC):
                     )
                 if cut.get("seaming_required"):
                     profile_totals[profile]["seaming_required"] = True
+                # Collect individual piece dimensions for bin-packing
+                pw = cut.get("width_inches", 0)
+                if pw > 0:
+                    profile_totals[profile]["pieces"].append(
+                        (length_in, pw, quantity)
+                    )
+                else:
+                    profile_totals[profile]["pieces"].append(
+                        (length_in, length_in, quantity)
+                    )
 
             if not trust_opus:
                 total_weld_inches += quantity * 6  # Estimate 6" weld per piece
@@ -327,19 +407,31 @@ class BaseCalculator(ABC):
             is_sheet = info.get("is_sheet", False)
 
             if is_sheet and info.get("total_piece_area", 0) > 0:
-                # Area-based nesting: calculate sheets from total piece area
+                # Sheet nesting: bin-pack pieces onto stock sheets
                 import math
                 stock = info["sheet_stock_size"]
                 if stock:
-                    sheet_area_sqin = stock[0] * stock[1]
-                    sheet_sqft = sheet_area_sqin / 144.0
+                    sheet_w, sheet_h = stock[0], stock[1]
+                    sheet_sqft = (sheet_w * sheet_h) / 144.0
                 else:
-                    sheet_area_sqin = 48 * 96  # fallback 4x8
+                    sheet_w, sheet_h = 48, 96  # fallback 4x8
                     sheet_sqft = 32.0
-                usable_area = sheet_area_sqin * 0.85  # 85% nesting efficiency
-                sheets_needed = max(1, int(math.ceil(
-                    info["total_piece_area"] / usable_area
-                )))
+
+                pieces = info.get("pieces", [])
+                if pieces:
+                    sheets_needed = self._nest_sheets(pieces, sheet_w, sheet_h)
+                else:
+                    # Fallback: area-based with 85% efficiency
+                    usable_area = (sheet_w * sheet_h) * 0.85
+                    sheets_needed = max(1, math.ceil(
+                        info["total_piece_area"] / usable_area
+                    ))
+
+                # Safety rail: never exceed Opus's per-piece sum
+                opus_sum = info.get("sheets_needed", 0)
+                if opus_sum > 0 and sheets_needed > opus_sum:
+                    sheets_needed = opus_sum
+
                 info["sheets_needed"] = sheets_needed
                 line_total = round(sheets_needed * sheet_sqft * info["price_ft"], 2)
                 wasted_ft = raw_ft

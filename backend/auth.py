@@ -1,17 +1,17 @@
 """
 JWT token creation/validation and password hashing utilities.
 
-Libraries: python-jose[cryptography] for JWT, passlib[bcrypt] for passwords.
+Libraries: python-jose[cryptography] for JWT, bcrypt for passwords.
 """
 
 import hashlib
 import uuid
 from datetime import datetime, timedelta
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -20,15 +20,15 @@ from . import models
 
 # --- Password hashing ---
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt."""
+    return bcrypt.hashpw(password.encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash."""
+    return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
 
 
 # --- JWT tokens ---
