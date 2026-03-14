@@ -800,14 +800,14 @@ def test_full_package_hardware_single_option():
 
 
 def test_full_package_consumables_passthrough():
-    """Opus consumable prices should pass through unchanged — no override."""
+    """Opus consumable prices pass through if non-zero; $0 prices get fallback."""
     from backend.pricing_engine import PricingEngine
     pe = PricingEngine()
     opus_consumables = [
         {"description": "Welding wire ER70S-6", "quantity": 1,
          "unit_price": 32.50, "line_total": 32.50},
         {"description": "Grinding discs", "quantity": 3,
-         "unit_price": 0, "line_total": 0},  # $0 price — should stay $0
+         "unit_price": 0, "line_total": 0},  # $0 price — gets fallback
     ]
     session_data = {
         "session_id": "test-cons-pass",
@@ -838,16 +838,18 @@ def test_full_package_consumables_passthrough():
     pq = pe.build_priced_quote(session_data, user)
     # Consumables with shop stock keywords get tiered into shop_stock
     all_items = pq.get("consumables", []) + pq.get("shop_stock", [])
-    # Wire should keep its $32.50 price
+    # Wire should keep its $32.50 price (non-zero passes through)
     wire = [c for c in all_items if "wire" in c.get("description", "").lower()]
     assert len(wire) == 1
     assert wire[0]["unit_price"] == 32.50, \
         "Wire price should be Opus's $32.50, got $%.2f" % wire[0]["unit_price"]
-    # Grinding discs with $0 should stay $0 (no override to $5 or $12)
+    # Grinding discs with $0 should get fallback price ($4.50 for grinding disc)
     discs = [c for c in all_items if "disc" in c.get("description", "").lower()]
     assert len(discs) == 1
-    assert discs[0]["unit_price"] == 0, \
-        "Opus $0 price should pass through unchanged, got $%.2f" % discs[0]["unit_price"]
+    assert discs[0]["unit_price"] > 0, \
+        "Opus $0 price should get fallback, got $%.2f" % discs[0]["unit_price"]
+    assert discs[0]["line_total"] == round(3 * discs[0]["unit_price"], 2), \
+        "line_total should be qty × fallback price"
 
 
 def test_full_package_surface_area_from_cuts():

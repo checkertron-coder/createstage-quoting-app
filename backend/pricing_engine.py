@@ -79,6 +79,9 @@ class PricingEngine:
                 item["line_total"] = round(qty * unit_price, 2)
                 consumables.append(item)
 
+            # Validate consumable prices — fill in $0 items with fallbacks
+            consumables = self._validate_consumable_prices(consumables)
+
             # Build finishing from Opus's method recommendation
             finish_method = opus_finishing_method or "raw"
             finishing = finishing_builder.build(
@@ -165,6 +168,9 @@ class PricingEngine:
                         consumables = opus_bom["consumables"]
             except Exception:
                 pass
+
+            # Validate consumable prices — fill in $0 items with fallbacks
+            consumables = self._validate_consumable_prices(consumables)
 
         # --- BOM validation: orphan check against build instructions ---
         build_instructions = session_data.get("build_instructions", [])
@@ -376,6 +382,20 @@ class PricingEngine:
         "wire wheel": 12.00,
         "acetone": 8.00,
         "degreaser": 10.00,
+        "tungsten": 6.00,
+        "filler rod": 4.50,
+        "tack cloth": 3.50,
+        "solder": 8.00,
+        "flux": 7.00,
+        "silicone": 6.50,
+        "sealant": 7.50,
+        "heat shrink": 4.00,
+        "nitrile": 12.00,
+        "gloves": 12.00,
+        "cutting fluid": 9.00,
+        "reducer": 10.00,
+        "rags": 5.00,
+        "lint-free": 6.00,
     }
 
     def _validate_consumable_prices(self, consumables):
@@ -807,9 +827,12 @@ class PricingEngine:
     # --- Shop stock keywords for tiering ---
     _SHOP_STOCK_KEYWORDS = (
         "wire", "disc", "gas", "tape", "sandpaper", "solvent",
-        "primer", "spray", "welding", "grinding", "flap",
+        "primer", "spray", "grinding", "flap",
         "shielding", "clear coat", "clearcoat", "denatured",
         "alcohol", "acetone", "spool",
+        "anti-spatter", "weatherstrip", "gasket", "cable mount",
+        "zip tie", "wire loom", "vhb", "foam tape",
+        "scotch-brite", "roloc",
     )
 
     def _dedup_hardware(self, hardware_list):
