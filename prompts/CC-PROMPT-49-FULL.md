@@ -115,31 +115,7 @@ that can be rolled for curved applications.
 
 ---
 
-# PART 4: MATERIAL CATALOG — Add Wide Flat Bar Profiles
-
-Find the material/profile catalog (likely in `backend/calculators/` or a JSON/Python file that defines available profiles and prices). Add these profiles:
-
-**Aluminum:**
-- `al_flat_bar_4x0.125` — 4" × 1/8" aluminum flat bar
-- `al_flat_bar_5x0.125` — 5" × 1/8" aluminum flat bar
-- `al_flat_bar_6x0.125` — 6" × 1/8" aluminum flat bar
-- `al_flat_bar_4x0.1875` — 4" × 3/16" aluminum flat bar
-- `al_flat_bar_5x0.1875` — 5" × 3/16" aluminum flat bar
-- `al_flat_bar_6x0.1875` — 6" × 3/16" aluminum flat bar
-
-**Steel:**
-- `flat_bar_4x0.125` — 4" × 1/8" steel flat bar
-- `flat_bar_5x0.125` — 5" × 1/8" steel flat bar
-- `flat_bar_6x0.125` — 6" × 1/8" steel flat bar
-- `flat_bar_4x0.25` — 4" × 1/4" steel flat bar
-- `flat_bar_5x0.25` — 5" × 1/4" steel flat bar
-- `flat_bar_6x0.25` — 6" × 1/4" steel flat bar
-
-Price per foot: estimate based on weight (aluminum ~$2-4/ft for 1/8" widths, steel ~$1.50-3/ft). Standard stock lengths: 20' for steel, 12' or 20' for aluminum.
-
----
-
-# PART 5: UNIVERSAL INTAKE — QUESTION VOICE & NEW QUESTIONS
+# PART 4: UNIVERSAL INTAKE — QUESTION VOICE & NEW QUESTIONS
 
 ## 5A: Shop Voice (Question Tone)
 
@@ -224,7 +200,7 @@ And in the TONE AND VOICE examples:
 
 ---
 
-# PART 6: FRONTEND FIXES
+# PART 5: FRONTEND FIXES
 
 ## 6A: Edit Button — Disable During Question Flow
 
@@ -267,9 +243,8 @@ Then verify:
 4. ✅ Laser cut drops: layered sign shows `sheets_needed: 0` for cutout elements
 5. ✅ Shop voice: questions read like shop talk, not sales form
 6. ✅ Frame question: sign/cabinet jobs get "Internal structure?" question
-7. ✅ Wide flat bar: side walls spec flat bar (e.g., `al_flat_bar_5x0.125`)
-8. ✅ Edit button: disabled during questions, active on review screen
-9. ✅ Other button: works on choice questions
+7. ✅ Edit button: disabled during questions, active on review screen
+8. ✅ Other button: works on choice questions
 
 ---
 
