@@ -124,7 +124,14 @@ def start_session(
                 print(f"[VISION-DEBUG] Photo result: confidence={photo_result.get('confidence', 0)}, "
                       f"obs='{(photo_result.get('photo_observations', '') or '')[:100]}'", flush=True)
                 # Merge photo-extracted fields (text wins on conflict)
-                for field_id, value in photo_result.get("extracted_fields", {}).items():
+                # Apply same conservative enforcement as text extraction
+                from backend.question_trees.engine import _enforce_conservative_extraction
+                photo_raw = photo_result.get("extracted_fields", {})
+                tree = engine.load_tree(job_type)
+                photo_raw = _enforce_conservative_extraction(
+                    photo_raw, tree.get("questions", []), request.description
+                )
+                for field_id, value in photo_raw.items():
                     if field_id not in extracted_fields:
                         photo_extracted_fields[field_id] = value
                 photo_observations = photo_result.get("photo_observations", "")
@@ -325,7 +332,15 @@ def answer_questions(
                 description=str(request.answers.get("description", "")),
             )
             photo_observations = photo_result.get("photo_observations", "")
-            for field_id, value in photo_result.get("extracted_fields", {}).items():
+            # Apply conservative enforcement — drop guessed choice fields
+            from backend.question_trees.engine import _enforce_conservative_extraction
+            photo_raw = photo_result.get("extracted_fields", {})
+            desc = str(session.params_json.get("description", "") or "")
+            tree = engine.load_tree(job_type)
+            photo_raw = _enforce_conservative_extraction(
+                photo_raw, tree.get("questions", []), desc
+            )
+            for field_id, value in photo_raw.items():
                 if field_id not in current_params:
                     current_params[field_id] = value
                     photo_extracted_fields[field_id] = value
