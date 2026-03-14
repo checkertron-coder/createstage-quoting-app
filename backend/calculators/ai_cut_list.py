@@ -1446,6 +1446,20 @@ CUT TYPES: square, miter_45, miter_22.5, cope, notch, compound
 SHEET/PLATE RULES:
 For sheet/plate items include: width_inches, sheet_stock_size ([W,H] from standard sizes: [48,96], [48,120], [48,144], [60,120], [60,144]), sheets_needed.
 
+LASER CUT DROP RULE:
+When a sheet is laser-cut to produce a decorative face (e.g., channel letter faces, sign panels with cutouts):
+- The DROP (remaining sheet after cutouts are removed) IS the finished part.
+- The cutout shapes are WASTE — do NOT create separate line items for them.
+- sheets_needed applies to the parent sheet only. One face panel = 1 sheet piece.
+- Example: sign face with cut-out letters = 1 sheet piece. The letter-shaped holes are waste, not pieces.
+
+SIDE WALL / RETURN MATERIAL RULE:
+For side walls, returns, and channel sides that are 6 inches deep or less:
+- Use FLAT BAR stock (flat_bar_*) instead of cutting strips from sheet.
+- Flat bar is cheaper, already straight-edged, and needs no sheet nesting.
+- Example: 6" deep sign return → flat_bar_3x0.25, NOT a 6" strip cut from sheet_11ga.
+- Side walls deeper than 6" → sheet/plate strip is acceptable.
+
 LABOR HOUR ESTIMATION RULES:
 - TIG welding (aluminum, stainless) is 2.5-3x slower per inch than MIG (mild steel).
 - Outdoor painted steel: grind is cleanup pass, not full furniture-grade grinding.

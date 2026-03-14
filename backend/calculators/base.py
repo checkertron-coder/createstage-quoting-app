@@ -340,60 +340,59 @@ class BaseCalculator(ABC):
                 cut_entry["seaming_required"] = cut["seaming_required"]
             cut_list_items.append(cut_entry)
 
-            # Accumulate footage by profile
+            # Accumulate footage by profile (sheets sub-grouped by stock size)
             is_sheet = "sheet" in profile.lower() or "plate" in profile.lower()
-            if profile not in profile_totals:
+            if is_sheet:
+                stock_size = cut.get("sheet_stock_size")
+                sk = tuple(stock_size) if stock_size else (48, 96)
+                group_key = "%s|%dx%d" % (profile, sk[0], sk[1])
+            else:
+                group_key = profile
+
+            if group_key not in profile_totals:
                 if is_sheet:
                     price_ft = _lookup.get_price_per_sqft(profile)
                 else:
                     price_ft = _lookup.get_price_per_foot(profile)
                 if price_ft == 0.0:
                     price_ft = 3.50
-                profile_totals[profile] = {
+                profile_totals[group_key] = {
                     "total_ft": 0.0,
                     "material_type": cut.get("material_type", "mild_steel"),
                     "price_ft": price_ft,
                     "is_sheet": is_sheet,
-                    "sheet_stock_size": None,
+                    "profile": profile,
+                    "sheet_stock_size": list(sk) if is_sheet else None,
                     "sheets_needed": 0,
                     "seaming_required": False,
                     "pieces": [],
+                    "total_piece_area": 0,
                 }
-            profile_totals[profile]["total_ft"] += piece_total_ft
+            profile_totals[group_key]["total_ft"] += piece_total_ft
 
             # Accumulate sheet data
             if is_sheet:
-                new_size = cut.get("sheet_stock_size")
-                if new_size:
-                    existing = profile_totals[profile]["sheet_stock_size"]
-                    if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
-                        profile_totals[profile]["sheet_stock_size"] = new_size
-                # Accumulate Opus's sheets_needed per profile
-                profile_totals[profile]["sheets_needed"] += (
+                profile_totals[group_key]["sheets_needed"] += (
                     cut.get("sheets_needed", 0) * quantity
                 )
-                # Accumulate total piece area for legacy path nesting calc
                 width_in = cut.get("width_inches", 0)
                 if width_in > 0:
-                    profile_totals[profile]["total_piece_area"] = (
-                        profile_totals[profile].get("total_piece_area", 0)
-                        + length_in * width_in * quantity
+                    profile_totals[group_key]["total_piece_area"] += (
+                        length_in * width_in * quantity
                     )
                 else:
-                    profile_totals[profile]["total_piece_area"] = (
-                        profile_totals[profile].get("total_piece_area", 0)
-                        + length_in * length_in * quantity
+                    profile_totals[group_key]["total_piece_area"] += (
+                        length_in * length_in * quantity
                     )
                 if cut.get("seaming_required"):
-                    profile_totals[profile]["seaming_required"] = True
-                # Collect individual piece dimensions for bin-packing
+                    profile_totals[group_key]["seaming_required"] = True
                 pw = cut.get("width_inches", 0)
                 if pw > 0:
-                    profile_totals[profile]["pieces"].append(
+                    profile_totals[group_key]["pieces"].append(
                         (length_in, pw, quantity)
                     )
                 else:
-                    profile_totals[profile]["pieces"].append(
+                    profile_totals[group_key]["pieces"].append(
                         (length_in, length_in, quantity)
                     )
 
@@ -402,7 +401,8 @@ class BaseCalculator(ABC):
 
         # Build consolidated material items (what you buy from the supplier)
         items = []
-        for profile, info in profile_totals.items():
+        for group_key, info in profile_totals.items():
+            profile = info.get("profile", group_key)
             raw_ft = info["total_ft"]
             is_sheet = info.get("is_sheet", False)
 

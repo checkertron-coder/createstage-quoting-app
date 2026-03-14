@@ -622,8 +622,15 @@ class PricingEngine:
             # or infer from profile name if lookup missed
             is_area_sold = stock_ft is None or "sheet" in profile or "plate" in profile
 
-            if profile not in groups:
-                groups[profile] = {
+            # Group sheets by stock size so different stock sizes stay separate
+            if is_area_sold and item.get("sheet_stock_size"):
+                ss = item["sheet_stock_size"]
+                group_key = "%s|%dx%d" % (profile, ss[0], ss[1])
+            else:
+                group_key = profile
+
+            if group_key not in groups:
+                groups[group_key] = {
                     "profile": profile,
                     "description": item.get("description", profile),
                     "total_length_ft": 0.0,
@@ -635,23 +642,21 @@ class PricingEngine:
                     "sheets_needed": 0,
                     "seaming_required": False,
                 }
-            groups[profile]["total_length_ft"] += (length_in * qty) / 12.0
-            groups[profile]["total_cost"] += line_total
+            groups[group_key]["total_length_ft"] += (length_in * qty) / 12.0
+            groups[group_key]["total_cost"] += line_total
 
             # Accumulate sheet data from material items (set by _build_from_ai_cuts)
-            # Take the LARGEST sheet size needed (not the last one seen)
             if is_area_sold:
                 new_size = item.get("sheet_stock_size")
                 if new_size:
-                    existing = groups[profile]["sheet_stock_size"]
-                    if not existing or (new_size[0] * new_size[1]) > (existing[0] * existing[1]):
-                        groups[profile]["sheet_stock_size"] = new_size
-                groups[profile]["sheets_needed"] += item.get("sheets_needed", 0)
+                    groups[group_key]["sheet_stock_size"] = new_size
+                groups[group_key]["sheets_needed"] += item.get("sheets_needed", 0)
                 if item.get("seaming_required"):
-                    groups[profile]["seaming_required"] = True
+                    groups[group_key]["seaming_required"] = True
 
         result = []
-        for profile, info in sorted(groups.items()):
+        for group_key, info in sorted(groups.items()):
+            profile = info["profile"]
             total_ft = round(info["total_length_ft"], 1)
             stock_ft = info["stock_length_ft"]
 
@@ -857,12 +862,11 @@ class PricingEngine:
         """
         shop_stock = []
 
-        # Move consumables that are shop stock items
+        # Move consumables that match shop stock keywords
         remaining_consumables = []
         for item in (consumables or []):
             desc = str(item.get("description", "")).lower()
-            cat = str(item.get("category", "")).lower()
-            if cat == "consumable" or any(kw in desc for kw in self._SHOP_STOCK_KEYWORDS):
+            if any(kw in desc for kw in self._SHOP_STOCK_KEYWORDS):
                 stock_item = dict(item)
                 stock_item["allocation_pct"] = 100  # full allocation for this job
                 shop_stock.append(stock_item)

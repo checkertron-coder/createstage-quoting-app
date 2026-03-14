@@ -271,6 +271,9 @@ const QuoteFlow = {
         const keys = Object.keys(allConfirmed);
         if (keys.length === 0) return;
 
+        // Disable Edit buttons while questions are being answered
+        const hasActiveQuestions = allQuestions.length > 0;
+
         const header = document.createElement('div');
         header.className = 'confirmed-header';
         header.textContent = 'Already captured';
@@ -289,7 +292,7 @@ const QuoteFlow = {
                 <span class="confirmed-check">${isPhoto ? '&#128247; &#10003;' : '&#10003;'}</span>
                 <span class="confirmed-label">${label}:</span>
                 <span class="confirmed-value">${value}</span>
-                <button class="confirmed-edit" onclick="QuoteFlow.editExtractedField('${fieldId}')">Edit</button>
+                <button class="confirmed-edit" onclick="QuoteFlow.editExtractedField('${fieldId}')" ${hasActiveQuestions ? 'disabled' : ''}>Edit</button>
             `;
             el.appendChild(fieldDiv);
         }
