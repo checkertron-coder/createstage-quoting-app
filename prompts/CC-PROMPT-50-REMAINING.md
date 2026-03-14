@@ -1,82 +1,15 @@
-# CC Prompt 49: Full Cleanup — Tests, Calculator, Intake, Frontend
+# CC Prompt 50: Shop Voice, Intake Fixes, Fabrication Knowledge
 
 ## Context
-We just landed universal intake (P47/48) and a first pass at three fixes (sheet nesting, Other button, edit button). The app works on Railway but has **8 test failures + 71 test errors**, the sheet nesting calculator overcounts, consumables display is broken, questions sound like a customer form, and several fabrication knowledge gaps need fixing.
-
-**Test summary:** `8 failed, 989 passed, 2 skipped, 71 errors`
-
-Run `python3 -m pytest tests/ --tb=line -q` to see current state.
-
-This is ONE prompt covering everything. Work through it in order — the test fixes (Part 1) unblock everything else.
+P49 handled test fixes (bcrypt/passlib), sheet nesting calculator, Other button, Edit button verification, and vision bug check. This prompt covers everything else found during today's quote testing session.
 
 ---
 
-# PART 1: TEST FIXES (do first)
+# PART 1: OPUS PROMPT FIXES
 
-## 1A: bcrypt/passlib Incompatibility (8 failed + 71 errors)
+## 1A: Laser Cut Drops ARE the Raised Layers (CRITICAL)
 
-**Root cause:** `bcrypt==5.0.0` + `passlib` incompatibility. bcrypt 5.x removed the `__about__` module and changed password length enforcement. passlib's `CryptContext` breaks.
-
-**Fix:** In `backend/auth.py`, replace passlib with direct bcrypt usage:
-
-```python
-import bcrypt
-
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return bcrypt.hashpw(password.encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
-```
-
-Remove the `passlib` import and `pwd_context` entirely. Keep everything else in `auth.py` unchanged (JWT, refresh tokens, etc.).
-
-Update `requirements.txt`: remove `passlib[bcrypt]`, keep `bcrypt>=4.0.0`.
-
-**Verify:** All tests in `test_session1_schema.py` should pass, and all 71 `ERROR` tests should resolve.
-
-## 1B: Vision Bug Check
-
-After the passlib fix unblocks tests, re-run `test_photo_extraction.py`. If tests still fail, check `frontend/js/api.js` — the `startSession()` function must send `photo_urls` in the POST body to `/api/quote/start`.
-
----
-
-# PART 2: BACKEND — CALCULATOR FIXES
-
-## 2A: Sheet Nesting — Separate Buckets Per Stock Size
-
-**File:** `backend/calculators/base.py`
-
-**Problem:** Opus returns cut list pieces referencing DIFFERENT sheet stock sizes (60x120 for discs, 48x96 for side band strips). They're all the same profile (`al_sheet_0.125`), so the calculator lumps them together and overcounts.
-
-**Fix:** In `_build_materials_from_full_package()`, when aggregating sheet pieces into `profile_totals`, sub-group by `sheet_stock_size`. Each sub-group does its own area-based nesting calculation independently. Then generate separate material line items per stock size.
-
-## 2B: Sheet Nesting — Smarter Area Calculation
-
-**Current problem:** The area-based nesting uses a flat 85% efficiency factor. For a 5' circular sign, two 60" circular panels = 7200 sq in, but one 60x120 sheet at 85% = 6120 sq in usable → result is 2 sheets when they clearly fit on 1.
-
-**Fix options (in priority order):**
-1. If Opus's full package response includes a top-level `total_sheets` or per-material `sheets_needed`, and `trust_opus` is True, use that directly.
-2. Fall back to area-based nesting with first-fit-decreasing bin packing: sort pieces by largest dimension descending, place each on the first sheet that fits.
-3. Safety rail: if calculated sheets > Opus's per-piece sum, use Opus's sum (it's already an overcount).
-
-**Key constraint:** Don't break the existing tube/bar/angle material paths. Only change the `if is_sheet` branch.
-
-## 2C: Consumables Field Mapping
-
-**Problem:** Every quote has `"consumables": []` and `"consumable_subtotal": 0`, but actual consumable items are in `shop_stock` instead. The totals are correct (shop_stock_subtotal is included), but the display is confusing.
-
-**Fix:** Trace the data flow from Opus's full-package response through the calculator/pricing engine. Find where consumables get routed to `shop_stock` instead of `consumables` and fix the routing. If Opus returns them as `shop_stock`, either update the prompt to use `consumables` or add a mapping step. The `consumable_subtotal` must reflect the real consumable costs.
-
----
-
-# PART 3: OPUS PROMPT FIXES
-
-## 3A: Laser Cut Drops ARE the Raised Layers (CRITICAL)
-
-**Problem:** When Opus generates a cut list for a layered sign, it specs SEPARATE sheet stock for raised layer elements. But those elements are laser cut OUT of the base panel — **the cutout drops ARE the raised layer pieces.** You don't buy additional sheets to re-cut them.
+**Problem:** When Opus generates a cut list for a layered sign, it specs SEPARATE sheet stock for raised layer elements (letters, horse heads, cactus, etc.). But those elements are laser cut OUT of the base panel — **the cutout drops ARE the raised layer pieces.** You don't buy additional sheets to re-cut them.
 
 **Example:** 5' circular sign with 3 layers:
 - Layer 1 = base disc (60" circle from 60x120 sheet)
@@ -99,7 +32,7 @@ what fits in the base panel cutouts).
 
 Pieces that are laser cut drops should have `sheets_needed: 0` in the cut list.
 
-## 3B: Side Wall Material — Use Flat Bar, Not Sheet Strips
+## 1B: Side Wall Material — Use Flat Bar, Not Sheet Strips
 
 **Problem:** For sign side walls, Opus specs cutting strips from full 4x8 or 5x10 sheets. Wide flat bar stock (4", 5", 6" widths) exists and is way cheaper.
 
@@ -113,13 +46,35 @@ Flat bar is sold by the foot, is cheaper, and comes in standard 12-20' lengths
 that can be rolled for curved applications.
 ```
 
+Do NOT add hardcoded profiles to any catalog — Opus already knows what sizes exist. If a profile isn't in the price lookup, the pricing engine should estimate based on weight, not crash.
+
 ---
 
-# PART 4: UNIVERSAL INTAKE — QUESTION VOICE & NEW QUESTIONS
+# PART 2: BACKEND — CALCULATOR FIXES
 
-## 5A: Shop Voice (Question Tone)
+## 2A: Sheet Nesting — Separate Buckets Per Stock Size
+
+**File:** `backend/calculators/base.py`
+
+**Problem:** Opus returns cut list pieces referencing DIFFERENT sheet stock sizes (60x120 for discs, 48x96 for side band strips). They're all the same profile (`al_sheet_0.125`), so the calculator lumps them together and overcounts.
+
+**Fix:** In `_build_materials_from_full_package()`, when aggregating sheet pieces into `profile_totals`, sub-group by `sheet_stock_size`. Each sub-group does its own area-based nesting calculation independently. Then generate separate material line items per stock size.
+
+## 2B: Consumables Field Mapping
+
+**Problem:** Every quote has `"consumables": []` and `"consumable_subtotal": 0`, but actual consumable items are in `shop_stock` instead. The totals are correct (shop_stock_subtotal is included), but the display is confusing — "Consumables: $0" when there's $500+ in consumable items.
+
+**Fix:** Trace the data flow from Opus's full-package response through the calculator/pricing engine. Find where consumables get routed to `shop_stock` instead of `consumables` and fix the routing. If Opus returns them as `shop_stock`, either update the prompt to use `consumables` or add a mapping step. The `consumable_subtotal` must reflect the real consumable costs.
+
+---
+
+# PART 3: UNIVERSAL INTAKE — QUESTION VOICE & NEW QUESTIONS
+
+## 3A: Shop Voice (Question Tone)
 
 **File:** `backend/question_trees/universal_intake.py`
+
+**Problem:** Questions read like a customer intake form, not a shop tool. The user is a fabricator, not a retail customer.
 
 ### UNIVERSAL_INTAKE_PROMPT (line ~28)
 
@@ -185,9 +140,11 @@ Don't hardcode "metal fabrication" — use "fabricators, welders, and contractor
 | "What finish would you prefer for your sign?" | "Finish?" → powder coat / wet paint / clear coat / raw / galvanized |
 | "How would you like the sign delivered and installed?" | "Install scope?" → shop pickup / deliver only / full install |
 
-## 5B: Frame/Structure Question
+## 3B: Frame/Structure Question Missing from Intake
 
-Add to the MANDATORY CATEGORIES in both prompts:
+**Problem:** Opus assumes a full internal frame on every sign/cabinet project. The intake never asks about frame approach, so the fabricator can't specify "I just need a couple cross braces, not a full skeleton."
+
+**Fix:** Add to the MANDATORY CATEGORIES in both `UNIVERSAL_INTAKE_PROMPT` and `FOLLOWUP_PROMPT`:
 
 ```
    - Internal structure/frame approach (for enclosed or cabinet-style pieces)
@@ -200,25 +157,17 @@ And in the TONE AND VOICE examples:
 
 ---
 
-# PART 5: FRONTEND FIXES
+# PART 4: FRONTEND FIX
 
-## 6A: Edit Button — Disable During Question Flow
+## 4A: Edit Button — Disable During Question Flow
 
-**Problem:** Clicking "Edit" on a captured field before answering all AI-generated questions triggers quote processing, skipping remaining questions.
+**Problem:** Clicking "Edit" on a captured field before answering all AI-generated questions triggers quote processing, skipping remaining questions entirely.
 
 **Fix:** In `frontend/js/quote-flow.js`, in `_renderClarifyStep()`:
 1. When rendering "Already captured" extracted fields, check if `next_questions` is non-empty
 2. If questions pending: render Edit button as disabled with tooltip "Answer all questions first"
 3. If no questions pending (review screen): render Edit buttons as normal/active
 4. CSS: add `.confirmed-edit:disabled` or `.confirmed-edit.disabled` style that grays it out
-
-## 6B: Verify "Other" Button Works
-
-CC already added the Other button in commit `49d7519`. Verify it works:
-1. Appears on every choice question
-2. Clicking it highlights it and shows text input
-3. Typed value collected in `_collectAnswers()` when `selected.dataset.value === '__other__'`
-4. If broken, fix it. If working, leave it.
 
 ---
 
@@ -230,21 +179,16 @@ After all changes:
 python3 -m pytest tests/ --tb=line -q
 ```
 
-Target: **0 failures, 0 errors** (or only failures from missing external API keys).
-
-```bash
-cd backend && python3 -m uvicorn main:app --port 8000
-```
+Existing tests should still pass (don't break P49 fixes).
 
 Then verify:
-1. ✅ Tests pass (bcrypt fix)
-2. ✅ Sheet nesting: separate buckets per stock size, correct count
-3. ✅ Consumables: `consumable_subtotal` non-zero, items in `consumables` array
-4. ✅ Laser cut drops: layered sign shows `sheets_needed: 0` for cutout elements
+1. ✅ Laser cut drops: layered sign cut list shows `sheets_needed: 0` for cutout elements; total = 1 sheet (not 2-3)
+2. ✅ Side walls: Opus specs flat bar for sign sides, not sheet strips
+3. ✅ Sheet nesting: separate buckets per stock size
+4. ✅ Consumables: `consumable_subtotal` non-zero, items in `consumables` array
 5. ✅ Shop voice: questions read like shop talk, not sales form
 6. ✅ Frame question: sign/cabinet jobs get "Internal structure?" question
 7. ✅ Edit button: disabled during questions, active on review screen
-8. ✅ Other button: works on choice questions
 
 ---
 
@@ -254,4 +198,4 @@ Then verify:
 - Question field structure (id, text, type, options, unit, required, hint)
 - Calculator logic for tubes/bars/angles (only change `if is_sheet` branch)
 - Pricing formulas or markup calculations
-- Frontend beyond Edit button disable + Other button verify
+- Test fixes from P49 (bcrypt, passlib, etc.)
