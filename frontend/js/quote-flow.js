@@ -198,6 +198,7 @@ const QuoteFlow = {
         try {
             const data = await API.startSession(description, jobType, this.sessionPhotoUrls);
             this.sessionId = data.session_id;
+            this._currentJobType = data.job_type || jobType || '';
             this.extractedFields = data.extracted_fields || {};
             this.allQuestions = data.next_questions || [];
 
@@ -295,36 +296,42 @@ const QuoteFlow = {
     },
 
     editExtractedField(fieldId) {
-        const oldValue = this.extractedFields[fieldId];
-        delete this.extractedFields[fieldId];
+        try {
+            const oldValue = this.extractedFields[fieldId];
+            delete this.extractedFields[fieldId];
 
-        // Find the question definition from previously seen questions
-        let question = this.allQuestions.find(q => q.id === fieldId);
-        if (!question) {
-            // Construct a generic text question for this field
-            question = {
-                id: fieldId,
-                text: fieldId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + '?',
-                type: 'text',
-                required: true,
-                hint: oldValue ? 'Previously: ' + oldValue : null,
-            };
+            // Find the question definition from previously seen questions
+            let question = this.allQuestions.find(q => q.id === fieldId);
+            if (!question) {
+                // Construct a generic text question for this field
+                const label = fieldId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                question = {
+                    id: fieldId,
+                    text: label + '?',
+                    type: 'text',
+                    required: true,
+                    hint: oldValue ? 'Previously: ' + oldValue : null,
+                };
+            }
+
+            // Re-render clarify step with this field shown as an editable question
+            const nKnown = Object.keys(this.extractedFields).length;
+            this._renderClarifyStep({
+                job_type: this._currentJobType || '',
+                completion: {
+                    completion_pct: Math.round(nKnown / (nKnown + 1) * 100),
+                    required_answered: nKnown,
+                    required_total: nKnown + 1,
+                },
+                extracted_fields: this.extractedFields,
+                photo_extracted_fields: {},
+                next_questions: [question],
+            });
+            this._showStep('clarify');
+        } catch (err) {
+            console.error('editExtractedField error:', err);
+            alert('Error editing field — check console');
         }
-
-        // Re-render clarify step with this field shown as an editable question
-        const nKnown = Object.keys(this.extractedFields).length;
-        this._renderClarifyStep({
-            job_type: document.querySelector('.clarify-header h2')?.textContent || '',
-            completion: {
-                completion_pct: Math.round(nKnown / (nKnown + 1) * 100),
-                required_answered: nKnown,
-                required_total: nKnown + 1,
-            },
-            extracted_fields: this.extractedFields,
-            photo_extracted_fields: {},
-            next_questions: [question],
-        });
-        this._showStep('clarify');
     },
 
     _renderQuestions(questions) {
@@ -1378,6 +1385,7 @@ const QuoteFlow = {
         this.sessionPhotoUrls = [];
         this.extractedFields = {};
         this.allQuestions = [];
+        this._currentJobType = '';
         this.currentStep = 'describe';
         this.renderQuoteView();
     },
