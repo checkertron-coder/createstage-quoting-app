@@ -8,93 +8,29 @@ Two remaining issues after P51 landed successfully.
 
 **Root cause:** The Opus prompt example shows `"quantity": 1, "estimated_price": 25.00` with no guidance on what `estimated_price` means. Opus sometimes returns per-unit prices and sometimes per-lot prices inconsistently.
 
-**Fix — two parts:**
+**Fix — prompt only, no Python price caps:**
 
-### Part A: Clarify the Opus prompt (ai_cut_list.py)
+### Clarify the Opus prompt (ai_cut_list.py)
 
-In `backend/calculators/ai_cut_list.py`, find the hardware example in the prompt template (~line 1490). Change:
-
-```json
-"hardware": [
-    {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
-],
-```
-
-to:
-
-```json
-"hardware": [
-    {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
-],
-```
-
-And add this instruction text right before or after the hardware JSON example:
+In `backend/calculators/ai_cut_list.py`, find the hardware example in the prompt template (~line 1490). Add this instruction text right before or after the hardware JSON example:
 
 ```
 HARDWARE PRICING RULES:
-- estimated_price is ALWAYS the price PER UNIT (per single piece/item)
-- For bulk items (screws, bolts, nuts, washers, rivets, cable ties, wire connectors): price is per PIECE, not per box/bag
-  - Example: 40 machine screws at $0.50 each → quantity: 40, estimated_price: 0.50
-  - NOT: quantity: 40, estimated_price: 25.00 (that's a box price)
+- estimated_price is ALWAYS the price PER SINGLE UNIT (per piece, per item)
+- The pricing engine multiplies estimated_price × quantity — so if you put $25 for 40 screws, it bills $1,000
+- For bulk items (screws, bolts, nuts, washers, rivets, cable ties, wire connectors): price is per PIECE, not per box/bag/pack
+  - CORRECT: 40 machine screws → quantity: 40, estimated_price: 0.50 (total = $20)
+  - WRONG: 40 machine screws → quantity: 40, estimated_price: 25.00 (that's a box price, would bill $1,000)
 - For kit items (gas lens kit, connector assortment): quantity: 1, estimated_price: kit price
 - For rolls/spools (LED strip, wire, tape): quantity is number of rolls, estimated_price is per roll
+- For packs (cable gland 10-pack): quantity: 1, estimated_price: pack price — OR quantity: 10, estimated_price: per-piece price
 ```
 
-### Part B: Add a sanity check in the pricing engine
+**No Python safety net / price caps.** Trust the prompt. If Opus still gets it wrong after this clear instruction, we address it then — not by hardcoding price ceilings that will be wrong for specialty hardware.
 
-In `backend/pricing_engine.py`, add a method `_validate_hardware_prices` and call it on the hardware list BEFORE `_calculate_hardware_subtotal`. This catches Opus mistakes:
+**Files to modify:** `backend/calculators/ai_cut_list.py` only (prompt text)
 
-```python
-_HARDWARE_UNIT_PRICE_CAPS = {
-    # Keywords → max reasonable per-unit price
-    "screw": 2.00,
-    "bolt": 5.00,
-    "nut": 1.50,
-    "washer": 1.00,
-    "rivet": 0.50,
-    "cable tie": 0.20,
-    "zip tie": 0.20,
-    "wire connector": 2.00,
-    "cable clip": 1.50,
-    "cable mount": 1.50,
-    "wire nut": 0.50,
-    "crimp": 1.00,
-    "resistor": 0.50,
-    "capacitor": 2.00,
-}
-
-def _validate_hardware_prices(self, hardware):
-    """
-    Catch Opus returning box/lot prices as per-unit for bulk fasteners.
-    If quantity > 10 and per-unit price exceeds cap for that item type,
-    assume Opus returned a lot price and divide by quantity.
-    """
-    for item in hardware:
-        options = item.get("options", [])
-        qty = item.get("quantity", 1)
-        if qty <= 10 or not options:
-            continue
-        
-        desc = str(item.get("description", "")).lower()
-        for keyword, max_unit in self._HARDWARE_UNIT_PRICE_CAPS.items():
-            if keyword in desc:
-                for opt in options:
-                    price = float(opt.get("price", 0))
-                    if price > max_unit:
-                        # Opus likely returned a lot/box price
-                        opt["price"] = round(price / qty, 2)
-                        opt["supplier"] = opt.get("supplier", "Estimated") + " (corrected from lot price)"
-                break
-    
-    return hardware
-```
-
-Call it in `price_quote()` right before the `_dedup_hardware` call (~line 183):
-
-```python
-priced_hardware = self._validate_hardware_prices(priced_hardware)
-priced_hardware = self._dedup_hardware(priced_hardware)
-```
+**DO NOT add** `_HARDWARE_UNIT_PRICE_CAPS`, `_validate_hardware_prices()`, or any hardcoded price cap logic to `pricing_engine.py`.
 
 ## Bug 2: Laser cut drops not reused — calculator buys separate sheets
 
@@ -159,16 +95,16 @@ python -m pytest tests/ -x -q 2>&1 | tail -20
 ```
 
 Then mentally verify:
-- loanDepot: 40 machine screws at $25 → corrected to $0.63/screw → $25 total (not $1,000)
+- loanDepot: 40 machine screws — Opus should now return estimated_price: 0.50 (not 25.00), total hardware ~$200
 - Hacienda non-LED: face panel = 1 sheet of 60×120. Layer 2/3 elements = from_drop, 0 additional sheets. Total: 1-2 sheets (face + back panel + side ring), not 3-4.
 - Hacienda LED: same drop logic. Face disc cutouts are the raised elements.
 
 ## Files to modify
 - `backend/calculators/ai_cut_list.py` — Opus prompt (hardware pricing rules + from_drop field + parser)
 - `backend/calculators/base.py` — skip from_drop pieces in sheet accumulation
-- `backend/pricing_engine.py` — hardware price validation
 
 ## DO NOT modify
+- `backend/pricing_engine.py` — no price caps, no hardware validation method
 - Frontend files
 - Question tree / intake logic
 - The consumable pricing/tiering from P51 (it's working correctly now)
