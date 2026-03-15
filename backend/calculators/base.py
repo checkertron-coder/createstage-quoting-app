@@ -338,7 +338,14 @@ class BaseCalculator(ABC):
                 cut_entry["sheets_needed"] = cut["sheets_needed"]
             if cut.get("seaming_required"):
                 cut_entry["seaming_required"] = cut["seaming_required"]
+            if cut.get("from_drop"):
+                cut_entry["from_drop"] = True
             cut_list_items.append(cut_entry)
+
+            # Skip from_drop pieces — they come from another cut's waste
+            # Still in the cut list for display, but don't count toward purchases
+            if cut.get("from_drop", False):
+                continue
 
             # Accumulate footage by profile (sheets sub-grouped by stock size)
             is_sheet = "sheet" in profile.lower() or "plate" in profile.lower()

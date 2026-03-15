@@ -1212,6 +1212,7 @@ Return ONLY valid JSON — an array of step objects:
                 cut["sheets_needed"] = 1 if is_sheet_item else 0
 
             cut["seaming_required"] = bool(item.get("seaming_required", False))
+            cut["from_drop"] = bool(item.get("from_drop", False))
 
             # Sanity checks
             if cut["length_inches"] <= 0:
@@ -1453,6 +1454,12 @@ When a sheet is laser-cut to produce a decorative face (e.g., channel letter fac
 - sheets_needed applies to the parent sheet only. One face panel = 1 sheet piece.
 - Example: sign face with cut-out letters = 1 sheet piece. The letter-shaped holes are waste, not pieces.
 
+CUT LIST DROP REUSE:
+- When a piece is laser-cut FROM another piece (e.g., letter cutouts from a face panel, raised elements from base layer drops), set "from_drop": true
+- from_drop pieces do NOT require purchasing additional sheet stock — they come from the waste/drop of another cut
+- Only the parent piece (the sheet being cut) needs sheets_needed
+- Example: A sign face panel is laser cut with letter openings. The letter pieces that fall out ARE the raised layer elements. The face panel needs 1 sheet. The letter pieces need 0 additional sheets (from_drop: true).
+
 SIDE WALL / RETURN MATERIAL RULE:
 For side walls, returns, and channel sides that are 6 inches deep or less:
 - Use FLAT BAR stock (flat_bar_*) instead of cutting strips from sheet.
@@ -1493,6 +1500,7 @@ Return ONLY valid JSON matching this structure:
             "weld_type": "fillet",
             "sheet_stock_size": null,
             "sheets_needed": 0,
+            "from_drop": false,
             "notes": "Brief fabrication note"
         }
     ],
@@ -1509,6 +1517,16 @@ Return ONLY valid JSON matching this structure:
     "hardware": [
         {"description": "Item name", "quantity": 1, "estimated_price": 25.00}
     ],
+
+HARDWARE PRICING RULES:
+- estimated_price is ALWAYS the price PER SINGLE UNIT (per piece, per item)
+- The pricing engine multiplies estimated_price × quantity — so if you put $25 for 40 screws, it bills $1,000
+- For bulk items (screws, bolts, nuts, washers, rivets, cable ties, wire connectors): price is per PIECE, not per box/bag/pack
+  - CORRECT: 40 machine screws → quantity: 40, estimated_price: 0.50 (total = $20)
+  - WRONG: 40 machine screws → quantity: 40, estimated_price: 25.00 (that's a box price, would bill $1,000)
+- For kit items (gas lens kit, connector assortment): quantity: 1, estimated_price: kit price
+- For rolls/spools (LED strip, wire, tape): quantity is number of rolls, estimated_price is per roll
+- For packs (cable gland 10-pack): quantity: 1, estimated_price: pack price — OR quantity: 10, estimated_price: per-piece price
     "consumables": [
         {"description": "Item name", "quantity": 1, "unit_price": 5.00}
     ],
