@@ -76,21 +76,34 @@ body {
 
 /* --- Hero Section --- */
 .hero {
-    background: var(--hero-bg);
+    background: radial-gradient(ellipse at 50% 0%, #1e3a5f 0%, var(--hero-bg) 70%);
     color: var(--hero-text);
     padding: 80px 32px 100px;
     text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+.hero-pattern {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(59, 130, 246, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 130, 246, 0.06) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
 }
 .hero-inner {
     max-width: var(--max-w);
     margin: 0 auto;
+    position: relative;
+    z-index: 1;
 }
 .hero h1 {
-    font-size: 3rem;
+    font-size: 3.25rem;
     font-weight: 800;
-    line-height: 1.15;
-    margin-bottom: 16px;
-    letter-spacing: -0.02em;
+    line-height: 1.1;
+    margin-bottom: 20px;
+    letter-spacing: -0.025em;
 }
 .hero h1 .highlight {
     color: var(--accent);
@@ -167,17 +180,21 @@ body {
 /* --- Features Grid --- */
 .features-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 24px;
 }
 .feature-card {
     background: var(--surface);
     border: 1px solid var(--border);
+    border-top: 3px solid var(--accent);
     border-radius: var(--radius-lg);
     padding: 32px 24px;
-    transition: box-shadow 0.2s;
+    transition: box-shadow 0.2s, transform 0.2s;
 }
-.feature-card:hover { box-shadow: var(--shadow-lg); }
+.feature-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
 .feature-icon {
     font-size: 2rem;
     margin-bottom: 16px;
@@ -197,7 +214,7 @@ body {
 /* --- How It Works --- */
 .steps-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 32px;
     counter-reset: step;
 }
@@ -205,6 +222,16 @@ body {
     text-align: center;
     position: relative;
     counter-increment: step;
+}
+/* Connecting dashed line between step circles */
+.step-card:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 24px;
+    left: calc(50% + 32px);
+    width: calc(100% - 64px);
+    border-top: 2px dashed var(--border);
+    pointer-events: none;
 }
 .step-number {
     width: 48px;
@@ -218,6 +245,8 @@ body {
     font-size: 1.25rem;
     font-weight: 700;
     margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
 }
 .step-card h3 {
     font-size: 1.1rem;
@@ -389,6 +418,7 @@ body {
     .section-title { font-size: 1.6rem; }
     .features-grid { grid-template-columns: 1fr; }
     .steps-grid { grid-template-columns: 1fr; }
+    .step-card:not(:last-child)::after { display: none; }
     .pricing-grid { grid-template-columns: 1fr; max-width: 400px; margin: 0 auto; }
     .footer-inner { flex-direction: column; gap: 24px; }
 }

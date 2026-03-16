@@ -236,7 +236,7 @@ def test_landing_page_loads(client):
     text = resp.text
     assert "CreateQuote" in text
     assert "Metal Fabrication" in text
-    assert "Get Started" in text
+    assert "Start Quoting Free" in text
 
 
 # === 15. App page loads ===
