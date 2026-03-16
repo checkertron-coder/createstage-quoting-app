@@ -169,7 +169,7 @@ def start_job_cleanup():
 @app.on_event("startup")
 def auto_seed():
     """Auto-seed process rates, material prices, and invite codes on first run."""
-    from datetime import timedelta
+    from datetime import datetime, timedelta
     from .database import SessionLocal
     from .routers.process_rates import DEFAULT_RATES
     from .routers.materials import DEFAULT_PRICES
