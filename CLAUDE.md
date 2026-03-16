@@ -1,6 +1,6 @@
 # CLAUDE.md — CreateStage Fabrication Intelligence Platform
 *Read this at the start of EVERY session. This is the definitive reference.*
-*Last verified: Prompt 34 (March 5, 2026)*
+*Last verified: Prompt 47+ (March 16, 2026)*
 
 ---
 
@@ -794,6 +794,42 @@ class Fusion360Integration:
 - `requirements.txt` — add to it, don't remove without flagging
 - Existing SQLAlchemy table definitions in `models.py` — extend them, don't replace (data migration required)
 - `data/seeded_prices.json` — generated output, regenerate via `python data/seed_from_invoices.py`
+
+---
+
+## 21. Defensive Engineering Rules (Agent Standing Orders)
+
+These rules exist because agents won't think to ask about them. Enforce on every session.
+
+### Error Handling — No Blank Screens, Ever
+- Every API call from frontend must have a `.catch()` or `try/catch` with a **user-visible error message**
+- Never show a white page, raw JSON error, or browser console error to the user
+- Payment failures, server timeouts, API rate limits → friendly message + retry option
+- If Opus/Gemini returns empty or garbage → show "AI is thinking harder, please wait" or fall back gracefully
+- **Rule:** If `fetch()` or `httpx` can fail, it MUST be wrapped with user-facing error handling
+
+### Data Security — Row-Level Isolation
+- Every database query that returns user data MUST filter by `user_id`
+- No endpoint should ever return another user's quotes, sessions, or customer data
+- **Never log** customer emails, payment info, or API keys to stdout/file
+- API keys go in env vars ONLY — never hardcoded, never in prompts, never in DB
+- JWT secrets: minimum 256-bit, rotated if compromised
+- **Rule:** Before adding any new GET endpoint, verify it filters by authenticated user
+
+### Scale Expectations
+- Target: **500 active shops within 12 months** of launch, scaling to 5,000+
+- Database queries must use indexes on `user_id`, `created_at`, `job_type`
+- Avoid N+1 query patterns — use joins or eager loading
+- PDF generation must handle 50+ line item quotes without timeout
+- Background jobs (AI calls) must have timeout + cleanup — no zombie threads
+- **Rule:** Every new table needs a `user_id` foreign key + index. Every list endpoint needs pagination.
+
+### Blast Radius Control
+- One prompt = one focused change. Don't touch unrelated files.
+- If a change touches more than 10 files, decompose it into smaller prompts
+- Always run `pytest tests/ -v` after changes — never push failing tests
+- Git commit at every working state — **save points are mandatory, not optional**
+- **Rule:** If you're about to modify a calculator AND a router AND the frontend in one session, stop and break it up.
 
 ---
 
