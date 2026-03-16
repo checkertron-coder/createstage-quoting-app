@@ -201,8 +201,6 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
             if request.terms_accepted:
                 existing.terms_accepted_at = datetime.utcnow()
-            if request.nda_accepted:
-                existing.nda_accepted_at = datetime.utcnow()
 
             db.commit()
             db.refresh(existing)
@@ -229,7 +227,6 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         trial_ends_at=datetime.utcnow() + timedelta(days=14),
         invite_code_used=invite_code_record.code if invite_code_record else None,
         terms_accepted_at=datetime.utcnow() if request.terms_accepted else None,
-        nda_accepted_at=datetime.utcnow() if request.nda_accepted else None,
     )
     db.add(user)
 

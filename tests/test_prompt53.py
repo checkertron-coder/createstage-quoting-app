@@ -174,11 +174,10 @@ def test_password_minimum_length(client):
 def test_terms_accepted_timestamp(client, db):
     """Register with terms_accepted=True sets terms_accepted_at."""
     email = "terms_%s@test.local" % uuid.uuid4().hex[:8]
-    resp = _register(client, email=email, terms_accepted=True, nda_accepted=True)
+    resp = _register(client, email=email, terms_accepted=True)
     assert resp.status_code == 200
     user = db.query(models.User).filter(models.User.email == email).first()
     assert user.terms_accepted_at is not None
-    assert user.nda_accepted_at is not None
 
 
 # === 12. Quote access — free tier limit ===

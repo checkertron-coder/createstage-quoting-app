@@ -112,7 +112,6 @@ class User(Base):
     trial_ends_at = Column(DateTime, nullable=True)
     invite_code_used = Column(String, nullable=True)
     terms_accepted_at = Column(DateTime, nullable=True)
-    nda_accepted_at = Column(DateTime, nullable=True)
     quotes_this_month = Column(Integer, default=0)
     billing_cycle_start = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -328,6 +327,23 @@ class InviteCode(Base):
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+
+class DemoLink(Base):
+    """48-hour magic links for frictionless demos."""
+    __tablename__ = "demo_links"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    label = Column(String, nullable=True)  # "For Jim Lai", "Investor demo"
+    tier = Column(String, default="professional")
+    max_quotes = Column(Integer, default=3)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
+    demo_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class MaterialPrice(Base):
