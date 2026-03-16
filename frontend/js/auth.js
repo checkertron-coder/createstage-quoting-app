@@ -106,14 +106,14 @@ const Auth = {
         const tier = this.currentUser.tier || 'free';
         const subStatus = this.currentUser.subscription_status || 'trial';
 
-        // Show banner for free or trial users (not paid subscribers or beta invite users)
+        // Show banner for free users (not paid subscribers or beta invite users)
         if (tier === 'free' && subStatus !== 'active') {
             const banner = document.createElement('div');
             banner.id = 'upgrade-banner';
             banner.className = 'upgrade-banner';
             banner.innerHTML = `
                 <span>You're on the free plan (1 quote).</span>
-                <a href="#" onclick="Auth.startCheckout('starter');return false;">Upgrade to unlock more quotes &rarr;</a>
+                <a href="/#pricing">Upgrade to unlock more quotes &rarr;</a>
             `;
             document.body.insertBefore(banner, document.body.firstChild);
         } else if (subStatus === 'past_due') {
@@ -142,9 +142,11 @@ const Auth = {
             const data = await resp.json();
             if (data.url) {
                 window.location.href = data.url;
+            } else {
+                alert(data.detail || 'Unable to start checkout. Please try again.');
             }
         } catch (e) {
-            console.error('Checkout failed:', e);
+            alert('Unable to connect to billing. Please try again later.');
         }
     },
 
@@ -156,9 +158,11 @@ const Auth = {
             const data = await resp.json();
             if (data.url) {
                 window.location.href = data.url;
+            } else {
+                alert(data.detail || 'Unable to open billing portal. Please try again.');
             }
         } catch (e) {
-            console.error('Portal failed:', e);
+            alert('Unable to connect to billing. Please try again later.');
         }
     },
 
@@ -357,14 +361,20 @@ const Auth = {
 
     _renderPlanSection(u) {
         const tier = (u.tier || 'free').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const rawTier = u.tier || 'free';
         const status = u.subscription_status || 'trial';
         const hasBilling = u.has_billing;
+        const isPaid = status === 'active' && rawTier !== 'free';
 
         let statusLabel = status;
         if (status === 'active') statusLabel = 'Active';
-        else if (status === 'trial') statusLabel = 'Trial';
+        else if (status === 'trial') statusLabel = 'Trial (14 days)';
         else if (status === 'past_due') statusLabel = 'Past Due';
         else if (status === 'cancelled') statusLabel = 'Cancelled';
+        else if (status === 'demo') statusLabel = 'Demo';
+
+        // Show upgrade for anyone not on a paid subscription (trial, free, cancelled, demo)
+        const showUpgrade = !isPaid && rawTier !== 'shop';
 
         return `
             <div class="plan-section">
@@ -374,10 +384,15 @@ const Auth = {
                 </p>
                 <div class="plan-actions">
                     ${hasBilling ? '<button class="btn btn-secondary btn-sm" onclick="Auth.openBillingPortal()">Manage Billing</button>' : ''}
-                    ${tier === 'Free' ? '<button class="btn btn-accent btn-sm" onclick="Auth.startCheckout(\'starter\')">Upgrade</button>' : ''}
+                    ${showUpgrade ? '<button class="btn btn-accent btn-sm" onclick="Auth.showUpgradeOptions()">Upgrade</button>' : ''}
                 </div>
             </div>
         `;
+    },
+
+    showUpgradeOptions() {
+        // Redirect to landing page pricing section (works whether or not Stripe is configured)
+        window.location.href = '/#pricing';
     },
 
     showError(containerId, msg) {
