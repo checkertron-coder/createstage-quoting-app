@@ -128,6 +128,16 @@ if os.path.exists(frontend_path):
         """Serve the quoting application (requires auth via JS)."""
         return FileResponse(os.path.join(frontend_path, "app.html"))
 
+    @app.get("/terms")
+    def serve_terms():
+        """Serve Terms of Service page."""
+        return FileResponse(os.path.join(frontend_path, "terms.html"))
+
+    @app.get("/nda")
+    def serve_nda():
+        """Serve Non-Disclosure Agreement page."""
+        return FileResponse(os.path.join(frontend_path, "nda.html"))
+
 @app.get("/health")
 def health():
     return {"status": "ok", "app": "createstage-quoting-app", "version": "de23c35-enforce"}
