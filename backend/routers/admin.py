@@ -1,11 +1,12 @@
 """
-Admin endpoints — invite code management.
+Admin endpoints — invite code + demo link management.
 
 Protected by ADMIN_SECRET env var (simple shared secret for now).
 """
 
 import os
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Header
@@ -105,4 +106,63 @@ def list_invite_codes(db: Session = Depends(get_db)):
             "created_at": c.created_at.isoformat() if c.created_at else None,
         }
         for c in codes
+    ]
+
+
+# --- Demo Links ---
+
+class CreateDemoLinkRequest(BaseModel):
+    label: Optional[str] = None
+    max_quotes: Optional[int] = 3
+    expires_hours: Optional[int] = 48
+
+
+@router.post("/demo-links", dependencies=[Depends(_require_admin)])
+def create_demo_link(
+    request: CreateDemoLinkRequest,
+    db: Session = Depends(get_db),
+):
+    """Create a 48-hour magic demo link."""
+    token = secrets.token_urlsafe(24)
+    expires_at = datetime.utcnow() + timedelta(hours=request.expires_hours or 48)
+
+    link = models.DemoLink(
+        token=token,
+        label=request.label,
+        tier="professional",
+        max_quotes=request.max_quotes or 3,
+        expires_at=expires_at,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return {
+        "id": link.id,
+        "token": link.token,
+        "url": "/demo/%s" % link.token,
+        "label": link.label,
+        "max_quotes": link.max_quotes,
+        "expires_at": link.expires_at.isoformat(),
+    }
+
+
+@router.get("/demo-links", dependencies=[Depends(_require_admin)])
+def list_demo_links(db: Session = Depends(get_db)):
+    """List all demo links."""
+    links = db.query(models.DemoLink).order_by(
+        models.DemoLink.created_at.desc()
+    ).all()
+    return [
+        {
+            "id": dl.id,
+            "token": dl.token,
+            "label": dl.label,
+            "max_quotes": dl.max_quotes,
+            "is_used": dl.is_used,
+            "demo_user_id": dl.demo_user_id,
+            "expires_at": dl.expires_at.isoformat() if dl.expires_at else None,
+            "created_at": dl.created_at.isoformat() if dl.created_at else None,
+        }
+        for dl in links
     ]

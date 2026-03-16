@@ -138,6 +138,16 @@ if os.path.exists(frontend_path):
         """Serve Non-Disclosure Agreement page."""
         return FileResponse(os.path.join(frontend_path, "nda.html"))
 
+    @app.get("/demo/{token}")
+    def demo_redirect(token: str):
+        """
+        Demo magic link — serves app.html with demo token embedded.
+
+        Frontend reads the token from the URL, calls /api/auth/redeem-demo,
+        and auto-authenticates the demo user.
+        """
+        return FileResponse(os.path.join(frontend_path, "app.html"))
+
 @app.get("/health")
 def health():
     return {"status": "ok", "app": "createstage-quoting-app", "version": "de23c35-enforce"}

@@ -37,10 +37,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class RegisterRequest(BaseModel):
     email: str
-    password: str
+    password: Optional[str] = None  # Optional when invite code provided
     invite_code: Optional[str] = None
     terms_accepted: Optional[bool] = False
-    nda_accepted: Optional[bool] = False
+    nda_accepted: Optional[bool] = False  # Kept for backward compat, ignored
+    demo_token: Optional[str] = None  # If upgrading a demo user
 
 
 class LoginRequest(BaseModel):
@@ -159,16 +160,10 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Create a new account or claim a provisional one.
 
-    Optional invite_code grants a subscription tier (e.g., professional for beta testers).
-    terms_accepted and nda_accepted are recorded with timestamps.
+    - With invite code: password is optional (passwordless beta onboarding).
+    - With demo_token: upgrades existing demo user to real account.
+    - Without invite code: password required (min 8 chars).
     """
-    # Validate password length
-    if len(request.password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password must be at least 8 characters",
-        )
-
     # Validate invite code if provided
     invite_code_record = None
     if request.invite_code:
@@ -179,13 +174,61 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 detail="Invalid or expired invite code",
             )
 
+    # Password validation: required unless invite code is provided
+    has_password = request.password and len(request.password) >= 8
+    if request.password and len(request.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+    if not invite_code_record and not has_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+
+    # Demo token upgrade: transfer demo user to real account
+    if request.demo_token:
+        demo_link = db.query(models.DemoLink).filter(
+            models.DemoLink.token == request.demo_token,
+        ).first()
+        if demo_link and demo_link.demo_user_id:
+            demo_user = db.query(models.User).filter(
+                models.User.id == demo_link.demo_user_id,
+            ).first()
+            if demo_user and demo_user.is_provisional:
+                # Upgrade demo user — change email, set password, keep quotes
+                demo_user.email = request.email
+                if has_password:
+                    demo_user.password_hash = hash_password(request.password)
+                    demo_user.is_provisional = False
+                demo_user.updated_at = datetime.utcnow()
+
+                if invite_code_record:
+                    demo_user.tier = invite_code_record.tier
+                    demo_user.invite_code_used = invite_code_record.code
+                    invite_code_record.uses += 1
+                else:
+                    demo_user.tier = "free"
+
+                demo_user.trial_ends_at = datetime.utcnow() + timedelta(days=14)
+                demo_user.subscription_status = "trial"
+                if request.terms_accepted:
+                    demo_user.terms_accepted_at = datetime.utcnow()
+
+                db.commit()
+                db.refresh(demo_user)
+                tokens = _issue_tokens(demo_user, db)
+                return {**tokens, "user": _user_to_response(demo_user), "upgraded_demo": True}
+
     existing = db.query(models.User).filter(models.User.email == request.email).first()
 
     if existing:
         if existing.is_provisional and not existing.password_hash:
             # Claim provisional account
-            existing.password_hash = hash_password(request.password)
-            existing.is_provisional = False
+            if has_password:
+                existing.password_hash = hash_password(request.password)
+                existing.is_provisional = False
             existing.updated_at = datetime.utcnow()
 
             # Set subscription fields
@@ -217,10 +260,12 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if invite_code_record:
         tier = invite_code_record.tier
 
+    password_hash = hash_password(request.password) if has_password else None
+
     user = models.User(
         email=request.email,
-        password_hash=hash_password(request.password),
-        is_provisional=False,
+        password_hash=password_hash,
+        is_provisional=not has_password,
         is_verified=False,
         tier=tier,
         subscription_status="trial",
@@ -331,6 +376,87 @@ def validate_code(request: ValidateCodeRequest, db: Session = Depends(get_db)):
     return {"valid": True, "tier": code.tier}
 
 
+@router.post("/redeem-demo")
+def redeem_demo(token: str, db: Session = Depends(get_db)):
+    """
+    Redeem a demo link token.
+
+    Creates a provisional user, issues JWT, returns tokens.
+    Called by GET /demo/{token} route in main.py.
+    """
+    demo_link = db.query(models.DemoLink).filter(
+        models.DemoLink.token == token,
+    ).first()
+
+    if not demo_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Demo link not found",
+        )
+
+    if demo_link.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="This demo link has expired. Register for full access.",
+        )
+
+    # If already redeemed, reissue tokens for existing demo user
+    if demo_link.is_used and demo_link.demo_user_id:
+        demo_user = db.query(models.User).filter(
+            models.User.id == demo_link.demo_user_id,
+        ).first()
+        if demo_user:
+            tokens = _issue_tokens(demo_user, db)
+            return {**tokens, "user": _user_to_response(demo_user), "demo": True}
+
+    # Create provisional demo user
+    demo_email = "demo-%s@createquote.app" % demo_link.token[:12]
+    demo_user = models.User(
+        email=demo_email,
+        password_hash=None,
+        is_provisional=True,
+        is_verified=False,
+        tier=demo_link.tier,
+        subscription_status="demo",
+        quotes_this_month=0,
+    )
+    db.add(demo_user)
+    db.flush()  # Get the user ID
+
+    demo_link.is_used = True
+    demo_link.used_at = datetime.utcnow()
+    demo_link.demo_user_id = demo_user.id
+
+    db.commit()
+    db.refresh(demo_user)
+
+    tokens = _issue_tokens(demo_user, db)
+    return {**tokens, "user": _user_to_response(demo_user), "demo": True}
+
+
+@router.get("/demo-status")
+def demo_status(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Check if current user is a demo user and return remaining quota."""
+    demo_link = db.query(models.DemoLink).filter(
+        models.DemoLink.demo_user_id == current_user.id,
+    ).first()
+
+    if not demo_link:
+        return {"is_demo": False}
+
+    quotes_used = getattr(current_user, "quotes_this_month", 0) or 0
+    return {
+        "is_demo": True,
+        "quotes_remaining": max(0, demo_link.max_quotes - quotes_used),
+        "max_quotes": demo_link.max_quotes,
+        "expires_at": demo_link.expires_at.isoformat() if demo_link.expires_at else None,
+        "demo_token": demo_link.token,
+    }
+
+
 @router.get("/me")
 def me(current_user: models.User = Depends(get_current_user)):
     """Return the current authenticated user's profile."""
@@ -410,12 +536,39 @@ TIER_QUOTE_LIMITS = {
 
 def check_quote_access(
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Dependency that checks whether the user can create a new quote.
 
-    Raises 403 if quota exceeded for their tier.
+    For demo users: checks the DemoLink's max_quotes and expiration.
+    For regular users: checks tier quota limits.
+    Raises 403 if quota exceeded.
     """
+    # Check if this is a demo user
+    demo_link = db.query(models.DemoLink).filter(
+        models.DemoLink.demo_user_id == current_user.id,
+    ).first()
+
+    if demo_link:
+        # Demo user — check expiration and max_quotes
+        if demo_link.expires_at < datetime.utcnow():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo link has expired. Register for full access.",
+            )
+        quotes_used = getattr(current_user, "quotes_this_month", 0) or 0
+        if quotes_used >= demo_link.max_quotes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Demo limit reached (%d quotes). Register for full access."
+                    % demo_link.max_quotes
+                ),
+            )
+        return current_user
+
+    # Regular user — check tier limits
     tier = getattr(current_user, "tier", "free") or "free"
     limit = TIER_QUOTE_LIMITS.get(tier)
 
