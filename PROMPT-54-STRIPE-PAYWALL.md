@@ -38,12 +38,15 @@ CreateQuote needs real payment processing. Users who don't have a beta invite co
 2. In-app banner for free/trial users: "You're on the free plan. Upgrade to unlock unlimited quotes."
 3. Profile page shows current plan + "Manage Billing" button (→ Stripe portal)
 
-### Quote Access Enforcement
-1. Free tier: 1 total quote (demo)
-2. Trial (14 days from registration): full Professional access
-3. Paid tiers: per the tier limits from P53
-4. Past due: read-only access to existing quotes, no new quotes
-5. Cancelled: downgrade to free
+### Quote Access Enforcement (updated tiers)
+1. Free tier: 1 quote total (preview mode — blurred results, no downloads, handled by P53D)
+2. Starter ($49/mo): 3 quotes/month
+3. Professional ($149/mo): 25 quotes/month
+4. Shop ($349/mo): unlimited quotes
+5. Trial (14 days from registration): full Professional access
+6. Past due: read-only access to existing quotes, no new quotes
+7. Cancelled: downgrade to free
+8. Beta invite code users: Professional tier, no payment required
 
 ---
 
@@ -69,26 +72,42 @@ CreateQuote needs real payment processing. Users who don't have a beta invite co
 
 ## Decomposition
 
-### Chunk 1: Stripe Service Layer
-- `stripe_service.py` — create customer, create checkout session, create portal session, handle webhook events
+**⚠️ SESSION DISCIPLINE:**
+- Work through chunks sequentially. Commit after each.
+- `pytest tests/ -v` after chunks 1, 2, and 4.
+- **Do NOT push until all 4 chunks pass.**
+
+### Chunk 1: Stripe Service Layer + Models → COMMIT
+- Create `backend/stripe_service.py` — create customer, create checkout session, create portal session, handle webhook events
 - All Stripe API calls go through this service (same pattern as `claude_client.py` for AI)
+- Add `stripe_customer_id` and `stripe_subscription_id` to User model
+- Create Alembic migration (idempotent)
+- Add `stripe>=8.0.0` to requirements.txt
+- ✅ `pytest tests/ -v`
 
-### Chunk 2: Webhook + Endpoints
-- Webhook endpoint with signature verification
-- Checkout session creation endpoint
-- Portal session creation endpoint
-- Return URL handling
+### Chunk 2: Webhook + Endpoints → COMMIT
+- Create `backend/routers/stripe_billing.py`
+- Webhook endpoint with signature verification (`POST /api/stripe/webhook`)
+- Checkout session creation endpoint (`POST /api/stripe/create-checkout`)
+- Portal session creation endpoint (`GET /api/stripe/portal`)
+- Return URL handling (`/app?session_id=xxx`)
+- Mount router in main.py
+- Create Stripe customer on registration in auth.py (if STRIPE_SECRET_KEY is set — graceful skip otherwise)
+- ✅ `pytest tests/ -v`
 
-### Chunk 3: Frontend Integration
-- Pricing buttons → checkout flow
-- In-app upgrade banner
-- Profile billing section
+### Chunk 3: Frontend Integration → COMMIT
+- Landing page pricing buttons → hit backend to create Checkout Session → redirect to Stripe
+- In-app upgrade banner for free/trial users
+- Profile page: show current plan + "Manage Billing" button (→ Stripe portal)
+- Handle return from Stripe checkout in app.js
+- ✅ App starts, manual test
 
-### Chunk 4: Tests
-- Mock Stripe API calls
+### Chunk 4: Tests → COMMIT
+- Mock Stripe API calls (don't hit real Stripe in tests)
 - Test webhook event handling (each event type)
 - Test tier enforcement after subscription changes
 - Test free → paid → cancelled flow
+- ✅ `pytest tests/ -v` — all pass
 
 ---
 
