@@ -47,18 +47,52 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 
 ### Auth Overhaul
 1. **Remove guest access entirely.** Delete the `handleGuest()` flow and "Start Quoting Now" button. Every user must register.
-2. Registration flow:
-   - Email + Password (min 8 chars)
-   - **Invite Code field** (optional) — if valid beta code entered, user gets Professional tier free for the beta period
-   - Checkbox: "I agree to the [Terms of Service] and [Non-Disclosure Agreement]" — both links open in new tabs. **Registration blocked until checkbox is checked.**
+2. Registration flow — TWO PATHS:
+   - **Path A — With invite code (testers):** Email + Invite Code + Terms checkbox. Password is OPTIONAL (can set later in profile). Minimal friction. Click "Get Started" → lands in app immediately.
+   - **Path B — Without invite code (public):** Email + Password (min 8 chars) + Terms checkbox. Gets free tier (1 demo quote).
+   - Both paths: checkbox "I agree to the [Terms of Service]" required. NDA is handled separately via DocuSign for testers, NOT a gate in the registration flow.
    - On submit: create account → redirect to profile setup → then to quoting
 3. Login flow stays the same (email + password).
 4. **NDA/Terms pages:** Create static HTML pages at `/terms` and `/nda` served by FastAPI. Content will be placeholder text for now — Burton will add the real legal text later. Structure them with clear sections and professional formatting.
 
-### Invite Code System (Beta Testers)
+### Demo Links (48-Hour Magic Links) — "Try It Now"
+The most important onboarding feature. Burton needs to text someone a link and they're IN.
+
+1. New database table: `demo_links`
+   - `id` (int, PK)
+   - `token` (string, unique, indexed) — URL-safe random token (e.g. `createquote.app/demo/a7f3x9k2`)
+   - `created_by_user_id` (int, FK to users) — which admin/user created it
+   - `label` (string, nullable) — "For Jim Lai", "Kevin demo", "Investor meeting" (internal tracking)
+   - `tier` (string, default "professional") — what access level the demo gets
+   - `max_quotes` (int, default 3) — how many quotes the demo user can generate
+   - `expires_at` (datetime) — default 48 hours from creation
+   - `is_used` (boolean, default false)
+   - `used_at` (datetime, nullable)
+   - `demo_user_id` (int, FK to users, nullable) — the provisional user created when link is clicked
+   - `created_at` (datetime)
+
+2. Flow:
+   - Burton hits `POST /api/admin/demo-links` → gets back a URL like `createquote.app/demo/a7f3x9k2`
+   - Burton texts/emails that URL to Jim, Kevin, investor, whoever
+   - Recipient clicks the link → backend creates a provisional user automatically (no email, no password, no forms)
+   - Recipient lands directly in the quoting app, ready to go
+   - Demo user can generate up to `max_quotes` quotes, download PDFs, see the full experience
+   - After 48 hours OR max quotes reached → demo expires, show "Demo expired — register for full access" with link to registration
+   - Demo user's quotes are preserved — if they register later, quotes transfer to their real account
+
+3. Admin endpoint: `POST /api/admin/demo-links` — create demo links
+   - Body: `{ "label": "For Jim Lai", "max_quotes": 3, "expires_hours": 48 }`
+   - Returns: `{ "url": "https://createquote.app/demo/a7f3x9k2", "expires_at": "..." }`
+
+4. Frontend route: `GET /demo/{token}` → validates token, creates provisional user, sets JWT, redirects to `/app`
+   - Show a subtle banner at top: "Demo Mode — X quotes remaining | [Register for full access]"
+
+### Invite Code System (Beta Testers — Quick Onboard)
+For fabricators like Kevin and Jason who Burton wants as real testers. One step: email + code.
+
 1. New database table: `invite_codes`
    - `id` (int, PK)
-   - `code` (string, unique, indexed) — e.g. "BETA-KEVIN-2026", "BETA-FIRSTWAVE"
+   - `code` (string, unique, indexed) — e.g. "BETA-KEVIN", "BETA-FIRSTWAVE"
    - `tier` (string) — what tier the code grants (default: "professional")
    - `max_uses` (int, nullable) — null = unlimited
    - `uses` (int, default 0)
@@ -67,7 +101,7 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
    - `created_at` (datetime)
    - `is_active` (boolean, default true)
 2. New endpoint: `POST /api/auth/validate-code` — checks if code is valid (exists, active, not expired, not maxed out)
-3. Registration endpoint updated: if `invite_code` provided and valid, set user tier accordingly and increment `uses`
+3. Registration with invite code is MINIMAL: email + invite code + terms checkbox. That's it. Password is optional on first registration (set later in profile). The goal is ZERO friction for testers.
 4. Admin endpoint: `POST /api/admin/invite-codes` — create new invite codes (protected, admin-only for now — can be a simple shared secret in env var `ADMIN_SECRET`)
 5. Seed 3 default codes on first run:
    - `BETA-FOUNDER` — unlimited uses, professional tier, no expiry
@@ -81,7 +115,6 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
    - `trial_ends_at` (datetime, nullable) — set to 14 days from registration
    - `invite_code_used` (string, nullable) — which code they used
    - `terms_accepted_at` (datetime, nullable) — when they accepted terms
-   - `nda_accepted_at` (datetime, nullable) — when they accepted NDA
    - `quotes_this_month` (int, default 0) — for tier-based usage limits
    - `billing_cycle_start` (datetime, nullable)
 2. Add middleware/dependency: `check_quote_access(user)` — verifies user can create a new quote based on tier + usage. Returns 403 with clear message if limit reached.
@@ -149,6 +182,7 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 
 ### Chunk 1: Database + Models → COMMIT
 - Add `InviteCode` model to `models.py`
+- Add `DemoLink` model to `models.py`
 - Add subscription fields to `User` model
 - Create Alembic migration
 - Seed default invite codes
@@ -157,9 +191,10 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 ### Chunk 2: Backend Auth Updates → COMMIT
 - Remove guest endpoint logic (keep the route but return 410 Gone for backward compat)
 - Add invite code validation endpoint
-- Update register to accept `invite_code` + `terms_accepted` + `nda_accepted`
-- Add `check_quote_access` dependency
-- Add admin router for invite code CRUD
+- Add demo link creation + redemption endpoints
+- Update register: Path A (email + invite code + terms) and Path B (email + password + terms)
+- Add `check_quote_access` dependency (respects demo link limits too)
+- Add admin router for invite codes + demo links
 - ✅ `pytest tests/ -v` — all existing tests still pass
 
 ### Chunk 3: Landing Page → COMMIT
@@ -180,8 +215,11 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 
 ### Chunk 6: Tests → COMMIT
 - Test invite code CRUD (create, validate, use, expire, max uses)
-- Test registration with/without invite code
+- Test demo link CRUD (create, redeem, expire, max quotes, transfer quotes on register)
+- Test registration Path A (email + invite code, no password required)
+- Test registration Path B (email + password, no invite code)
 - Test quote access limits per tier
+- Test demo user quote limit enforcement
 - Test guest endpoint returns 410
 - Test landing page loads (200 on /)
 - Test app page requires auth
@@ -195,16 +233,22 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 2. Click "Get Started" → goes to registration
 3. Register without invite code → gets "free" tier, 1 demo quote
 4. Register with `BETA-FOUNDER` → gets "professional" tier, unlimited quotes
-5. Try to register without checking terms → blocked
-6. After registration → profile setup → quoting works as before
-7. Free user creates 1 quote → tries to create another → sees paywall message
-8. `/terms` and `/nda` pages load with formatted content
-9. Mobile: landing page is fully responsive
+5. Register with invite code but NO password → works (password optional for beta testers)
+6. Try to register without checking terms → blocked
+7. After registration → profile setup → quoting works as before
+8. Free user creates 1 quote → tries to create another → sees paywall message
+9. **Demo link: create via admin endpoint → get URL → open in incognito → lands directly in app, no forms**
+10. **Demo link: generate 3 quotes → try 4th → "Demo expired" message with register CTA**
+11. **Demo link: wait 48 hours (or manually expire) → link shows "Demo expired"**
+12. **Demo user registers with real account → previous demo quotes transfer to new account**
+13. `/terms` page loads with formatted content
+14. Mobile: landing page is fully responsive
 
 ### Automated Tests
 - `pytest tests/ -v` → all existing 384+ tests still pass
-- New test file: `tests/test_landing_and_auth.py` — minimum 15 new tests
+- New test file: `tests/test_landing_and_auth.py` — minimum 20 new tests
 - Invite code edge cases: expired code, maxed out code, invalid code, reused code
+- Demo link edge cases: expired link, maxed quotes, invalid token, quote transfer on registration
 
 ---
 
