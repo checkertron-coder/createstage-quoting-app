@@ -68,25 +68,6 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 - **Centralized Gemini Client:** All Gemini API calls go through `backend/gemini_client.py` — tiered model selection (fast/deep), unified error handling with 429 retry, structured logging
 - **Tests:** 384 passing tests across 15 test files
 
-### Post Session 10 Hotfix — AI Cut List Bug Fixes
-
-**Silent exception override bug (critical):**
-6 calculators (furniture_table, custom_fab, furniture_other, led_sign_custom, repair_decorative, repair_structural) had local `_try_ai_cut_list()` and `_build_from_ai_cuts()` overrides with `except Exception: return None` — silently swallowing ALL Gemini errors. This caused AI cut list generation to always fail silently and fall back to generic templates (76ms response instead of 10-20s). Fix: deleted all 6 local overrides (-514 lines). All calculators now use BaseCalculator's versions which have `logger.warning()` on failure, price fallbacks ($3.50/ft), and weight fallbacks (2.0 lbs/ft).
-
-**material_lookup.py — New profile:**
-- Added `flat_bar_1x0.125` = $1.10/ft (1" wide x 1/8" thick flat bar). User submitted an end table job with "1x1/8 flat bar" pyramid pattern — this profile didn't exist so Gemini couldn't use it, silently skipping the entire flat bar feature from the materials list.
-
-**furniture_table.py — Tube size respects user input:**
-- Template fallback now reads `leg_material_profile` field AND `description` text to detect tube size
-- "1 inch", "1x1", "1\" square" → `sq_tube_1x1_14ga` for legs and frame
-- "1.5", "1-1/2" → `sq_tube_1.5x1.5_11ga`
-- "2 inch", "2x2" → `sq_tube_2x2_11ga` legs / `sq_tube_1.5x1.5_11ga` frame
-- Previously hardcoded to 2x2 legs / 1.5x1.5 frame regardless of what the user specified.
-
-**ai_cut_list.py — Prompt improvements:**
-- Added `flat_bar_1x0.125` and `flat_bar_1x0.1875` to AVAILABLE PROFILES list in Gemini prompt
-- Added CRITICAL RULES FOR CUSTOM FEATURES block: patterns (pyramid, grid, concentric squares) MUST appear as real line items with quantities and lengths — never just mentioned in notes or build steps. Concentric square patterns calculate each layer separately, stepping inward by specified spacing until no more full squares fit, each layer = 4 pieces.
-
 ### Workflow Rule
 - Direct code edits to this repo go through Claude Code prompts only. Checker (the OpenClaw AI assistant) diagnoses problems and writes the prompt; Claude Code executes and runs tests. Claude Code has full repo context, runs the test suite, and handles edge cases better than one-off direct edits.
 
@@ -97,148 +78,19 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 
 ---
 
-## 3. File Map (verified Session 10)
+## 3. File Map
 
-```
-createstage-quoting-app/
-├── backend/
-│   ├── __init__.py
-│   ├── main.py              — FastAPI app, startup, CORS, static files, router mounting
-│   ├── models.py            — SQLAlchemy ORM (User, Quote, QuoteSession, AuthToken, BidAnalysis, etc.)
-│   ├── schemas.py           — Pydantic request/response schemas
-│   ├── database.py          — DB engine, SessionLocal, Base
-│   ├── config.py            — Settings via pydantic-settings (env vars)
-│   ├── auth.py              — JWT creation/validation, bcrypt hashing, get_current_user dependency
-│   ├── gemini_client.py     — Centralized Gemini API client (call_fast, call_deep, call_vision, tiered model resolution)
-│   ├── weights.py           — Steel weight calculator by profile type (DO NOT MODIFY)
-│   ├── labor_estimator.py   — Stage 4: AI labor estimation (Gemini) + rule-based fallback
-│   ├── finishing.py         — Stage 4: FinishingBuilder (raw/clearcoat/paint/powder_coat/galvanized)
-│   ├── historical_validator.py — Stage 4: Compare estimates vs historical actuals
-│   ├── hardware_sourcer.py  — Stage 5: 25-item hardware catalog + consumable estimation
-│   ├── pricing_engine.py    — Stage 5: PricedQuote assembly, markup options, subtotals
-│   ├── quote_jobs.py        — In-memory async job store + background runner (Railway 503 fix)
-│   ├── pdf_generator.py     — Stage 6: PDF generation (10 sections), _safe() Unicode helper
-│   ├── bid_parser.py        — Session 7: Bid scope extraction (Gemini + keyword fallback)
-│   ├── pdf_extractor.py     — Session 7: PDF text extraction via pdfplumber
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── auth.py          — /api/auth/* (register, login, guest, refresh, me, profile)
-│   │   ├── quote_session.py — /api/session/* (start, answer, status, calculate, estimate, price)
-│   │   ├── quotes.py        — /api/quotes/* (CRUD, /mine, /detail, /breakdown, /markup)
-│   │   ├── pdf.py           — /api/quotes/{id}/pdf (download with query param auth)
-│   │   ├── bid_parser.py    — /api/bid/* (upload, parse-text, quote-items)
-│   │   ├── ai_quote.py      — /api/ai/* (legacy v1 AI estimation)
-│   │   ├── photos.py        — /api/photos/* (upload with R2 or local fallback)
-│   │   ├── customers.py     — /api/customers/* (CRUD)
-│   │   ├── materials.py     — /api/materials/* (seed, list, update) + DEFAULT_PRICES
-│   │   ├── process_rates.py — /api/process-rates/* (seed, list, update) + DEFAULT_RATES
-│   │   └── admin.py         — /api/admin/* (invite code CRUD, admin-secret protected)
-│   ├── calculators/
-│   │   ├── __init__.py
-│   │   ├── base.py              — Abstract BaseCalculator + make_material_item/list/hardware + AI-first helpers (_has_description, _try_ai_cut_list, _build_from_ai_cuts)
-│   │   ├── material_lookup.py   — Price lookup: seeded prices (35) → hardcoded defaults fallback
-│   │   ├── registry.py          — Calculator registry (25 job types → calculator classes, CustomFab fallback)
-│   │   ├── cantilever_gate.py   — Cantilever gate geometry + materials
-│   │   ├── swing_gate.py        — Swing gate geometry + materials
-│   │   ├── straight_railing.py  — Straight railing geometry + materials
-│   │   ├── stair_railing.py     — Stair railing geometry + materials
-│   │   ├── repair_decorative.py — Decorative repair estimation
-│   │   ├── ornamental_fence.py  — Panel-based fence (posts, rails, pickets)
-│   │   ├── complete_stair.py    — Stringer + treads + landing (rise/run geometry)
-│   │   ├── spiral_stair.py      — Center column + pie treads + spiral handrail
-│   │   ├── window_security_grate.py — Frame + bars, batch multiply
-│   │   ├── balcony_railing.py   — Delegates to StraightRailingCalculator + structural frame
-│   │   ├── furniture_table.py   — Legs + frame + stretchers
-│   │   ├── utility_enclosure.py — Sheet metal box + door hardware
-│   │   ├── bollard.py           — Pipe + cap + base plate, multiply by count
-│   │   ├── repair_structural.py — Conservative estimate by repair_type
-│   │   ├── custom_fab.py        — Universal fallback, NEVER fails
-│   │   ├── offroad_bumper.py    — Plate + tube structure by bumper_position
-│   │   ├── rock_slider.py       — DOM tube rails + mount brackets (always pair)
-│   │   ├── roll_cage.py         — Tube footage by cage_style
-│   │   ├── exhaust_custom.py    — Pipe runs + bends + flanges
-│   │   ├── trailer_fab.py       — Channel frame + cross members + deck
-│   │   ├── structural_frame.py  — Routes by frame_type (mezzanine/canopy/portal)
-│   │   ├── furniture_other.py   — Routes by item_type (shelving/bracket/generic)
-│   │   ├── sign_frame.py        — Frame tube + mounting by sign_type
-│   │   ├── led_sign_custom.py   — Channel letters / cabinet estimate
-│   │   ├── product_firetable.py — BOM-based from firetable_pro_bom.json
-│   │   ├── hardware_mapper.py   — Hardware mapping from question tree fields → hardware catalog
-│   │   ├── ai_cut_list.py      — AI-assisted cut list + build instructions (Gemini)
-│   │   ├── fab_knowledge.py    — FAB_KNOWLEDGE.md parser, targeted section injection into AI prompts
-│   │   └── labor_calculator.py — Deterministic labor hours from cut list (replaces AI labor estimation)
-│   └── question_trees/
-│       ├── __init__.py
-│       ├── engine.py        — QuestionTreeEngine (load, detect_job_type, extract_fields, extract_from_photo, next_questions)
-│       └── data/            — 25 JSON question tree files (one per job type)
-│           ├── cantilever_gate.json    ├── ornamental_fence.json
-│           ├── swing_gate.json         ├── complete_stair.json
-│           ├── straight_railing.json   ├── spiral_stair.json
-│           ├── stair_railing.json      ├── window_security_grate.json
-│           ├── repair_decorative.json  ├── balcony_railing.json
-│           ├── furniture_table.json    ├── utility_enclosure.json
-│           ├── bollard.json            ├── repair_structural.json
-│           ├── custom_fab.json         ├── offroad_bumper.json
-│           ├── rock_slider.json        ├── roll_cage.json
-│           ├── exhaust_custom.json     ├── trailer_fab.json
-│           ├── structural_frame.json   ├── furniture_other.json
-│           ├── sign_frame.json         ├── led_sign_custom.json
-│           └── product_firetable.json
-├── frontend/
-│   ├── index.html           — SPA shell (nav + 4 view containers)
-│   ├── css/style.css        — Responsive CSS with custom properties
-│   ├── js/
-│   │   ├── api.js           — API client with JWT token management
-│   │   ├── auth.js          — Auth UI (login, register, guest, profile)
-│   │   ├── quote-flow.js    — Quoting pipeline UI + QuoteHistory
-│   │   └── app.js           — App controller, view management
-│   └── static/              — Legacy static files (v1, kept for compat)
-│       ├── app.js
-│       └── style.css
-├── data/
-│   ├── seed_from_invoices.py — Profile key parser + price seeder (processes raw/ → seeded_prices.json)
-│   ├── seeded_prices.json    — 35 profile prices from Osorio/Wexler (generated output)
-│   ├── README.md
-│   └── raw/                  — Source invoice/price files
-│       ├── osorio_prices_seed.json    — 35 items, per-foot prices
-│       ├── osorio_prices_raw.json     — Raw Osorio data
-│       ├── wexler_prices_raw.json     — 16 items, mixed units
-│       ├── createstage_invoices.json  — 15 invoices with hours/costs
-│       └── firetable_pro_bom.json     — Single product BOM
-├── tests/
-│   ├── __init__.py
-│   ├── conftest.py          — Fixtures (client, db, auth_headers, guest_headers)
-│   ├── test_session1_schema.py         — 11 tests (DB schema, models)
-│   ├── test_session2a_question_trees.py — 21 tests (Priority A trees)
-│   ├── test_session2b_question_trees.py — 23 tests (Priority B+C trees)
-│   ├── test_session3_calculators.py     — 30 tests (5 Priority A calculators)
-│   ├── test_session3b_all_calculators.py — 35 tests (20 new calculators, registry, detection, trees)
-│   ├── test_session4_labor.py           — 26 tests (labor estimation)
-│   ├── test_session5_pricing.py         — 26 tests (pricing engine)
-│   ├── test_session6_output.py          — 25 tests (PDF, frontend, auth)
-│   ├── test_session7_bid_parser.py      — 26 tests (bid parser)
-│   ├── test_session8_integration.py    — 15 tests (smoke, seed data, meta)
-│   ├── test_photo_extraction.py        — 20 tests (photo upload, vision, extraction confirmation)
-│   ├── test_ai_cut_list.py             — 20 tests (AI cut list, furniture fixes, PDF sections)
-│   ├── test_session10_intelligence.py  — 39 tests (intelligence layer, AI-first, weld process)
-│   ├── test_async_jobs.py              — 17 tests (async job store, polling endpoints, background tasks)
-│   ├── test_gemini_client.py           — 21 tests (centralized Gemini client, model resolution, error handling)
-│   └── fixtures/
-│       └── sample_bid_excerpt.txt       — SECTION 05 50 00 test fixture
-├── alembic/                 — Database migrations
-│   ├── env.py
-│   └── versions/82694c65cf42_v2_foundation_....py
-├── BUILD_LOG.md             — Session-by-session progress log
-├── CLAUDE.md                — This file
-├── railway.json             — Railway deploy config
-├── requirements.txt         — Python dependencies
-├── SPEC.md                  — Old v1 spec (ignore)
-├── SESSION_1_PROMPT.md      — Session 1 instructions (historical)
-├── SESSION_2A_PROMPT.md     — Session 2A instructions (historical)
-└── AGENT_TASK.md            — Agent task reference
-```
+**Use `find` and `ls` to explore the repo — don't rely on a static map.** Key directories:
 
----
+- `backend/` — FastAPI app, routers, calculators, AI clients, PDF generator
+- `backend/routers/` — auth, quote_session, quotes, pdf, bid_parser, admin, photos, customers, materials, process_rates
+- `backend/calculators/` — 25 job-type calculators + base, registry, ai_cut_list, fab_knowledge, labor_calculator, material_lookup
+- `backend/question_trees/data/` — 25 JSON question tree files
+- `frontend/` — Landing page (index.html), App (app.html), JS (api, auth, quote-flow, app, bid-upload), CSS
+- `data/` — Seeded prices, raw invoices, BOM
+- `tests/` — 1090+ tests across multiple test files
+- `alembic/` — Database migrations
+
 
 ## 4. The 6-Stage Pipeline
 
@@ -284,202 +136,35 @@ User Input (text / photo)
 
 ---
 
-## 5. Data Contracts Between Stages (verified against code — Session 8)
+## 5. Data Contracts Between Stages
 
-These match the actual implementations. The code is the source of truth.
+**The code is the source of truth.** Read the TypedDicts directly from the source files:
+- **Stage 1 → 2:** `IntakeResult` in `backend/question_trees/engine.py`
+- **Stage 2 → 3:** `QuoteParams` in `backend/question_trees/engine.py`
+- **Stage 3 output:** `MaterialItem`, `HardwareItem`, `MaterialList` in `backend/calculators/base.py`
+- **Stage 4 output:** `LaborProcess`, `LaborEstimate` in `backend/labor_estimator.py` + `FinishingSection` in `backend/finishing.py`
+- **Stage 5 output:** `PricedQuote` in `backend/pricing_engine.py`
 
-```python
-# Stage 1 → Stage 2 (engine.py:263-329)
-class IntakeResult(TypedDict):
-    job_type: str                    # e.g. "cantilever_gate", "straight_railing"
-    confidence: float                # 0.0-1.0 — from Gemini (0.0 if API unavailable)
-    ambiguous: bool                  # True if user could mean multiple job types
+**Key rules:**
+- 11 canonical labor processes: layout_setup, cut_prep, fit_tack, full_weld, grind_clean, finish_prep, clearcoat, paint, hardware_install, site_install, final_inspection
+- Finishing is NEVER optional — if raw: method="raw", all costs 0
+- Labor total is Python-computed sum, NEVER AI-provided
+- Markup options: fixed set [0, 5, 10, 15, 20, 25, 30]%
 
-# NOTE: extracted_fields is returned separately by engine.extract_fields_from_description(),
-# not as part of IntakeResult. The session router combines them.
 
-# Stage 2 → Stage 3 (engine.py:159-182)
-class QuoteParams(TypedDict):
-    job_type: str
-    user_id: int
-    session_id: str
-    fields: dict                     # All required fields for this job type, fully populated
-    photos: list[str]                # Cloudflare R2 URLs
-    notes: str                       # Anything that doesn't fit structured fields
+## 6. API Endpoints
 
-# Stage 3 output (base.py:114-164)
-class MaterialItem(TypedDict):
-    description: str                 # e.g. "2\" sq tube 11ga - gate frame"
-    material_type: str               # matches MaterialType enum
-    profile: str                     # "sq_tube_2x2_11ga", "flat_bar_1x0.25", etc.
-    length_inches: float             # Rounded to 2 decimals
-    quantity: int
-    unit_price: float                # From seeded prices or market average
-    line_total: float                # quantity × unit_price
-    cut_type: str                    # "miter_45" | "square" | "cope" | "notch"
-    waste_factor: float              # 0.0-0.15 as decimal
+**Discover endpoints from the router files** — `backend/routers/*.py`. Key route groups:
+- `/api/auth/*` — register, login, refresh, me, profile, validate-code (P53)
+- `/api/admin/*` — invite code CRUD (P53)
+- `/api/session/*` — start, answer, status, calculate, estimate, price (main pipeline)
+- `/api/quotes/*` — CRUD, /mine, /detail, /breakdown, /markup, /{id}/pdf
+- `/api/bid/*` — upload, parse-text, quote-items
+- `/api/photos/*` — upload (R2 or local fallback)
+- `/api/ai/*` — legacy async estimation (job_id polling)
+- `/api/customers/*`, `/api/materials/*`, `/api/process-rates/*` — CRUD
+- `/` — landing page, `/app` — quoting app (P53), `/health` — health check
 
-class HardwareItem(TypedDict):
-    description: str                 # e.g. "Heavy duty weld-on gate hinge pair"
-    quantity: int
-    options: list[PricingOption]     # 3 options: McMaster + Amazon + other
-
-class PricingOption(TypedDict):
-    supplier: str                    # "McMaster-Carr" | "Amazon" | "Grainger" | etc.
-    price: float                     # Rounded to 2 decimals
-    url: str
-    part_number: str | None
-    lead_days: int | None
-
-class MaterialList(TypedDict):
-    job_type: str
-    items: list[MaterialItem]
-    hardware: list[HardwareItem]
-    total_weight_lbs: float          # Rounded to 1 decimal
-    total_sq_ft: float               # For finish area calculation
-    weld_linear_inches: float        # For labor + consumable estimation
-    assumptions: list[str]           # Calculator assumptions made
-
-# Stage 4 output (labor_estimator.py:50-376)
-class LaborProcess(TypedDict):
-    process: str                     # One of 11 canonical process names (see below)
-    hours: float                     # Rounded to 2 decimals
-    rate: float                      # From user's rate_inshop or rate_onsite
-    notes: str                       # AI reasoning or fallback explanation
-
-# 11 canonical processes:
-# "layout_setup", "cut_prep", "fit_tack", "full_weld", "grind_clean",
-# "finish_prep", "clearcoat", "paint", "hardware_install",
-# "site_install", "final_inspection"
-
-class LaborEstimate(TypedDict):
-    processes: list[LaborProcess]
-    total_hours: float               # Sum of all process hours — computed, not AI-provided
-    flagged: bool                    # True if >25% variance from historical actuals
-    flag_reason: str | None
-
-# Stage 4 — Finishing (finishing.py:27-123)
-class FinishingSection(TypedDict):
-    method: str                      # "raw" | "clearcoat" | "paint" | "powder_coat" | "galvanized"
-    area_sq_ft: float                # Rounded to 1 decimal
-    hours: float                     # In-house finish hours, rounded to 2 decimals
-    materials_cost: float            # Product cost (paint, clearcoat, etc.)
-    outsource_cost: float            # Powder coat / galvanizing service cost
-    total: float                     # Sum of materials_cost or outsource_cost
-    # FINISHING IS NEVER OPTIONAL. If raw: method="raw", everything else 0, note it.
-
-# Stage 5 output (pricing_engine.py:28-127)
-class PricedQuote(TypedDict):
-    quote_id: int | None             # None until Quote DB record created
-    user_id: int
-    job_type: str
-    client_name: str | None          # Currently: user.shop_name (TODO: actual client name)
-    materials: list[MaterialItem]
-    hardware: list[HardwareItem]
-    consumables: list[dict]          # NEW: welding wire, discs, gas, etc.
-    labor: list[LaborProcess]
-    finishing: FinishingSection
-    material_subtotal: float         # Sum of material line_totals
-    hardware_subtotal: float         # Sum of cheapest hardware option per item
-    consumable_subtotal: float       # Sum of consumable line_totals
-    labor_subtotal: float            # Sum of (hours × rate) per process
-    finishing_subtotal: float        # finishing.total
-    subtotal: float                  # Sum of all above subtotals
-    markup_options: dict             # {"0": float, "5": float, ..., "30": float}
-    selected_markup_pct: int         # Default from user profile
-    total: float                     # subtotal × (1 + markup_pct/100)
-    created_at: str                  # ISO format timestamp
-    assumptions: list[str]           # Every assumption made
-    exclusions: list[str]            # Every item explicitly not included
-```
-
----
-
-## 6. API Endpoint Reference (45 total — verified Session 3B-Hotfix + async)
-
-### Auth — `/api/auth`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/auth/register` | No | Register or claim provisional account |
-| POST | `/api/auth/login` | No | Login, returns access + refresh tokens |
-| POST | `/api/auth/refresh` | No | Exchange refresh token for new access token |
-| POST | `/api/auth/guest` | No | Create provisional account, returns JWT |
-| GET | `/api/auth/me` | Yes | Get current user profile |
-| PUT | `/api/auth/profile` | Yes | Update shop profile (name, rates, markup) |
-
-### Photos — `/api/photos`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/photos/upload` | Yes | Upload photo (R2 or local), returns photo_url + filename |
-
-### Quote Sessions — `/api/session` (the main v2 pipeline)
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/session/start` | Yes | Start quote from description + photos → detect job type, extract fields, run vision |
-| POST | `/api/session/{id}/answer` | Yes | Submit field answers + optional photo_url → get next questions |
-| GET | `/api/session/{id}/status` | Yes | Get session state, completion %, remaining questions |
-| POST | `/api/session/{id}/calculate` | Yes | Run Stage 3 calculator → MaterialList |
-| POST | `/api/session/{id}/estimate` | Yes | Run Stage 4 labor estimator → LaborEstimate + Finishing |
-| POST | `/api/session/{id}/price` | Yes | Run Stage 5 pricing → create Quote, return PricedQuote |
-
-### Quotes — `/api/quotes`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/quotes/` | No | Create quote (v1 legacy) |
-| GET | `/api/quotes/` | No | List all quotes (paginated) |
-| GET | `/api/quotes/mine` | Yes | List user's quotes, newest first |
-| GET | `/api/quotes/{id}` | No | Get single quote |
-| GET | `/api/quotes/{id}/detail` | Yes | Get full PricedQuote from outputs_json |
-| GET | `/api/quotes/{id}/breakdown` | No | Get cost breakdown |
-| PATCH | `/api/quotes/{id}` | No | Update quote fields |
-| DELETE | `/api/quotes/{id}` | No | Delete quote |
-| PUT | `/api/quotes/{id}/markup` | Yes | Change markup % and recalculate total |
-| GET | `/api/quotes/{id}/pdf` | Yes* | Download PDF (*supports `?token=` query param) |
-
-### Bid Parser — `/api/bid`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/bid/upload` | Yes | Upload PDF bid doc, extract metal fab scope (50MB limit) |
-| POST | `/api/bid/parse-text` | Yes | Parse pasted bid text for scope items |
-| POST | `/api/bid/{bid_id}/quote-items` | Yes | Create quote sessions from selected bid items |
-
-### Legacy AI — `/api/ai` (async — returns job_id, poll for results)
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/ai/estimate` | No | Plain English → job_id (async) or immediate result (cache hit) |
-| POST | `/api/ai/quote` | No | With pre_computed: sync save. Without: returns job_id (async) |
-| GET | `/api/ai/job/{job_id}` | No | Poll async job status (pending/running/complete/failed/timeout) |
-| GET | `/api/ai/test` | No | Verify Gemini API key works |
-
-### Customers — `/api/customers`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/customers/` | No | Create customer |
-| GET | `/api/customers/` | No | List customers (paginated) |
-| GET | `/api/customers/{id}` | No | Get customer |
-| PATCH | `/api/customers/{id}` | No | Update customer |
-
-### Materials — `/api/materials`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/materials/seed` | No | Seed default material prices (idempotent) |
-| GET | `/api/materials/` | No | List all material prices |
-| PATCH | `/api/materials/{type}` | No | Update material price |
-
-### Process Rates — `/api/process-rates`
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/api/process-rates/seed` | No | Seed default process rates (idempotent) |
-| GET | `/api/process-rates/` | No | List all process rates |
-| PATCH | `/api/process-rates/{type}` | No | Update process rate |
-
-### System
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/` | No | Serve frontend |
-| GET | `/health` | No | Health check → `{"status": "ok"}` |
-
----
 
 ## 7. Database Schema (implemented — all tables exist)
 
@@ -690,90 +375,23 @@ alembic upgrade head
 
 ---
 
-## 15. Testing Protocol
+## 15. Testing
 
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific session tests
-pytest tests/test_session3_calculators.py -v
-
-# Run with random order (verify isolation)
-pip install pytest-randomly && pytest tests/ -v -p randomly
+pytest tests/ -v          # Run all tests
+pytest tests/test_X.py -v # Run specific file
 ```
 
-- Framework: pytest
-- DB: SQLite in-memory for tests (overridden in `conftest.py`)
-- Auth: `auth_headers` and `guest_headers` fixtures provide JWT tokens
-- Naming: `test_{session_number}_{what_is_tested}.py`
-- Rule: **FIX FAILING TESTS BEFORE PROCEEDING. Do not push failing tests.**
-- Each session adds at least 3 new passing tests
-
-### Test Count by Session
-| File | Tests |
-|------|-------|
-| `test_session1_schema.py` | 11 |
-| `test_session2a_question_trees.py` | 21 |
-| `test_session2b_question_trees.py` | 23 |
-| `test_session3_calculators.py` | 30 |
-| `test_session3b_all_calculators.py` | 35 |
-| `test_session4_labor.py` | 26 |
-| `test_session5_pricing.py` | 26 |
-| `test_session6_output.py` | 25 |
-| `test_session7_bid_parser.py` | 26 |
-| `test_session8_integration.py` | 15 |
-| `test_photo_extraction.py` | 20 |
-| `test_ai_cut_list.py` | 20 |
-| `test_session10_intelligence.py` | 39 |
-| `test_async_jobs.py` | 17 |
-| `test_gemini_client.py` | 21 |
-| **Total** | **384** |
+- pytest, SQLite in-memory (conftest.py), fixtures: `auth_headers`/`guest_headers`
+- **1090+ tests** as of P53. Rule: **NEVER push failing tests.**
 
 ---
 
-## 16. Python Version + Dependencies
+## 16. Python 3.9
 
-**Python 3.9** — do NOT use `str | None` syntax (use `Optional[str]` from typing)
+**Do NOT use `str | None`** — use `Optional[str]` from typing.
+Key constraint: `bcrypt==4.1.3` pinned (passlib crashes with bcrypt 5.x). Read `requirements.txt` for full deps.
 
-Key dependencies (from `requirements.txt`):
-- `fastapi==0.110.0` + `uvicorn==0.27.1` — web framework
-- `sqlalchemy==2.0.28` — ORM
-- `psycopg2-binary==2.9.9` — PostgreSQL driver
-- `pydantic==2.6.3` + `pydantic-settings==2.2.1` — validation + config
-- `python-jose[cryptography]==3.3.0` — JWT tokens
-- `passlib[bcrypt]==1.7.4` + `bcrypt==4.1.3` — password hashing
-- `fpdf2==2.8.4` — PDF generation
-- `pdfplumber==0.11.4` — PDF text extraction
-- `boto3==1.34.69` — Cloudflare R2 / S3 photo storage
-- `alembic==1.13.1` — DB migrations
-- `httpx==0.27.0` — async HTTP client (Gemini API)
-- `pytest==8.1.1` — testing
-
----
-
-## 17. Integration Stubs (Phase 3 — do not implement yet)
-
-```python
-# integrations/steel_pricing.py
-class SteelPricingIntegration:
-    """
-    Stub for Enmark ENITEO / SteelXML integration — Phase 3
-    Bayern Software (founded 1985, Indiana) merged with Enmark Systems (2024).
-    Product: ENITEO — #1 ERP for metal service centers in North America.
-    Integration path: SteelXML (AISC standard) + e-Acquire360.
-    """
-    def get_price(self, material_type, size, quantity, zip_code) -> float:
-        raise NotImplementedError
-
-# integrations/fusion360.py
-class Fusion360Integration:
-    """Stub for Fusion 360 parametric model generation — Phase 3"""
-    def generate_model(self, job_params: dict) -> str:
-        raise NotImplementedError
-```
-
----
 
 ## 18. Hardcoded Rules
 
