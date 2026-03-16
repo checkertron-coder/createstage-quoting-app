@@ -203,20 +203,20 @@ def test_free_tier_quota_enforced(client, db):
     assert "limit" in start_resp.json()["detail"].lower()
 
 
-# === 13. Professional tier — unlimited access ===
+# === 13. Professional tier — 25 quotes/month ===
 
 def test_professional_tier_unlimited(client, db):
-    """Professional tier user can start sessions without quota block."""
+    """Professional tier user can start sessions within quota (25/mo)."""
     _seed_code(db, "PRO-ACCESS", "professional")
     resp = _register(client, invite_code="PRO-ACCESS")
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     headers = {"Authorization": "Bearer %s" % token}
 
-    # Set high usage — should still be allowed
+    # Set usage below limit — should be allowed
     user = db.query(models.User).filter(
         models.User.id == resp.json()["user_id"]).first()
-    user.quotes_this_month = 100
+    user.quotes_this_month = 20
     db.commit()
 
     # Should not get 403 (may fail for other reasons like missing Gemini,

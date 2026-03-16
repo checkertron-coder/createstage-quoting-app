@@ -83,7 +83,7 @@ Not a chatbot. Not a generic LLM wrapper. A domain-specific tool that knows how 
 **Use `find` and `ls` to explore the repo — don't rely on a static map.** Key directories:
 
 - `backend/` — FastAPI app, routers, calculators, AI clients, PDF generator
-- `backend/routers/` — auth, quote_session, quotes, pdf, bid_parser, admin, photos, customers, materials, process_rates, ai_quote
+- `backend/routers/` — auth, quote_session, quotes, pdf, bid_parser, admin, photos, customers, materials, process_rates, ai_quote, stripe_billing
 - `backend/calculators/` — 25 job-type calculators + base, registry, ai_cut_list, fab_knowledge, labor_calculator, material_lookup, hardware_mapper
 - `backend/question_trees/data/` — 25 JSON question tree files
 - `frontend/` — Landing page (index.html), App (app.html), JS (api, auth, quote-flow, app, bid-upload), CSS

@@ -29,6 +29,7 @@ from ..auth import (
     verify_password,
 )
 from ..database import get_db
+from .. import stripe_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -92,6 +93,7 @@ class UserResponse(BaseModel):
     subscription_status: Optional[str] = None
     trial_ends_at: Optional[str] = None
     quotes_this_month: Optional[int] = 0
+    has_billing: Optional[bool] = False
     created_at: datetime
 
     class Config:
@@ -120,6 +122,7 @@ def _user_to_response(user: models.User) -> dict:
             if getattr(user, "trial_ends_at", None) else None
         ),
         "quotes_this_month": getattr(user, "quotes_this_month", 0),
+        "has_billing": bool(getattr(user, "stripe_customer_id", None)),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -135,6 +138,21 @@ def _issue_tokens(user: models.User, db: Session) -> dict:
         "token_type": "bearer",
         "user_id": user.id,
     }
+
+
+def _ensure_stripe_customer(user: models.User, db: Session):
+    """Create a Stripe customer for the user if Stripe is configured and they don't have one."""
+    if user.stripe_customer_id:
+        return
+    if not stripe_service.is_configured():
+        return
+    try:
+        customer_id = stripe_service.create_customer(user.email, user.id)
+        user.stripe_customer_id = customer_id
+        db.commit()
+    except Exception:
+        # Non-critical — user can still use the app, Stripe customer created later
+        pass
 
 
 def _validate_invite_code(code_str: str, db: Session):
@@ -218,6 +236,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
                 db.commit()
                 db.refresh(demo_user)
+                _ensure_stripe_customer(demo_user, db)
                 tokens = _issue_tokens(demo_user, db)
                 return {**tokens, "user": _user_to_response(demo_user), "upgraded_demo": True}
 
@@ -247,6 +266,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
             db.commit()
             db.refresh(existing)
+            _ensure_stripe_customer(existing, db)
             tokens = _issue_tokens(existing, db)
             return {**tokens, "user": _user_to_response(existing), "claimed_provisional": True}
         else:
@@ -281,6 +301,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(user)
+    _ensure_stripe_customer(user, db)
 
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
@@ -527,9 +548,9 @@ async def upload_logo(
 
 # Quota limits per tier
 TIER_QUOTE_LIMITS = {
-    "free": 3,           # 3 quotes total (demo)
-    "starter": 10,       # 10 per month
-    "professional": None, # unlimited
+    "free": 1,            # 1 quote total (preview mode)
+    "starter": 3,         # 3 per month
+    "professional": 25,   # 25 per month
     "shop": None,         # unlimited
 }
 
@@ -567,6 +588,17 @@ def check_quote_access(
                 ),
             )
         return current_user
+
+    # Past due or cancelled — no new quotes
+    sub_status = getattr(current_user, "subscription_status", "trial") or "trial"
+    if sub_status == "past_due":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your payment is past due. Update your billing info to continue quoting.",
+        )
+    if sub_status == "cancelled":
+        # Cancelled users are downgraded to free tier — fall through to limit check
+        pass
 
     # Regular user — check tier limits
     tier = getattr(current_user, "tier", "free") or "free"
