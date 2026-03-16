@@ -15,11 +15,12 @@ Every prompt and every implementation follows this framework. No exceptions.
 4. **Decomposition** — Break the work into logical chunks. Describe WHAT each chunk accomplishes, not HOW to code it. Trust the builder.
 5. **Evaluation Design** — How to verify it worked. Real-world test cases, expected before/after.
 
-### The Philosophy: Teach, Don't Tell
-- **TEACH the theory** — "outdoor painted steel gets a cleanup pass, not full grinding" 
-- **DON'T dictate the code** — no hardcoded minute values, no Python snippets, no line-by-line instructions
-- **Trust Opus** — it's the most capable model available. Give it principles and constraints, it figures out the implementation.
-- **Fewer rules, better rules** — every rule in an AI prompt is noise that dilutes the rules that matter. Only include what Opus can't know on its own (shop-specific decisions, naming conventions, business rules).
+### The Philosophy: Opus First, Always
+- **Opus is the brain. Python is the calculator.** Opus reasons about fabrication (cut lists, labor, build sequences, material selection). Python does deterministic math (pricing, totals, markup, PDF rendering). If you're writing Python code that makes fabrication decisions, you're overriding Opus — stop.
+- **Don't build code that second-guesses Opus.** No post-processors that recalculate quantities. No hardcoded rules that override AI output. No Python that adds materials Opus didn't return. The knowledge base is CONTEXT, not curriculum — feed Opus facts (prices, dimensions, shop prefs), not process instructions.
+- **Don't teach Opus what it already knows.** Opus knows how to weld. It knows steel comes in 20' sticks. It knows outdoor work needs paint. Only include rules for things Opus CAN'T know: your shop rate, your preferred suppliers, your specific tooling.
+- **Fewer rules, better rules** — every rule in an AI prompt is noise that dilutes the rules that matter. If a rule hasn't prevented a real mistake, delete it.
+- **TEACH the theory, don't dictate the code** — "outdoor painted steel gets a cleanup pass, not full grinding" is a principle. "Set grind_hours = 2.0" is a crutch. Trust the builder.
 - **Scale over specifics** — a fix that only works for "this test case" is worthless. Teach the underlying principle so it works for every job type.
 
 ### Anti-Patterns (things that have burned us)
