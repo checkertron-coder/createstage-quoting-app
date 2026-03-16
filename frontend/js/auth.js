@@ -1,5 +1,6 @@
 /**
- * Auth UI — login, register, guest, profile setup.
+ * Auth UI — login, register, profile setup.
+ * Guest access removed in P53. All users must register.
  */
 
 const Auth = {
@@ -21,33 +22,108 @@ const Auth = {
 
     renderAuthView() {
         const el = document.getElementById('view-auth');
+        // Check URL hash for register mode
+        const showRegister = window.location.hash === '#register';
+
         el.innerHTML = `
             <div class="auth-card">
-                <h1 class="auth-title">Fabrication Quoting</h1>
-                <p class="auth-subtitle">Get an accurate quote in minutes, not hours.</p>
+                <h1 class="auth-title">CreateQuote</h1>
+                <p class="auth-subtitle">AI-Powered Metal Fabrication Quoting</p>
 
                 <div id="auth-form">
                     <div id="auth-error" class="auth-error" style="display:none"></div>
 
-                    <div class="auth-fields">
-                        <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
-                        <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+                    <!-- Tab switcher -->
+                    <div class="auth-tabs">
+                        <button class="auth-tab ${showRegister ? '' : 'active'}" id="tab-login" onclick="Auth.showTab('login')">Log In</button>
+                        <button class="auth-tab ${showRegister ? 'active' : ''}" id="tab-register" onclick="Auth.showTab('register')">Register</button>
                     </div>
 
-                    <div class="auth-buttons">
-                        <button class="btn btn-primary" onclick="Auth.handleLogin()">Log In</button>
-                        <button class="btn btn-secondary" onclick="Auth.handleRegister()">Register</button>
+                    <!-- Login fields -->
+                    <div id="login-fields" style="${showRegister ? 'display:none' : ''}">
+                        <div class="auth-fields">
+                            <input type="email" id="login-email" placeholder="Email" autocomplete="email">
+                            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                        </div>
+                        <div class="auth-buttons">
+                            <button class="btn btn-primary btn-full" onclick="Auth.handleLogin()">Log In</button>
+                        </div>
+                        <p class="auth-hint">Don't have an account? <a href="#" onclick="Auth.showTab('register');return false;">Register here</a></p>
                     </div>
 
-                    <div class="auth-divider"><span>or</span></div>
-
-                    <button class="btn btn-accent btn-full" onclick="Auth.handleGuest()">
-                        Start Quoting Now &rarr;
-                    </button>
-                    <p class="auth-hint">No account needed. Create one later to save your work.</p>
+                    <!-- Register fields -->
+                    <div id="register-fields" style="${showRegister ? '' : 'display:none'}">
+                        <div class="auth-fields">
+                            <input type="email" id="reg-email" placeholder="Email" autocomplete="email">
+                            <input type="password" id="reg-password" placeholder="Password (min 8 characters)" autocomplete="new-password">
+                            <input type="text" id="reg-invite-code" placeholder="Invite Code (optional)" autocomplete="off">
+                        </div>
+                        <div id="invite-code-status" class="invite-code-status" style="display:none"></div>
+                        <div class="auth-terms">
+                            <label class="terms-checkbox">
+                                <input type="checkbox" id="reg-terms">
+                                <span>I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/nda" target="_blank">Non-Disclosure Agreement</a></span>
+                            </label>
+                        </div>
+                        <div class="auth-buttons">
+                            <button class="btn btn-primary btn-full" onclick="Auth.handleRegister()">Create Account</button>
+                        </div>
+                        <p class="auth-hint">Already have an account? <a href="#" onclick="Auth.showTab('login');return false;">Log in here</a></p>
+                    </div>
                 </div>
             </div>
         `;
+
+        // Bind invite code validation
+        const codeInput = document.getElementById('reg-invite-code');
+        if (codeInput) {
+            codeInput.addEventListener('blur', () => Auth.validateInviteCode());
+        }
+    },
+
+    showTab(tab) {
+        const loginFields = document.getElementById('login-fields');
+        const registerFields = document.getElementById('register-fields');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+        if (tab === 'login') {
+            loginFields.style.display = '';
+            registerFields.style.display = 'none';
+            tabLogin.classList.add('active');
+            tabRegister.classList.remove('active');
+        } else {
+            loginFields.style.display = 'none';
+            registerFields.style.display = '';
+            tabLogin.classList.remove('active');
+            tabRegister.classList.add('active');
+        }
+    },
+
+    async validateInviteCode() {
+        const code = document.getElementById('reg-invite-code').value.trim();
+        const statusEl = document.getElementById('invite-code-status');
+        if (!code) {
+            statusEl.style.display = 'none';
+            return;
+        }
+        try {
+            const resp = await fetch('/api/auth/validate-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            const data = await resp.json();
+            statusEl.style.display = 'block';
+            if (data.valid) {
+                statusEl.className = 'invite-code-status valid';
+                statusEl.textContent = 'Valid invite code — ' + data.tier + ' tier';
+            } else {
+                statusEl.className = 'invite-code-status invalid';
+                statusEl.textContent = 'Invalid or expired invite code';
+            }
+        } catch (e) {
+            statusEl.style.display = 'none';
+        }
     },
 
     renderProfileView() {
@@ -119,8 +195,8 @@ const Auth = {
     },
 
     async handleLogin() {
-        const email = document.getElementById('auth-email').value.trim();
-        const password = document.getElementById('auth-password').value;
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
         if (!email || !password) return this.showError('auth-error', 'Email and password required.');
         try {
             const data = await API.login(email, password);
@@ -132,24 +208,19 @@ const Auth = {
     },
 
     async handleRegister() {
-        const email = document.getElementById('auth-email').value.trim();
-        const password = document.getElementById('auth-password').value;
+        const email = document.getElementById('reg-email').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const inviteCode = document.getElementById('reg-invite-code').value.trim();
+        const termsChecked = document.getElementById('reg-terms').checked;
+
         if (!email || !password) return this.showError('auth-error', 'Email and password required.');
-        if (password.length < 6) return this.showError('auth-error', 'Password must be at least 6 characters.');
+        if (password.length < 8) return this.showError('auth-error', 'Password must be at least 8 characters.');
+        if (!termsChecked) return this.showError('auth-error', 'You must agree to the Terms of Service and NDA to continue.');
+
         try {
-            const data = await API.register(email, password);
+            const data = await API.register(email, password, inviteCode, termsChecked);
             this.currentUser = data.user;
             App.showView('profile');
-        } catch (e) {
-            this.showError('auth-error', e.message);
-        }
-    },
-
-    async handleGuest() {
-        try {
-            const data = await API.guest();
-            this.currentUser = data.user;
-            App.showView('quote');
         } catch (e) {
             this.showError('auth-error', e.message);
         }
@@ -206,6 +277,7 @@ const Auth = {
     logout() {
         API.clearTokens();
         this.currentUser = null;
-        App.showView('auth');
+        // Redirect to landing page
+        window.location.href = '/';
     },
 };

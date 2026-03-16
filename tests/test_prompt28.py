@@ -375,9 +375,10 @@ class TestBidUploadFrontend:
             content = f.read()
         assert "initBidUpload" in content
 
-    def test_index_html_has_bid_view(self):
+    def test_app_html_has_bid_view(self):
+        """Bid upload view is in app.html (P53 moved app from index.html to app.html)."""
         path = os.path.join(
-            os.path.dirname(__file__), "..", "frontend", "index.html")
+            os.path.dirname(__file__), "..", "frontend", "app.html")
         with open(path, "r") as f:
             content = f.read()
         assert "view-bid" in content

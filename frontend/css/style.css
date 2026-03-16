@@ -148,10 +148,53 @@ body {
     content: ''; flex: 1; height: 1px; background: var(--border);
 }
 .auth-hint { color: var(--text-secondary); font-size: 0.8rem; margin-top: 8px; }
+.auth-hint a { color: var(--accent); text-decoration: none; }
+.auth-hint a:hover { text-decoration: underline; }
 .auth-error {
     background: #fef2f2; color: var(--error); padding: 10px;
     border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 12px;
 }
+
+/* --- Auth Tabs --- */
+.auth-tabs {
+    display: flex; gap: 0; margin-bottom: 20px;
+    border-bottom: 2px solid var(--border);
+}
+.auth-tab {
+    flex: 1; padding: 10px; background: transparent; border: none;
+    font-size: 0.95rem; font-weight: 600; font-family: var(--font);
+    color: var(--text-secondary); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -2px;
+    transition: all 0.15s;
+}
+.auth-tab:hover { color: var(--text); }
+.auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* --- Invite Code Status --- */
+.invite-code-status {
+    font-size: 0.85rem; padding: 6px 10px; border-radius: var(--radius);
+    margin-bottom: 12px;
+}
+.invite-code-status.valid {
+    background: #ecfdf5; color: var(--success);
+}
+.invite-code-status.invalid {
+    background: #fef2f2; color: var(--error);
+}
+
+/* --- Terms Checkbox --- */
+.auth-terms {
+    margin-bottom: 16px; text-align: left;
+}
+.terms-checkbox {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 0.85rem; color: var(--text-secondary); cursor: pointer;
+}
+.terms-checkbox input[type="checkbox"] {
+    margin-top: 3px; cursor: pointer;
+}
+.terms-checkbox a { color: var(--accent); text-decoration: none; }
+.terms-checkbox a:hover { text-decoration: underline; }
 
 /* --- Profile View --- */
 .profile-card {

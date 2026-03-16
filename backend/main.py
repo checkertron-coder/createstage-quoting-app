@@ -119,8 +119,14 @@ if os.path.exists(frontend_path):
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
     @app.get("/")
-    def serve_frontend():
+    def serve_landing():
+        """Serve the public landing page."""
         return FileResponse(os.path.join(frontend_path, "index.html"))
+
+    @app.get("/app")
+    def serve_app():
+        """Serve the quoting application (requires auth via JS)."""
+        return FileResponse(os.path.join(frontend_path, "app.html"))
 
 @app.get("/health")
 def health():

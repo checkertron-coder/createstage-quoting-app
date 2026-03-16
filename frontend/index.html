@@ -3,49 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CreateQuote</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <title>CreateQuote — AI-Powered Metal Fabrication Quoting</title>
+    <link rel="stylesheet" href="/css/landing.css">
 </head>
 <body>
 
     <!-- Navigation -->
-    <nav class="app-nav" id="main-nav" style="display:none">
-        <div class="nav-left">
-            <span class="nav-brand">CreateQuote</span>
-            <span class="nav-shop-name" id="nav-shop-name"></span>
-        </div>
-        <div class="nav-right">
-            <button class="nav-btn active" data-view="quote" onclick="App.showView('quote')">New Quote</button>
-            <button class="nav-btn" data-view="history" onclick="App.showView('history')">Quotes</button>
-            <button class="nav-btn" data-view="bid" onclick="App.showView('bid')">Upload Bid</button>
-            <button class="nav-btn" data-view="profile" onclick="Auth.renderProfileView(); App.showView('profile')">Profile</button>
-            <button class="nav-btn-logout" onclick="Auth.logout()">Log Out</button>
+    <nav class="landing-nav">
+        <a href="/" class="brand">CreateQuote</a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#how-it-works">How It Works</a>
+            <a href="#pricing">Pricing</a>
+            <a href="/app" class="btn-login">Log In</a>
         </div>
     </nav>
 
-    <!-- Views -->
-    <main>
-        <div id="view-auth" style="display:none"></div>
-        <div id="view-profile" style="display:none"></div>
-        <div id="view-quote" style="display:none"></div>
-        <div id="view-history" style="display:none"></div>
-        <div id="view-bid" style="display:none">
-            <div class="describe-card">
-                <h2>Upload Bid Document</h2>
-                <div class="bid-upload-area" id="bid-drop-zone">
-                    <p>Drop PDF here or click to select</p>
-                    <input type="file" id="bid-file-input" accept=".pdf" hidden>
-                </div>
-                <div id="bid-results" style="display:none"></div>
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-inner">
+            <h1>AI-Powered <span class="highlight">Metal Fabrication</span> Quoting</h1>
+            <p class="subtitle">
+                Get accurate, itemized quotes in minutes — not hours.
+                Built by fabricators, for fabricators.
+            </p>
+            <div class="hero-ctas">
+                <a href="/app#register" class="btn-hero btn-hero-primary">Get Started</a>
+                <a href="#how-it-works" class="btn-hero btn-hero-secondary">See How It Works</a>
             </div>
         </div>
-    </main>
+    </section>
 
-    <!-- Scripts (order matters: api first, then auth, then quote-flow, then app) -->
-    <script src="/js/api.js"></script>
-    <script src="/js/auth.js"></script>
-    <script src="/js/quote-flow.js"></script>
-    <script src="/js/bid-upload.js"></script>
-    <script src="/js/app.js"></script>
+    <!-- Features -->
+    <section class="section" id="features">
+        <h2 class="section-title">Everything You Need to Quote Faster</h2>
+        <p class="section-subtitle">
+            Stop guessing on hours and materials. CreateQuote uses real fabrication knowledge
+            to build accurate, professional quotes.
+        </p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <span class="feature-icon">&#9997;</span>
+                <h3>Describe Your Job</h3>
+                <p>Type a plain-English description or upload photos. CreateQuote understands
+                   gates, railings, stairs, bumpers, signs, trailers — 25+ job types.</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">&#9881;</span>
+                <h3>AI Does the Math</h3>
+                <p>Cut lists, material quantities, labor hours, hardware, consumables —
+                   calculated from real fab shop knowledge. Not generic estimates.</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">&#128196;</span>
+                <h3>Professional Quotes in Minutes</h3>
+                <p>Branded PDFs with your shop name and logo. Itemized materials,
+                   labor breakdown, markup options — ready to send to your client.</p>
+            </div>
+            <div class="feature-card">
+                <span class="feature-icon">&#128295;</span>
+                <h3>Built for the Shop Floor</h3>
+                <p>Weld process detection, TIG vs MIG multipliers, finish types,
+                   stock length optimization. This tool knows how fab shops work.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <div class="section-alt">
+        <section class="section" id="how-it-works">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-subtitle">
+                Three steps. No spreadsheets. No guessing.
+            </p>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Describe Your Project</h3>
+                    <p>Tell us what you're building in plain English. Upload reference
+                       photos if you have them. The AI extracts dimensions, materials,
+                       and finish requirements.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Answer a Few Smart Questions</h3>
+                    <p>The system asks only what it needs — gate width, railing height,
+                       material grade, finish type. No redundant questions, no 50-field
+                       forms.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Download Your Quote</h3>
+                    <p>Get an itemized quote with materials, labor, hardware, and
+                       consumables. Download a professional PDF branded with your shop
+                       name. Adjust markup and send.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Pricing -->
+    <section class="section" id="pricing">
+        <h2 class="section-title">Simple, Transparent Pricing</h2>
+        <p class="section-subtitle">
+            Start with a free trial. No credit card required for beta testers with an invite code.
+        </p>
+        <div class="pricing-grid">
+            <div class="price-card">
+                <h3>Starter</h3>
+                <div class="price-amount">$49<span>/mo</span></div>
+                <p class="price-desc">For individual fabricators</p>
+                <ul class="price-features">
+                    <li>10 quotes per month</li>
+                    <li>PDF downloads</li>
+                    <li>1 user</li>
+                    <li>Email support</li>
+                </ul>
+                <a href="/app#register" class="btn-price btn-price-outline">Start Free Trial</a>
+            </div>
+            <div class="price-card featured">
+                <h3>Professional</h3>
+                <div class="price-amount">$149<span>/mo</span></div>
+                <p class="price-desc">For growing shops</p>
+                <ul class="price-features">
+                    <li>Unlimited quotes</li>
+                    <li>PDF + shop branding</li>
+                    <li>Bid document parser</li>
+                    <li>3 users</li>
+                    <li>Priority support</li>
+                </ul>
+                <a href="/app#register" class="btn-price btn-price-primary">Start Free Trial</a>
+            </div>
+            <div class="price-card">
+                <h3>Shop</h3>
+                <div class="price-amount">$349<span>/mo</span></div>
+                <p class="price-desc">For multi-crew operations</p>
+                <ul class="price-features">
+                    <li>Everything in Professional</li>
+                    <li>API access</li>
+                    <li>Unlimited users</li>
+                    <li>Dedicated support</li>
+                    <li>Custom integrations</li>
+                </ul>
+                <a href="/app#register" class="btn-price btn-price-outline">Start Free Trial</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+        <div class="footer-inner">
+            <div class="footer-col">
+                <h4>CreateQuote</h4>
+                <p>AI-powered quoting for metal fabrication.<br>
+                   Built by fabricators, for fabricators.</p>
+            </div>
+            <div class="footer-col">
+                <h4>Product</h4>
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#pricing">Pricing</a>
+            </div>
+            <div class="footer-col">
+                <h4>Legal</h4>
+                <a href="/terms" target="_blank">Terms of Service</a>
+                <a href="/nda" target="_blank">Non-Disclosure Agreement</a>
+            </div>
+            <div class="footer-col">
+                <h4>Contact</h4>
+                <a href="mailto:info@CreateQuote.app">info@CreateQuote.app</a>
+                <p>CreateStage Fabrication</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            &copy; 2026 CreateStage Fabrication. All rights reserved.
+        </div>
+    </footer>
+
 </body>
 </html>

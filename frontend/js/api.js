@@ -83,11 +83,17 @@ const API = {
     },
 
     // --- Auth ---
-    async register(email, password) {
+    async register(email, password, inviteCode, termsAccepted) {
+        const body = { email, password };
+        if (inviteCode) body.invite_code = inviteCode;
+        if (termsAccepted) {
+            body.terms_accepted = true;
+            body.nda_accepted = true;
+        }
         const resp = await fetch(`${this.base}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify(body),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Registration failed');
@@ -103,17 +109,6 @@ const API = {
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Login failed');
-        this.setTokens(data.access_token, data.refresh_token);
-        return data;
-    },
-
-    async guest() {
-        const resp = await fetch(`${this.base}/auth/guest`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || 'Guest login failed');
         this.setTokens(data.access_token, data.refresh_token);
         return data;
     },

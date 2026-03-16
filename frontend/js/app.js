@@ -1,5 +1,6 @@
 /**
- * App — main controller. Shows/hides views, manages navigation.
+ * App — main controller for /app. Shows/hides views, manages navigation.
+ * Landing page is at /. This runs only on /app (app.html).
  */
 
 const App = {
