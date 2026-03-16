@@ -107,7 +107,14 @@ class User(Base):
     rate_inshop = Column(Float, default=125.00)
     rate_onsite = Column(Float, default=145.00)
     markup_default = Column(Integer, default=15)
-    tier = Column(String, default="basic")  # 'basic' | 'pro' | 'enterprise'
+    tier = Column(String, default="free")  # 'free' | 'starter' | 'professional' | 'shop'
+    subscription_status = Column(String, default="trial")  # 'trial' | 'active' | 'past_due' | 'cancelled'
+    trial_ends_at = Column(DateTime, nullable=True)
+    invite_code_used = Column(String, nullable=True)
+    terms_accepted_at = Column(DateTime, nullable=True)
+    nda_accepted_at = Column(DateTime, nullable=True)
+    quotes_this_month = Column(Integer, default=0)
+    billing_cycle_start = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -306,6 +313,21 @@ class BidAnalysis(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class InviteCode(Base):
+    """Beta invite codes for free tier access."""
+    __tablename__ = "invite_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False, index=True)
+    tier = Column(String, default="professional")  # tier granted to user
+    max_uses = Column(Integer, nullable=True)  # null = unlimited
+    uses = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    created_by = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
 
 
 class MaterialPrice(Base):

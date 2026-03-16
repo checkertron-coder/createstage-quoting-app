@@ -141,7 +141,8 @@ def start_job_cleanup():
 
 @app.on_event("startup")
 def auto_seed():
-    """Auto-seed process rates and material prices on first run."""
+    """Auto-seed process rates, material prices, and invite codes on first run."""
+    from datetime import timedelta
     from .database import SessionLocal
     from .routers.process_rates import DEFAULT_RATES
     from .routers.materials import DEFAULT_PRICES
@@ -162,6 +163,22 @@ def auto_seed():
             ).first()
             if not existing:
                 db.add(models.MaterialPrice(material_type=mat_type, **price_data))
+        # Seed invite codes
+        default_codes = [
+            {"code": "BETA-FOUNDER", "tier": "professional", "max_uses": None,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-KEVIN", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-TESTER", "tier": "professional", "max_uses": 50,
+             "created_by": "system",
+             "expires_at": datetime.utcnow() + timedelta(days=90)},
+        ]
+        for code_data in default_codes:
+            existing = db.query(models.InviteCode).filter(
+                models.InviteCode.code == code_data["code"]
+            ).first()
+            if not existing:
+                db.add(models.InviteCode(**code_data))
         db.commit()
     finally:
         db.close()
