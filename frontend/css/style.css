@@ -376,6 +376,22 @@ body {
 }
 .processing-card.error { color: var(--error); }
 .processing-text { font-size: 1.1rem; margin-top: 16px; color: var(--text-secondary); }
+.processing-flavor {
+    font-size: 0.95rem;
+    margin-top: 12px;
+    color: var(--text-light);
+    font-style: italic;
+    min-height: 1.4em;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+}
+.processing-flavor.flavor-visible { opacity: 1; }
+.processing-stay {
+    font-size: 0.85rem;
+    margin-top: 24px;
+    color: var(--text-light);
+    letter-spacing: 0.02em;
+}
 .error-text { font-size: 1rem; margin-bottom: 16px; }
 
 .spinner {

@@ -1396,20 +1396,93 @@ const QuoteFlow = {
     // --- Helpers ---
     _showStep(step) {
         this.currentStep = step;
+        // Stop loading message rotation when leaving processing
+        if (step !== 'processing' && this._loadingInterval) {
+            clearInterval(this._loadingInterval);
+            this._loadingInterval = null;
+        }
         ['describe', 'clarify', 'processing', 'results'].forEach(s => {
             const el = document.getElementById(`quote-step-${s}`);
             if (el) el.style.display = s === step ? 'block' : 'none';
         });
     },
 
+    _loadingInterval: null,
+
+    LOADING_MESSAGES: [
+        "Measuring twice, cutting once...",
+        "Calculating weld inches...",
+        "Checking stock lengths...",
+        "Optimizing your cut list...",
+        "Arguing with the tape measure...",
+        "Counting sticks of 2x2...",
+        "Squaring up the layout table...",
+        "Sharpening the soapstone...",
+        "Dialing in the MIG welder...",
+        "Preheating the TIG torch...",
+        "Flipping through the metals catalog...",
+        "Doing math so you don't have to...",
+        "Converting fractions to decimals (the hard part)...",
+        "Double-checking the miter angles...",
+        "Looking up McMaster part numbers...",
+        "Estimating grinding disc usage...",
+        "Pricing out the powder coat...",
+        "Figuring out if it fits on a 20-footer...",
+        "Calculating concrete for the post holes...",
+        "Checking if the hinge pin will clear...",
+        "Running the numbers on shielding gas...",
+        "Sorting the BOM by profile...",
+        "Making sure nobody forgot the base plates...",
+        "Adding hardware — yes, the bolts too...",
+        "Accounting for kerf width...",
+        "Rounding up to the next full stick...",
+        "Cross-referencing supplier pricing...",
+        "Building your fabrication sequence...",
+        "Almost done — just checking the math one more time...",
+        "Generating a quote that would make your accountant proud...",
+    ],
+
     _showProcessing(msg) {
+        // Clear any existing rotation interval
+        if (this._loadingInterval) {
+            clearInterval(this._loadingInterval);
+            this._loadingInterval = null;
+        }
+
         const el = document.getElementById('quote-step-processing');
         el.innerHTML = `
             <div class="processing-card">
                 <div class="spinner"></div>
-                <p class="processing-text">${msg}</p>
+                <p class="processing-text" id="processing-msg">${msg}</p>
+                <p class="processing-flavor" id="processing-flavor"></p>
+                <p class="processing-stay">Please don't leave this page while your quote is being built.</p>
             </div>
         `;
+
+        // Start rotating funny messages after a short delay
+        const flavorEl = document.getElementById('processing-flavor');
+        if (!flavorEl) return;
+
+        const msgs = this.LOADING_MESSAGES;
+        let idx = Math.floor(Math.random() * msgs.length);
+
+        const showNext = () => {
+            flavorEl.classList.remove('flavor-visible');
+            setTimeout(() => {
+                idx = (idx + 1) % msgs.length;
+                flavorEl.textContent = msgs[idx];
+                flavorEl.classList.add('flavor-visible');
+            }, 400);
+        };
+
+        // Show first message after 2 seconds
+        setTimeout(() => {
+            flavorEl.textContent = msgs[idx];
+            flavorEl.classList.add('flavor-visible');
+        }, 2000);
+
+        // Rotate every 8 seconds
+        this._loadingInterval = setInterval(showNext, 8000);
     },
 
     _showError(msg) {
