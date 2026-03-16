@@ -54,35 +54,29 @@ def test_job_type_is_varchar(db):
     assert fetched.job_type == "cantilever_gate"
 
 
-def test_provisional_account_flow(client, db):
-    """Guest creates provisional account → starts quoting → claims with real email."""
-    # Step 1: Create guest account
+def test_registration_account_flow(client, db):
+    """Register account → verify profile → guest endpoint returns 410."""
+    # Step 1: Guest endpoint returns 410 Gone (removed in P53)
     guest_resp = client.post("/api/auth/guest")
-    assert guest_resp.status_code == 200
-    guest_data = guest_resp.json()
-    assert guest_data["user"]["is_provisional"] is True
-    assert "access_token" in guest_data
-    assert "session_id" in guest_data
-    guest_user_id = guest_data["user_id"]
+    assert guest_resp.status_code == 410
 
-    # Step 2: Verify guest can access /me
-    headers = {"Authorization": f"Bearer {guest_data['access_token']}"}
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    assert me_resp.json()["is_provisional"] is True
-
-    # Step 3: Claim the account with real credentials
-    # First, get the provisional email
-    provisional_email = me_resp.json()["email"]
-
-    # Register with a new email — this creates a new account (not claiming)
-    claim_resp = client.post("/api/auth/register", json={
+    # Step 2: Register a real account
+    reg_resp = client.post("/api/auth/register", json={
         "email": "burton@createstage.com",
         "password": "securepass456",
     })
-    assert claim_resp.status_code == 200
-    assert claim_resp.json()["user"]["is_provisional"] is False
-    assert claim_resp.json()["user"]["email"] == "burton@createstage.com"
+    assert reg_resp.status_code == 200
+    reg_data = reg_resp.json()
+    assert reg_data["user"]["is_provisional"] is False
+    assert "access_token" in reg_data
+    user_id = reg_data["user_id"]
+
+    # Step 3: Verify user can access /me
+    headers = {"Authorization": f"Bearer {reg_data['access_token']}"}
+    me_resp = client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    assert me_resp.json()["email"] == "burton@createstage.com"
+    assert me_resp.json()["tier"] == "free"
 
 
 def test_jwt_auth_round_trip(client):

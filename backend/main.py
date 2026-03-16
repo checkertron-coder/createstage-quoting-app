@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 
 from .database import engine, Base
-from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser, photos
+from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser, photos, admin
 
 logger = logging.getLogger("createstage")
 
@@ -93,6 +93,7 @@ app.include_router(quote_session.router, prefix="/api")
 app.include_router(pdf.router, prefix="/api")
 app.include_router(bid_parser.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 # Serve uploaded photos (local fallback when R2 not configured)
 # Create directory unconditionally so the mount always exists —

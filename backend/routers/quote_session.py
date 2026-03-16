@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from .. import models
 from ..auth import get_current_user
+from .auth import check_quote_access
 from ..database import get_db
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
 from ..question_trees.universal_intake import (
@@ -71,7 +72,7 @@ class CustomerInfoRequest(BaseModel):
 def start_session(
     request: StartSessionRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(check_quote_access),
 ):
     """
     Start a new quote session using Universal Intake.

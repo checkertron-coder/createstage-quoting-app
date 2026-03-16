@@ -1,19 +1,19 @@
 """
-Auth endpoints — register, login, refresh, guest, me, profile.
+Auth endpoints — register, login, refresh, me, profile.
 
-Provisional account flow:
-- POST /api/auth/guest → creates provisional user, returns JWT
-- User can immediately start quoting
-- POST /api/auth/register → claims provisional or creates new account
-- Quotes created with provisional user_id stay attached
+Registration flow:
+- POST /api/auth/register → create account (with optional invite code + terms acceptance)
+- POST /api/auth/login → authenticate with email + password
+- POST /api/auth/validate-code → check if invite code is valid
+- POST /api/auth/guest → 410 Gone (removed in P53)
 """
 
 import base64
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -38,6 +38,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 class RegisterRequest(BaseModel):
     email: str
     password: str
+    invite_code: Optional[str] = None
+    terms_accepted: Optional[bool] = False
+    nda_accepted: Optional[bool] = False
 
 
 class LoginRequest(BaseModel):
@@ -58,6 +61,10 @@ class ProfileUpdate(BaseModel):
     rate_inshop: Optional[float] = None
     rate_onsite: Optional[float] = None
     markup_default: Optional[int] = None
+
+
+class ValidateCodeRequest(BaseModel):
+    code: str
 
 
 class TokenResponse(BaseModel):
@@ -81,6 +88,9 @@ class UserResponse(BaseModel):
     rate_onsite: float
     markup_default: int
     tier: str
+    subscription_status: Optional[str] = None
+    trial_ends_at: Optional[str] = None
+    quotes_this_month: Optional[int] = 0
     created_at: datetime
 
     class Config:
@@ -103,6 +113,12 @@ def _user_to_response(user: models.User) -> dict:
         "rate_onsite": user.rate_onsite,
         "markup_default": user.markup_default,
         "tier": user.tier,
+        "subscription_status": getattr(user, "subscription_status", "trial"),
+        "trial_ends_at": (
+            user.trial_ends_at.isoformat()
+            if getattr(user, "trial_ends_at", None) else None
+        ),
+        "quotes_this_month": getattr(user, "quotes_this_month", 0),
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
 
@@ -120,6 +136,22 @@ def _issue_tokens(user: models.User, db: Session) -> dict:
     }
 
 
+def _validate_invite_code(code_str: str, db: Session):
+    """Validate an invite code. Returns the InviteCode record or None."""
+    code = db.query(models.InviteCode).filter(
+        models.InviteCode.code == code_str.strip().upper()
+    ).first()
+    if not code:
+        return None
+    if not code.is_active:
+        return None
+    if code.expires_at and code.expires_at < datetime.utcnow():
+        return None
+    if code.max_uses is not None and code.uses >= code.max_uses:
+        return None
+    return code
+
+
 # --- Endpoints ---
 
 @router.post("/register")
@@ -127,9 +159,26 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Create a new account or claim a provisional one.
 
-    If user already exists with is_provisional=True and no password,
-    this sets the password and converts to a full account.
+    Optional invite_code grants a subscription tier (e.g., professional for beta testers).
+    terms_accepted and nda_accepted are recorded with timestamps.
     """
+    # Validate password length
+    if len(request.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+
+    # Validate invite code if provided
+    invite_code_record = None
+    if request.invite_code:
+        invite_code_record = _validate_invite_code(request.invite_code, db)
+        if not invite_code_record:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired invite code",
+            )
+
     existing = db.query(models.User).filter(models.User.email == request.email).first()
 
     if existing:
@@ -138,6 +187,23 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             existing.password_hash = hash_password(request.password)
             existing.is_provisional = False
             existing.updated_at = datetime.utcnow()
+
+            # Set subscription fields
+            if invite_code_record:
+                existing.tier = invite_code_record.tier
+                existing.invite_code_used = invite_code_record.code
+                invite_code_record.uses += 1
+            else:
+                existing.tier = "free"
+
+            existing.trial_ends_at = datetime.utcnow() + timedelta(days=14)
+            existing.subscription_status = "trial"
+
+            if request.terms_accepted:
+                existing.terms_accepted_at = datetime.utcnow()
+            if request.nda_accepted:
+                existing.nda_accepted_at = datetime.utcnow()
+
             db.commit()
             db.refresh(existing)
             tokens = _issue_tokens(existing, db)
@@ -148,13 +214,29 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 detail="Account with this email already exists",
             )
 
+    # Determine tier based on invite code
+    tier = "free"
+    if invite_code_record:
+        tier = invite_code_record.tier
+
     user = models.User(
         email=request.email,
         password_hash=hash_password(request.password),
         is_provisional=False,
         is_verified=False,
+        tier=tier,
+        subscription_status="trial",
+        trial_ends_at=datetime.utcnow() + timedelta(days=14),
+        invite_code_used=invite_code_record.code if invite_code_record else None,
+        terms_accepted_at=datetime.utcnow() if request.terms_accepted else None,
+        nda_accepted_at=datetime.utcnow() if request.nda_accepted else None,
     )
     db.add(user)
+
+    # Increment invite code uses
+    if invite_code_record:
+        invite_code_record.uses += 1
+
     db.commit()
     db.refresh(user)
 
@@ -231,33 +313,25 @@ def refresh(request: RefreshRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/guest")
-def guest(db: Session = Depends(get_db)):
+def guest():
     """
-    Create a provisional account with no password.
+    Guest access has been removed. All users must register.
 
-    Returns a JWT immediately — user can start quoting right away.
-    Call /register later to claim the account with a real email + password.
+    Returns 410 Gone for backward compatibility signaling.
     """
-    # Generate a unique placeholder email
-    placeholder_email = f"guest_{uuid.uuid4().hex[:12]}@provisional.local"
-    session_id = str(uuid.uuid4())
-
-    user = models.User(
-        email=placeholder_email,
-        password_hash=None,
-        is_provisional=True,
-        is_verified=False,
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Guest access has been removed. Please register for an account.",
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
 
-    tokens = _issue_tokens(user, db)
-    return {
-        **tokens,
-        "session_id": session_id,
-        "user": _user_to_response(user),
-    }
+
+@router.post("/validate-code")
+def validate_code(request: ValidateCodeRequest, db: Session = Depends(get_db)):
+    """Check if an invite code is valid without consuming it."""
+    code = _validate_invite_code(request.code, db)
+    if not code:
+        return {"valid": False, "tier": None}
+    return {"valid": True, "tier": code.tier}
 
 
 @router.get("/me")
@@ -324,3 +398,43 @@ async def upload_logo(
         "message": "Logo uploaded successfully",
         "logo_url": data_uri[:50] + "...",  # Truncated for response
     }
+
+
+# --- Quote access control ---
+
+# Quota limits per tier
+TIER_QUOTE_LIMITS = {
+    "free": 3,           # 3 quotes total (demo)
+    "starter": 10,       # 10 per month
+    "professional": None, # unlimited
+    "shop": None,         # unlimited
+}
+
+
+def check_quote_access(
+    current_user: models.User = Depends(get_current_user),
+):
+    """
+    Dependency that checks whether the user can create a new quote.
+
+    Raises 403 if quota exceeded for their tier.
+    """
+    tier = getattr(current_user, "tier", "free") or "free"
+    limit = TIER_QUOTE_LIMITS.get(tier)
+
+    if limit is None:
+        # Unlimited
+        return current_user
+
+    quotes_used = getattr(current_user, "quotes_this_month", 0) or 0
+    if quotes_used >= limit:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "You've reached the %d-quote limit for the %s tier. "
+                "Upgrade your plan at createquote.app to continue quoting."
+                % (limit, tier.title())
+            ),
+        )
+
+    return current_user

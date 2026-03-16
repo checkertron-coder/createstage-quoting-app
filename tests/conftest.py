@@ -3,6 +3,7 @@ Shared test fixtures — in-memory SQLite database, test client, auth helpers.
 """
 
 import os
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -71,8 +72,16 @@ def auth_headers(client):
 
 @pytest.fixture
 def guest_headers(client):
-    """Create a guest user and return auth headers."""
-    response = client.post("/api/auth/guest")
+    """Create a quick test user and return auth headers.
+
+    Originally used /api/auth/guest (provisional accounts).
+    P53 removed guest access — now registers a real user with a unique email.
+    """
+    unique_email = "guest_%s@test.local" % uuid.uuid4().hex[:8]
+    response = client.post("/api/auth/register", json={
+        "email": unique_email,
+        "password": "testpass123",
+    })
     assert response.status_code == 200
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}

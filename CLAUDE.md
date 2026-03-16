@@ -131,7 +131,8 @@ createstage-quoting-app/
 │   │   ├── photos.py        — /api/photos/* (upload with R2 or local fallback)
 │   │   ├── customers.py     — /api/customers/* (CRUD)
 │   │   ├── materials.py     — /api/materials/* (seed, list, update) + DEFAULT_PRICES
-│   │   └── process_rates.py — /api/process-rates/* (seed, list, update) + DEFAULT_RATES
+│   │   ├── process_rates.py — /api/process-rates/* (seed, list, update) + DEFAULT_RATES
+│   │   └── admin.py         — /api/admin/* (invite code CRUD, admin-secret protected)
 │   ├── calculators/
 │   │   ├── __init__.py
 │   │   ├── base.py              — Abstract BaseCalculator + make_material_item/list/hardware + AI-first helpers (_has_description, _try_ai_cut_list, _build_from_ai_cuts)
