@@ -140,35 +140,45 @@ Users need to understand what CreateQuote is, see pricing, have contact info (in
 
 ## Decomposition
 
-### Chunk 1: Database + Models
+**⚠️ SESSION DISCIPLINE — MANDATORY FOR THIS PROMPT:**
+- **Do NOT one-shot this.** Work through chunks sequentially, one at a time.
+- **Commit after EACH chunk** with a descriptive message: `git add . && git commit -m "P53 chunk N: description"`
+- **Run `pytest tests/ -v` after chunks 1, 2, and 6** to catch regressions early.
+- **Verify the app starts (`uvicorn backend.main:app --reload`) after chunk 4** before moving to chunk 5.
+- If context gets long after ~30 exchanges, summarize progress and start a fresh session. Read the git log + this file to pick up where you left off.
+
+### Chunk 1: Database + Models → COMMIT
 - Add `InviteCode` model to `models.py`
 - Add subscription fields to `User` model
 - Create Alembic migration
 - Seed default invite codes
+- ✅ `pytest tests/ -v` — all existing tests still pass
 
-### Chunk 2: Backend Auth Updates
+### Chunk 2: Backend Auth Updates → COMMIT
 - Remove guest endpoint logic (keep the route but return 410 Gone for backward compat)
 - Add invite code validation endpoint
 - Update register to accept `invite_code` + `terms_accepted` + `nda_accepted`
 - Add `check_quote_access` dependency
 - Add admin router for invite code CRUD
+- ✅ `pytest tests/ -v` — all existing tests still pass
 
-### Chunk 3: Landing Page
+### Chunk 3: Landing Page → COMMIT
 - Create `index.html` with hero, features, how-it-works, pricing, footer
 - Create `landing.css`
 - Make it look professional — dark header section, clean typography, fabrication-themed
 
-### Chunk 4: App Shell + Auth UI
+### Chunk 4: App Shell + Auth UI → COMMIT
 - Move quoting app into `app.html`
 - Update `auth.js` — remove guest, add invite code, add terms checkbox
 - Update `app.js` for /app route
 - Update `main.py` routing
+- ✅ Verify app starts: `uvicorn backend.main:app --reload`
 
-### Chunk 5: Legal Pages
+### Chunk 5: Legal Pages → COMMIT
 - Create `/terms` and `/nda` pages with professional placeholder text
 - NDA page should have prominent language about confidentiality (testers will see this)
 
-### Chunk 6: Tests
+### Chunk 6: Tests → COMMIT
 - Test invite code CRUD (create, validate, use, expire, max uses)
 - Test registration with/without invite code
 - Test quote access limits per tier
