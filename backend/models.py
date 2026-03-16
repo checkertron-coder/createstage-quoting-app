@@ -111,6 +111,8 @@ class User(Base):
     subscription_status = Column(String, default="trial")  # 'trial' | 'active' | 'past_due' | 'cancelled'
     trial_ends_at = Column(DateTime, nullable=True)
     invite_code_used = Column(String, nullable=True)
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
     terms_accepted_at = Column(DateTime, nullable=True)
     quotes_this_month = Column(Integer, default=0)
     billing_cycle_start = Column(DateTime, nullable=True)
