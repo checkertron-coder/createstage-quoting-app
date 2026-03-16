@@ -120,7 +120,7 @@
                     <li>Cut lists + build sequences</li>
                     <li>Email support</li>
                 </ul>
-                <a href="/app#register" class="btn-price btn-price-outline">Start Free Trial</a>
+                <a href="/app#register" class="btn-price btn-price-outline" onclick="return handlePricingClick('starter')">Start Free Trial</a>
             </div>
             <div class="price-card featured">
                 <h3>Professional</h3>
@@ -133,7 +133,7 @@
                     <li>Material alternatives</li>
                     <li>Priority support</li>
                 </ul>
-                <a href="/app#register" class="btn-price btn-price-primary">Start Free Trial</a>
+                <a href="/app#register" class="btn-price btn-price-primary" onclick="return handlePricingClick('professional')">Start Free Trial</a>
             </div>
             <div class="price-card">
                 <h3>Shop</h3>
@@ -146,9 +146,31 @@
                     <li>API access</li>
                     <li>Dedicated support</li>
                 </ul>
-                <a href="/app#register" class="btn-price btn-price-outline">Start Free Trial</a>
+                <a href="/app#register" class="btn-price btn-price-outline" onclick="return handlePricingClick('shop')">Start Free Trial</a>
             </div>
         </div>
+        <script>
+        function handlePricingClick(tier) {
+            var token = localStorage.getItem('access_token');
+            if (!token) return true; // Not logged in — follow href to /app#register
+            // Logged in — create checkout session
+            fetch('/api/stripe/create-checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({
+                    tier: tier,
+                    success_url: window.location.origin + '/app?checkout=success',
+                    cancel_url: window.location.origin + '/app?checkout=cancelled',
+                }),
+            }).then(function(r) { return r.json(); }).then(function(data) {
+                if (data.url) window.location.href = data.url;
+                else window.location.href = '/app#register';
+            }).catch(function() {
+                window.location.href = '/app#register';
+            });
+            return false; // Prevent default href
+        }
+        </script>
     </section>
 
     <!-- Footer -->

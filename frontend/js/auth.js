@@ -94,6 +94,74 @@ const Auth = {
         document.body.insertBefore(banner, document.body.firstChild);
     },
 
+    renderUpgradeBanner() {
+        // Remove existing upgrade banner
+        const existing = document.getElementById('upgrade-banner');
+        if (existing) existing.remove();
+
+        if (!this.currentUser) return;
+        // Don't show if demo (demo banner handles that)
+        if (this.demoStatus && this.demoStatus.is_demo) return;
+
+        const tier = this.currentUser.tier || 'free';
+        const subStatus = this.currentUser.subscription_status || 'trial';
+
+        // Show banner for free or trial users (not paid subscribers or beta invite users)
+        if (tier === 'free' && subStatus !== 'active') {
+            const banner = document.createElement('div');
+            banner.id = 'upgrade-banner';
+            banner.className = 'upgrade-banner';
+            banner.innerHTML = `
+                <span>You're on the free plan (1 quote).</span>
+                <a href="#" onclick="Auth.startCheckout('starter');return false;">Upgrade to unlock more quotes &rarr;</a>
+            `;
+            document.body.insertBefore(banner, document.body.firstChild);
+        } else if (subStatus === 'past_due') {
+            const banner = document.createElement('div');
+            banner.id = 'upgrade-banner';
+            banner.className = 'upgrade-banner upgrade-banner-warning';
+            banner.innerHTML = `
+                <span>Payment past due &mdash; update your billing to continue quoting.</span>
+                <a href="#" onclick="Auth.openBillingPortal();return false;">Update Billing &rarr;</a>
+            `;
+            document.body.insertBefore(banner, document.body.firstChild);
+        }
+    },
+
+    async startCheckout(tier) {
+        try {
+            const resp = await fetch('/api/stripe/create-checkout', {
+                method: 'POST',
+                headers: API.headers(),
+                body: JSON.stringify({
+                    tier: tier,
+                    success_url: window.location.origin + '/app?checkout=success',
+                    cancel_url: window.location.origin + '/app?checkout=cancelled',
+                }),
+            });
+            const data = await resp.json();
+            if (data.url) {
+                window.location.href = data.url;
+            }
+        } catch (e) {
+            console.error('Checkout failed:', e);
+        }
+    },
+
+    async openBillingPortal() {
+        try {
+            const resp = await fetch('/api/stripe/portal', {
+                headers: API.headers(),
+            });
+            const data = await resp.json();
+            if (data.url) {
+                window.location.href = data.url;
+            }
+        } catch (e) {
+            console.error('Portal failed:', e);
+        }
+    },
+
     showRegisterFromDemo() {
         App.showView('auth');
         setTimeout(() => Auth.showTab('register'), 50);
@@ -277,9 +345,36 @@ const Auth = {
                     </div>
                 </div>
 
+                ${this._renderPlanSection(u)}
+
                 <div class="profile-actions">
                     <button class="btn btn-primary" onclick="Auth.saveProfile()">Save & Continue</button>
                     <button class="btn btn-ghost" onclick="App.showView('quote')">Skip for Now &rarr;</button>
+                </div>
+            </div>
+        `;
+    },
+
+    _renderPlanSection(u) {
+        const tier = (u.tier || 'free').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const status = u.subscription_status || 'trial';
+        const hasBilling = u.has_billing;
+
+        let statusLabel = status;
+        if (status === 'active') statusLabel = 'Active';
+        else if (status === 'trial') statusLabel = 'Trial';
+        else if (status === 'past_due') statusLabel = 'Past Due';
+        else if (status === 'cancelled') statusLabel = 'Cancelled';
+
+        return `
+            <div class="plan-section">
+                <h3>Your Plan</h3>
+                <p class="plan-info">
+                    <strong>${tier}</strong> &mdash; ${statusLabel}
+                </p>
+                <div class="plan-actions">
+                    ${hasBilling ? '<button class="btn btn-secondary btn-sm" onclick="Auth.openBillingPortal()">Manage Billing</button>' : ''}
+                    ${tier === 'Free' ? '<button class="btn btn-accent btn-sm" onclick="Auth.startCheckout(\'starter\')">Upgrade</button>' : ''}
                 </div>
             </div>
         `;

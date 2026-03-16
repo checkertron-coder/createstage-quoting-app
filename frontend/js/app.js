@@ -18,9 +18,20 @@ const App = {
         this._setupNav();
 
         if (isAuth) {
+            // Handle return from Stripe checkout
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('checkout') === 'success') {
+                // Refresh user data to pick up new tier
+                try { Auth.currentUser = await API.getMe(); } catch(e) {}
+                history.replaceState(null, '', '/app');
+            } else if (params.get('checkout') === 'cancelled') {
+                history.replaceState(null, '', '/app');
+            }
+
             this.showView('quote');
-            // Show demo banner if applicable
+            // Show demo banner or upgrade banner
             Auth.renderDemoBanner();
+            Auth.renderUpgradeBanner();
         } else {
             this.showView('auth');
         }
