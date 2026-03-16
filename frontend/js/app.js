@@ -19,6 +19,8 @@ const App = {
 
         if (isAuth) {
             this.showView('quote');
+            // Show demo banner if applicable
+            Auth.renderDemoBanner();
         } else {
             this.showView('auth');
         }

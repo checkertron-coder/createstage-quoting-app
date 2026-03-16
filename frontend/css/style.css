@@ -196,6 +196,28 @@ body {
 .terms-checkbox a { color: var(--accent); text-decoration: none; }
 .terms-checkbox a:hover { text-decoration: underline; }
 
+/* --- Demo Banner --- */
+.demo-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 10px 20px;
+    background: #1e40af;
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+}
+.demo-banner a {
+    color: #93c5fd;
+    text-decoration: none;
+    font-weight: 600;
+}
+.demo-banner a:hover { text-decoration: underline; }
+.demo-banner-expired {
+    background: var(--error);
+}
+
 /* --- Profile View --- */
 .profile-card {
     max-width: 600px;

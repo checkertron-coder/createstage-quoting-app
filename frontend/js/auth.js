@@ -1,16 +1,26 @@
 /**
- * Auth UI — login, register, profile setup.
- * Guest access removed in P53. All users must register.
+ * Auth UI — login, register, profile setup, demo mode.
+ * P53: Registration with invite codes. P53B: Demo magic links, passwordless beta.
  */
 
 const Auth = {
     currentUser: null,
+    demoStatus: null, // { is_demo, quotes_remaining, max_quotes, demo_token }
 
     async init() {
         API.init();
+
+        // Check for demo token in URL (e.g., /demo/abc123)
+        const demoMatch = window.location.pathname.match(/^\/demo\/(.+)$/);
+        if (demoMatch) {
+            const redeemed = await this._redeemDemo(demoMatch[1]);
+            if (redeemed) return true;
+        }
+
         if (API.isAuthenticated()) {
             try {
                 this.currentUser = await API.getMe();
+                await this._checkDemoStatus();
                 return true;
             } catch (e) {
                 API.clearTokens();
@@ -18,6 +28,75 @@ const Auth = {
             }
         }
         return false;
+    },
+
+    async _redeemDemo(token) {
+        try {
+            const resp = await fetch(`/api/auth/redeem-demo?token=${encodeURIComponent(token)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
+            if (!resp.ok) return false;
+            const data = await resp.json();
+            API.setTokens(data.access_token, data.refresh_token);
+            this.currentUser = data.user;
+            // Store demo token for upgrade flow
+            localStorage.setItem('demo_token', token);
+            await this._checkDemoStatus();
+            // Replace URL to /app (clean up demo token from address bar)
+            history.replaceState(null, '', '/app');
+            return true;
+        } catch (e) {
+            return false;
+        }
+    },
+
+    async _checkDemoStatus() {
+        try {
+            const resp = await fetch('/api/auth/demo-status', {
+                headers: API.headers(),
+            });
+            if (resp.ok) {
+                this.demoStatus = await resp.json();
+            }
+        } catch (e) {
+            // Non-critical
+        }
+    },
+
+    renderDemoBanner() {
+        // Remove existing banner if any
+        const existing = document.getElementById('demo-banner');
+        if (existing) existing.remove();
+
+        if (!this.demoStatus || !this.demoStatus.is_demo) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'demo-banner';
+        banner.className = 'demo-banner';
+
+        const remaining = this.demoStatus.quotes_remaining;
+        const max = this.demoStatus.max_quotes;
+
+        if (remaining <= 0) {
+            banner.innerHTML = `
+                <span>Demo limit reached</span>
+                <a href="/app#register" onclick="Auth.showRegisterFromDemo();return false;">Register for full access &rarr;</a>
+            `;
+            banner.classList.add('demo-banner-expired');
+        } else {
+            banner.innerHTML = `
+                <span>Demo Mode &mdash; ${remaining} of ${max} quotes remaining</span>
+                <a href="/app#register" onclick="Auth.showRegisterFromDemo();return false;">Register for full access &rarr;</a>
+            `;
+        }
+
+        document.body.insertBefore(banner, document.body.firstChild);
+    },
+
+    showRegisterFromDemo() {
+        App.showView('auth');
+        setTimeout(() => Auth.showTab('register'), 50);
     },
 
     renderAuthView() {
@@ -62,11 +141,11 @@ const Auth = {
                         <div class="auth-terms">
                             <label class="terms-checkbox">
                                 <input type="checkbox" id="reg-terms">
-                                <span>I agree to the <a href="/terms" target="_blank">Terms of Service</a> and <a href="/nda" target="_blank">Non-Disclosure Agreement</a></span>
+                                <span>I agree to the <a href="/terms" target="_blank">Terms of Service</a></span>
                             </label>
                         </div>
                         <div class="auth-buttons">
-                            <button class="btn btn-primary btn-full" onclick="Auth.handleRegister()">Create Account</button>
+                            <button class="btn btn-primary btn-full" onclick="Auth.handleRegister()">Get Started</button>
                         </div>
                         <p class="auth-hint">Already have an account? <a href="#" onclick="Auth.showTab('login');return false;">Log in here</a></p>
                     </div>
@@ -74,10 +153,25 @@ const Auth = {
             </div>
         `;
 
-        // Bind invite code validation
+        // Bind invite code validation + password toggle
         const codeInput = document.getElementById('reg-invite-code');
         if (codeInput) {
             codeInput.addEventListener('blur', () => Auth.validateInviteCode());
+            codeInput.addEventListener('input', () => Auth._updatePasswordRequirement());
+        }
+    },
+
+    _updatePasswordRequirement() {
+        const codeInput = document.getElementById('reg-invite-code');
+        const passInput = document.getElementById('reg-password');
+        if (!codeInput || !passInput) return;
+
+        if (codeInput.value.trim()) {
+            passInput.placeholder = 'Set a password (optional — you can do this later)';
+            passInput.required = false;
+        } else {
+            passInput.placeholder = 'Password (min 8 characters)';
+            passInput.required = true;
         }
     },
 
@@ -165,6 +259,12 @@ const Auth = {
                         Shop Address
                         <input type="text" id="prof-address" value="${u.shop_address || ''}" placeholder="123 Industrial Ave, Chicago IL">
                     </label>
+                    ${u.is_provisional ? `
+                    <label class="form-label full-width">
+                        Set Password
+                        <input type="password" id="prof-password" placeholder="Set a password for your account" autocomplete="new-password">
+                    </label>
+                    ` : ''}
                     <div class="form-label full-width">
                         Shop Logo
                         <div class="logo-upload-section">
@@ -201,6 +301,7 @@ const Auth = {
         try {
             const data = await API.login(email, password);
             this.currentUser = data.user;
+            await this._checkDemoStatus();
             App.showView('quote');
         } catch (e) {
             this.showError('auth-error', e.message);
@@ -213,13 +314,25 @@ const Auth = {
         const inviteCode = document.getElementById('reg-invite-code').value.trim();
         const termsChecked = document.getElementById('reg-terms').checked;
 
-        if (!email || !password) return this.showError('auth-error', 'Email and password required.');
-        if (password.length < 8) return this.showError('auth-error', 'Password must be at least 8 characters.');
-        if (!termsChecked) return this.showError('auth-error', 'You must agree to the Terms of Service and NDA to continue.');
+        if (!email) return this.showError('auth-error', 'Email is required.');
+        if (!inviteCode && (!password || password.length < 8)) {
+            return this.showError('auth-error', 'Password must be at least 8 characters.');
+        }
+        if (password && password.length > 0 && password.length < 8) {
+            return this.showError('auth-error', 'Password must be at least 8 characters.');
+        }
+        if (!termsChecked) return this.showError('auth-error', 'You must agree to the Terms of Service to continue.');
 
         try {
-            const data = await API.register(email, password, inviteCode, termsChecked);
+            // Include demo token if upgrading from demo
+            const demoToken = localStorage.getItem('demo_token');
+            const data = await API.register(email, password || null, inviteCode, termsChecked, demoToken);
             this.currentUser = data.user;
+            // Clear demo state on successful registration
+            localStorage.removeItem('demo_token');
+            this.demoStatus = null;
+            const demoBanner = document.getElementById('demo-banner');
+            if (demoBanner) demoBanner.remove();
             App.showView('profile');
         } catch (e) {
             this.showError('auth-error', e.message);
@@ -236,6 +349,19 @@ const Auth = {
             shop_email: document.getElementById('prof-email').value.trim() || null,
             shop_address: document.getElementById('prof-address').value.trim() || null,
         };
+
+        // Handle password set from profile (for provisional users)
+        const passInput = document.getElementById('prof-password');
+        if (passInput && passInput.value && passInput.value.length >= 8) {
+            // Set password via a separate register call to claim the account
+            try {
+                const currentEmail = this.currentUser.email;
+                await API.register(currentEmail, passInput.value, null, true, null);
+            } catch (e) {
+                // Ignore if account already claimed
+            }
+        }
+
         try {
             this.currentUser = await API.updateProfile(data);
             App.showView('quote');
@@ -276,7 +402,9 @@ const Auth = {
 
     logout() {
         API.clearTokens();
+        localStorage.removeItem('demo_token');
         this.currentUser = null;
+        this.demoStatus = null;
         // Redirect to landing page
         window.location.href = '/';
     },
