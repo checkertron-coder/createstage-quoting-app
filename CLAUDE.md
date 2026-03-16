@@ -28,6 +28,16 @@ Every prompt and every implementation follows this framework. No exceptions.
 - ❌ 16 numbered rules in an AI prompt — Opus drowns in noise, misses what matters
 - ❌ "For this test case..." — if it only works for one scenario, it's not a fix
 - ❌ Telling the AI what answer to produce — it'll parrot it back without understanding
+- ❌ Sweeping changes (10+ files) in a single session — compound errors, impossible to untangle (blast radius)
+- ❌ Agent running 5+ minutes without human review — stop, check, then continue
+- ❌ One massive AGENTS.md — "when everything is marked important, nothing is, and the file rots instantly" (Nate/Anthropic)
+
+### Session Discipline (from Nate's 5 Agent Management Skills)
+- **Save point before every prompt session.** `git add . && git commit -m "pre-P{N} save point"` BEFORE running the prompt. Non-negotiable.
+- **Fresh conversation per task.** Don't let a login fix drift into a dashboard redesign. Context window = whiteboard being erased from the left while you write on the right.
+- **30-message rule.** After ~30 back-and-forth messages, summarize where you are and start fresh. Agent isn't getting dumber — it's running out of room.
+- **Screenshots over paragraphs.** A screenshot uses a fraction of the context that three paragraphs of description use. Use them for UI bugs.
+- **Progressive disclosure.** CLAUDE.md is the primary doc. FAB_KNOWLEDGE.md, DECISIONS.md, PROMPT-XX files are cross-linked supplements. Don't pile everything into one file.
 
 ---
 
