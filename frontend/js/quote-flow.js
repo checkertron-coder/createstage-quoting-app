@@ -68,6 +68,33 @@ const QuoteFlow = {
             <div id="quote-step-results" class="quote-step" style="display:none"></div>
         `;
         this._initPhotoUpload();
+        // Restore last quote if user navigated away and came back
+        this._tryRestoreLastQuote();
+    },
+
+    async _tryRestoreLastQuote() {
+        if (this.quoteId) return; // Already have an active quote
+        try {
+            const savedId = localStorage.getItem('cq_last_quote_id');
+            if (!savedId) return;
+            const resp = await fetch(`/api/quotes/${savedId}/detail`, {
+                headers: API.headers(),
+            });
+            if (!resp.ok) { localStorage.removeItem('cq_last_quote_id'); return; }
+            const data = await resp.json();
+            if (data && data.outputs_json) {
+                this.quoteId = parseInt(savedId);
+                this.pricedQuote = data.outputs_json;
+                this._renderResults({
+                    quote_id: this.quoteId,
+                    quote_number: data.quote_number || '',
+                    priced_quote: data.outputs_json,
+                });
+                this._showStep('results');
+            }
+        } catch (e) {
+            // Non-critical — just show fresh describe step
+        }
     },
 
     _renderDescribeStep() {
@@ -553,6 +580,8 @@ const QuoteFlow = {
 
             this.quoteId = result.quote_id;
             this.pricedQuote = result.priced_quote;
+            // Persist quote ID so user can return after navigating away
+            try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
             this._renderResults(result);
             this._showStep('results');
         } catch (e) {
@@ -587,7 +616,7 @@ const QuoteFlow = {
                     <div class="results-actions-top">
                         ${isPreview ? `
                         <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Shop PDF</button>
-                        <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Client PDF</button>
+                        <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
                         <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Materials PDF</button>
                         <button class="btn btn-ghost btn-sm btn-locked" onclick="QuoteFlow._previewGate()">CSV</button>
                         ` : `
@@ -635,23 +664,34 @@ const QuoteFlow = {
                     </div>
                 ` : ''}
 
-                ${isPreview ? `<div class="preview-blur">` : ''}
+                <div class="${isPreview ? 'preview-limit-4 preview-blur-prices' : ''}">
                 ${this._renderSection('Materials', this._renderMaterialsTable(pq))}
+                </div>
+                <div class="${isPreview ? 'preview-limit-2 preview-blur-prices' : ''}">
                 ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq))}
-                ${pq.consumables && pq.consumables.length ? this._renderSection('Consumables', this._renderConsumablesTable(pq)) : ''}
-                ${isPreview ? `</div>` : ''}
+                </div>
+                ${pq.consumables && pq.consumables.length ? `
+                <div class="${isPreview ? 'preview-limit-2 preview-blur-prices' : ''}">
+                ${this._renderSection('Consumables', this._renderConsumablesTable(pq))}
+                </div>` : ''}
 
                 ${isPreview ? this._renderPreviewCTA() : ''}
 
-                ${isPreview ? `<div class="preview-blur">` : ''}
+                <div class="${isPreview ? 'preview-limit-4' : ''}">
                 ${pq.detailed_cut_list && pq.detailed_cut_list.length ? this._renderSection('Cut List', this._renderCutListTable(pq)) : ''}
+                </div>
+                <div class="${isPreview ? 'preview-limit-4' : ''}">
                 ${pq.build_instructions && pq.build_instructions.length
                     ? this._renderSection('Build Sequence', this._renderBuildInstructions(pq))
                     : this._renderBuildInstructionsRetry(pq)}
+                </div>
 
+                <div class="${isPreview ? 'preview-limit-4 preview-blur-prices' : ''}">
                 ${this._renderSection('Labor', this._renderLaborTable(pq))}
+                </div>
+                <div class="${isPreview ? 'preview-limit-2' : ''}">
                 ${this._renderSection('Finishing', this._renderFinishing(pq))}
-                ${isPreview ? `</div>` : ''}
+                </div>
 
                 <div class="totals-section">
                     ${isPreview ? '' : `
@@ -711,10 +751,10 @@ const QuoteFlow = {
 
                 <div class="results-footer">
                     ${isPreview ? `
-                    <button class="btn btn-primary" onclick="QuoteFlow._previewGate()">Shop PDF</button>
-                    <button class="btn btn-secondary" onclick="QuoteFlow._previewGate()">Client PDF</button>
-                    <button class="btn btn-secondary" onclick="QuoteFlow._previewGate()">Materials PDF</button>
-                    <button class="btn btn-ghost" onclick="QuoteFlow._previewGate()">CSV</button>
+                    <button class="btn btn-primary btn-locked" onclick="QuoteFlow._previewGate()">Shop PDF</button>
+                    <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
+                    <button class="btn btn-secondary btn-locked" onclick="QuoteFlow._previewGate()">Materials PDF</button>
+                    <button class="btn btn-ghost btn-locked" onclick="QuoteFlow._previewGate()">CSV</button>
                     ` : `
                     <button class="btn btn-primary" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
@@ -1326,7 +1366,7 @@ const QuoteFlow = {
     },
 
     downloadPdf(mode) {
-        if (this._isPreviewMode()) { this._previewGate(); return; }
+        if (this._isPreviewMode() && mode !== 'client') { this._previewGate(); return; }
         if (!this.quoteId) return;
         // For client PDF, require customer name
         if (mode === 'client') {
@@ -1428,6 +1468,7 @@ const QuoteFlow = {
         this.allQuestions = [];
         this._currentJobType = '';
         this.currentStep = 'describe';
+        try { localStorage.removeItem('cq_last_quote_id'); } catch (e) {}
         this.renderQuoteView();
     },
 
@@ -1453,22 +1494,20 @@ const QuoteFlow = {
         "Checking stock lengths...",
         "Optimizing your cut list...",
         "Arguing with the tape measure...",
-        "Counting sticks of 2x2...",
         "Squaring up the layout table...",
         "Sharpening the soapstone...",
-        "Dialing in the MIG welder...",
-        "Preheating the TIG torch...",
+        "If Lincoln could see us now...",
+        "Checking if it'll fit through the shop door...",
         "Flipping through the metals catalog...",
         "Doing math so you don't have to...",
         "Converting fractions to decimals (the hard part)...",
         "Double-checking the miter angles...",
-        "Looking up McMaster part numbers...",
-        "Estimating grinding disc usage...",
-        "Pricing out the powder coat...",
+        "Trying to remember where we put the level...",
+        "Asking the foreman for a second opinion...",
+        "Making coffee while the numbers crunch...",
         "Figuring out if it fits on a 20-footer...",
-        "Calculating concrete for the post holes...",
-        "Checking if the hinge pin will clear...",
-        "Running the numbers on shielding gas...",
+        "Reminding everyone to wear their safety glasses...",
+        "Drawing it out on the shop floor with soapstone...",
         "Sorting the BOM by profile...",
         "Making sure nobody forgot the base plates...",
         "Adding hardware — yes, the bolts too...",
@@ -1476,6 +1515,8 @@ const QuoteFlow = {
         "Rounding up to the next full stick...",
         "Cross-referencing supplier pricing...",
         "Building your fabrication sequence...",
+        "Wondering who left the grinder plugged in...",
+        "Checking if the quote is heavy enough to weld...",
         "Almost done — just checking the math one more time...",
         "Generating a quote that would make your accountant proud...",
     ],

@@ -250,11 +250,28 @@ body {
 .plan-actions { display: flex; gap: 8px; }
 
 /* --- Preview Mode (Free Tier) --- */
-.preview-blur {
+/* Partial row blur: first N rows visible, rest blurred */
+.preview-limit-4 .data-table tbody tr:nth-child(n+5),
+.preview-limit-4 .build-steps .build-step:nth-child(n+5) {
     filter: blur(5px);
     user-select: none;
     pointer-events: none;
-    position: relative;
+}
+.preview-limit-2 .data-table tbody tr:nth-child(n+3) {
+    filter: blur(5px);
+    user-select: none;
+    pointer-events: none;
+}
+/* Blur price columns in visible rows */
+.preview-blur-prices .data-table td:last-child,
+.preview-blur-prices .data-table td:nth-last-child(2),
+.preview-blur-prices .data-table .subtotal-row td {
+    filter: blur(5px);
+    user-select: none;
+}
+.preview-blur-prices .data-table thead th:last-child,
+.preview-blur-prices .data-table thead th:nth-last-child(2) {
+    /* Keep headers readable */
 }
 .preview-price {
     filter: blur(6px);
