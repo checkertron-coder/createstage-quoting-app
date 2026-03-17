@@ -104,16 +104,16 @@ const Auth = {
         if (this.demoStatus && this.demoStatus.is_demo) return;
 
         const tier = this.currentUser.tier || 'free';
-        const subStatus = this.currentUser.subscription_status || 'trial';
+        const subStatus = this.currentUser.subscription_status || 'free';
 
-        // Show banner for free users (not paid subscribers or beta invite users)
+        // Show banner for free/trial users (not paid subscribers or beta invite users)
         if (tier === 'free' && subStatus !== 'active') {
             const banner = document.createElement('div');
             banner.id = 'upgrade-banner';
             banner.className = 'upgrade-banner';
             banner.innerHTML = `
-                <span>You're on the free plan (1 quote).</span>
-                <a href="/#pricing">Upgrade to unlock more quotes &rarr;</a>
+                <span>You're on the Free plan &mdash; 1 preview quote included.</span>
+                <a href="/#pricing">Subscribe to unlock full quotes &rarr;</a>
             `;
             document.body.insertBefore(banner, document.body.firstChild);
         } else if (subStatus === 'past_due') {
@@ -368,7 +368,7 @@ const Auth = {
 
         let statusLabel = status;
         if (status === 'active') statusLabel = 'Active';
-        else if (status === 'trial') statusLabel = 'Trial (14 days)';
+        else if (status === 'trial' || status === 'free') statusLabel = 'Free';
         else if (status === 'past_due') statusLabel = 'Past Due';
         else if (status === 'cancelled') statusLabel = 'Cancelled';
         else if (status === 'demo') statusLabel = 'Demo';

@@ -79,7 +79,7 @@ def test_webhook_checkout_completed(db):
         email="checkout@test.com",
         stripe_customer_id="cus_abc",
         tier="free",
-        subscription_status="trial",
+        subscription_status="free",
     )
     db.add(user)
     db.commit()
@@ -343,7 +343,7 @@ def test_beta_invite_gets_professional(client, db):
     assert resp.status_code == 200
     user_data = resp.json()["user"]
     assert user_data["tier"] == "professional"
-    assert user_data["subscription_status"] == "trial"
+    assert user_data["subscription_status"] == "active"
 
 
 # === 18. Free→paid→cancelled flow ===
@@ -354,7 +354,7 @@ def test_free_to_paid_to_cancelled(db):
         email="lifecycle@test.com",
         stripe_customer_id="cus_lifecycle",
         tier="free",
-        subscription_status="trial",
+        subscription_status="free",
     )
     db.add(user)
     db.commit()

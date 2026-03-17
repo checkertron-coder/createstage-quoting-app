@@ -10,7 +10,7 @@ Registration flow:
 
 import base64
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -116,7 +116,7 @@ def _user_to_response(user: models.User) -> dict:
         "rate_onsite": user.rate_onsite,
         "markup_default": user.markup_default,
         "tier": user.tier,
-        "subscription_status": getattr(user, "subscription_status", "trial"),
+        "subscription_status": getattr(user, "subscription_status", "free"),
         "trial_ends_at": (
             user.trial_ends_at.isoformat()
             if getattr(user, "trial_ends_at", None) else None
@@ -229,8 +229,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 else:
                     demo_user.tier = "free"
 
-                demo_user.trial_ends_at = datetime.utcnow() + timedelta(days=14)
-                demo_user.subscription_status = "trial"
+                demo_user.subscription_status = "active" if invite_code_record else "free"
                 if request.terms_accepted:
                     demo_user.terms_accepted_at = datetime.utcnow()
 
@@ -258,8 +257,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             else:
                 existing.tier = "free"
 
-            existing.trial_ends_at = datetime.utcnow() + timedelta(days=14)
-            existing.subscription_status = "trial"
+            existing.subscription_status = "active" if invite_code_record else "free"
 
             if request.terms_accepted:
                 existing.terms_accepted_at = datetime.utcnow()
@@ -288,8 +286,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         is_provisional=not has_password,
         is_verified=False,
         tier=tier,
-        subscription_status="trial",
-        trial_ends_at=datetime.utcnow() + timedelta(days=14),
+        subscription_status="active" if invite_code_record else "free",
         invite_code_used=invite_code_record.code if invite_code_record else None,
         terms_accepted_at=datetime.utcnow() if request.terms_accepted else None,
     )
@@ -590,7 +587,10 @@ def check_quote_access(
         return current_user
 
     # Past due or cancelled — no new quotes
-    sub_status = getattr(current_user, "subscription_status", "trial") or "trial"
+    sub_status = getattr(current_user, "subscription_status", "free") or "free"
+    # Treat legacy "trial" status as "free"
+    if sub_status == "trial":
+        sub_status = "free"
     if sub_status == "past_due":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

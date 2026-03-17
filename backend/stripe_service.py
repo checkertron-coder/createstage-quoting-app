@@ -85,7 +85,6 @@ def create_checkout_session(
         line_items=[{"price": price_id, "quantity": 1}],
         success_url=success_url,
         cancel_url=cancel_url,
-        subscription_data={"trial_period_days": 14},
     )
     logger.info("Created checkout session for customer %s, tier %s", customer_id, tier)
     return session.url

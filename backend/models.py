@@ -108,7 +108,7 @@ class User(Base):
     rate_onsite = Column(Float, default=145.00)
     markup_default = Column(Integer, default=15)
     tier = Column(String, default="free")  # 'free' | 'starter' | 'professional' | 'shop'
-    subscription_status = Column(String, default="trial")  # 'trial' | 'active' | 'past_due' | 'cancelled'
+    subscription_status = Column(String, default="free")  # 'free' | 'active' | 'past_due' | 'cancelled'
     trial_ends_at = Column(DateTime, nullable=True)
     invite_code_used = Column(String, nullable=True)
     stripe_customer_id = Column(String, nullable=True)

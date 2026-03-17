@@ -59,14 +59,24 @@ def db():
 
 
 @pytest.fixture
-def auth_headers(client):
-    """Register a test user and return auth headers."""
+def auth_headers(client, db):
+    """Register a test user and return auth headers.
+
+    Sets user to professional tier so pipeline tests aren't blocked by
+    the free tier 1-quote limit.
+    """
     response = client.post("/api/auth/register", json={
         "email": "test@fabricator.com",
         "password": "strongpassword123",
     })
     assert response.status_code == 200
     token = response.json()["access_token"]
+    # Promote to professional so pipeline tests can run multiple quotes
+    from backend import models
+    user = db.query(models.User).filter(models.User.email == "test@fabricator.com").first()
+    user.tier = "professional"
+    user.subscription_status = "active"
+    db.commit()
     return {"Authorization": f"Bearer {token}"}
 
 

@@ -77,12 +77,12 @@ def test_guest_returns_410(client):
 # === 2. Registration without invite code → free tier ===
 
 def test_register_no_code_gets_free_tier(client):
-    """Register without invite code → free tier, trial status."""
+    """Register without invite code → free tier, free status."""
     resp = _register(client)
     assert resp.status_code == 200
     user = resp.json()["user"]
     assert user["tier"] == "free"
-    assert user["subscription_status"] == "trial"
+    assert user["subscription_status"] == "free"
 
 
 # === 3. Registration with valid invite code → professional tier ===

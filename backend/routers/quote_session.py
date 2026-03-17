@@ -832,6 +832,9 @@ def price_quote(
         session.stage = "output"
         session.status = "complete"
         session.updated_at = datetime.utcnow()
+        # Increment quote counter for tier quota enforcement
+        current_user.quotes_this_month = (current_user.quotes_this_month or 0) + 1
+
         flag_modified(session, "params_json")
         db.commit()
 

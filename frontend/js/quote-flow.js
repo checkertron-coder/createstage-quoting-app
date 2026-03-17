@@ -560,23 +560,42 @@ const QuoteFlow = {
         }
     },
 
+    _isPreviewMode() {
+        const user = Auth.currentUser;
+        if (!user) return true;
+        const tier = user.tier || 'free';
+        const status = user.subscription_status || 'free';
+        // Free/trial users without active subscription see preview
+        if (tier === 'free' && status !== 'active') return true;
+        if (status === 'trial' && tier === 'free') return true;
+        return false;
+    },
+
     _renderResults(result) {
         const el = document.getElementById('quote-step-results');
         const pq = result.priced_quote;
         const qn = result.quote_number || '';
+        const isPreview = this._isPreviewMode();
 
         el.innerHTML = `
-            <div class="results-card">
+            <div class="results-card ${isPreview ? 'preview-mode' : ''}">
                 <div class="results-header">
                     <div>
                         <h2>Quote #${qn}</h2>
                         <p class="results-meta">${JOB_TYPES[pq.job_type] || pq.job_type} &middot; ${new Date(pq.created_at).toLocaleDateString()}</p>
                     </div>
                     <div class="results-actions-top">
+                        ${isPreview ? `
+                        <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Shop PDF</button>
+                        <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Client PDF</button>
+                        <button class="btn btn-secondary btn-sm btn-locked" onclick="QuoteFlow._previewGate()">Materials PDF</button>
+                        <button class="btn btn-ghost btn-sm btn-locked" onclick="QuoteFlow._previewGate()">CSV</button>
+                        ` : `
                         <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
                         <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
                         <button class="btn btn-secondary btn-sm" onclick="QuoteFlow.downloadPdf('materials')">Materials PDF</button>
                         <button class="btn btn-ghost btn-sm" onclick="QuoteFlow.downloadCsv()">Materials CSV</button>
+                        `}
                         <button class="btn btn-ghost btn-sm" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                     </div>
                 </div>
@@ -616,10 +635,15 @@ const QuoteFlow = {
                     </div>
                 ` : ''}
 
+                ${isPreview ? `<div class="preview-blur">` : ''}
                 ${this._renderSection('Materials', this._renderMaterialsTable(pq))}
                 ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq))}
                 ${pq.consumables && pq.consumables.length ? this._renderSection('Consumables', this._renderConsumablesTable(pq)) : ''}
+                ${isPreview ? `</div>` : ''}
 
+                ${isPreview ? this._renderPreviewCTA() : ''}
+
+                ${isPreview ? `<div class="preview-blur">` : ''}
                 ${pq.detailed_cut_list && pq.detailed_cut_list.length ? this._renderSection('Cut List', this._renderCutListTable(pq)) : ''}
                 ${pq.build_instructions && pq.build_instructions.length
                     ? this._renderSection('Build Sequence', this._renderBuildInstructions(pq))
@@ -627,8 +651,10 @@ const QuoteFlow = {
 
                 ${this._renderSection('Labor', this._renderLaborTable(pq))}
                 ${this._renderSection('Finishing', this._renderFinishing(pq))}
+                ${isPreview ? `</div>` : ''}
 
                 <div class="totals-section">
+                    ${isPreview ? '' : `
                     <div class="rate-input-section">
                         <label class="rate-label">Shop Rate:</label>
                         <div class="rate-input-wrap">
@@ -639,17 +665,19 @@ const QuoteFlow = {
                             <span class="rate-suffix">/hr</span>
                         </div>
                     </div>
+                    `}
 
                     <div class="totals-grid">
-                        <div class="total-row"><span>Materials</span><span id="material-subtotal-amount">${this._fmt(pq.material_subtotal)}</span></div>
-                        <div class="total-row"><span>Hardware</span><span id="hardware-subtotal-amount">${this._fmt(pq.hardware_subtotal)}</span></div>
-                        <div class="total-row"><span>Consumables</span><span id="consumable-subtotal-amount">${this._fmt(pq.consumable_subtotal)}</span></div>
-                        ${(pq.shop_stock_subtotal || 0) > 0 ? `<div class="total-row"><span>Shop Stock</span><span id="shop-stock-subtotal-amount">${this._fmt(pq.shop_stock_subtotal)}</span></div>` : ''}
-                        <div class="total-row"><span>Labor</span><span id="labor-subtotal-amount">${this._fmt(pq.labor_subtotal)}</span></div>
-                        <div class="total-row"><span>Finishing</span><span id="finishing-subtotal-amount">${this._fmt(pq.finishing_subtotal)}</span></div>
-                        <div class="total-row subtotal"><span>Subtotal</span><span id="subtotal-amount">${this._fmt(pq.subtotal)}</span></div>
+                        <div class="total-row"><span>Materials</span><span id="material-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.material_subtotal)}</span></div>
+                        <div class="total-row"><span>Hardware</span><span id="hardware-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.hardware_subtotal)}</span></div>
+                        <div class="total-row"><span>Consumables</span><span id="consumable-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.consumable_subtotal)}</span></div>
+                        ${(pq.shop_stock_subtotal || 0) > 0 ? `<div class="total-row"><span>Shop Stock</span><span id="shop-stock-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.shop_stock_subtotal)}</span></div>` : ''}
+                        <div class="total-row"><span>Labor</span><span id="labor-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.labor_subtotal)}</span></div>
+                        <div class="total-row"><span>Finishing</span><span id="finishing-subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.finishing_subtotal)}</span></div>
+                        <div class="total-row subtotal"><span>Subtotal</span><span id="subtotal-amount">${isPreview ? '<span class="preview-price">$---</span>' : this._fmt(pq.subtotal)}</span></div>
                     </div>
 
+                    ${isPreview ? '' : `
                     <div class="markup-section">
                         <label class="markup-label">Markup:</label>
                         <div class="markup-buttons">
@@ -659,10 +687,11 @@ const QuoteFlow = {
                             `).join('')}
                         </div>
                     </div>
+                    `}
 
                     <div class="grand-total">
-                        <span>QUOTE TOTAL</span>
-                        <span id="grand-total-amount">${this._fmt(pq.total)}</span>
+                        <span>ESTIMATED RANGE</span>
+                        <span id="grand-total-amount">${isPreview ? this._fmtRange(pq.total) : this._fmt(pq.total)}</span>
                     </div>
                 </div>
 
@@ -681,10 +710,17 @@ const QuoteFlow = {
                 ` : ''}
 
                 <div class="results-footer">
+                    ${isPreview ? `
+                    <button class="btn btn-primary" onclick="QuoteFlow._previewGate()">Shop PDF</button>
+                    <button class="btn btn-secondary" onclick="QuoteFlow._previewGate()">Client PDF</button>
+                    <button class="btn btn-secondary" onclick="QuoteFlow._previewGate()">Materials PDF</button>
+                    <button class="btn btn-ghost" onclick="QuoteFlow._previewGate()">CSV</button>
+                    ` : `
                     <button class="btn btn-primary" onclick="QuoteFlow.downloadPdf()">Shop PDF</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('client')">Client PDF</button>
                     <button class="btn btn-secondary" onclick="QuoteFlow.downloadPdf('materials')">Materials PDF</button>
                     <button class="btn btn-ghost" onclick="QuoteFlow.downloadCsv()">Materials CSV</button>
+                    `}
                     <button class="btn btn-secondary" onclick="QuoteFlow.newQuote()">+ New Quote</button>
                 </div>
             </div>
@@ -1290,6 +1326,7 @@ const QuoteFlow = {
     },
 
     downloadPdf(mode) {
+        if (this._isPreviewMode()) { this._previewGate(); return; }
         if (!this.quoteId) return;
         // For client PDF, require customer name
         if (mode === 'client') {
@@ -1307,6 +1344,7 @@ const QuoteFlow = {
     },
 
     downloadCsv() {
+        if (this._isPreviewMode()) { this._previewGate(); return; }
         if (!this.quoteId) return;
         // CSV downloads as a file — use same URL pattern with materials-csv mode
         const url = API.getPdfUrl(this.quoteId, 'materials-csv');
@@ -1502,6 +1540,27 @@ const QuoteFlow = {
         } catch {
             return '$0.00';
         }
+    },
+
+    _fmtRange(total) {
+        const t = parseFloat(total) || 0;
+        const lo = Math.round(t * 0.80 / 100) * 100;
+        const hi = Math.round(t * 1.20 / 100) * 100;
+        return '$' + lo.toLocaleString() + ' \u2013 $' + hi.toLocaleString();
+    },
+
+    _previewGate() {
+        window.location.href = '/#pricing';
+    },
+
+    _renderPreviewCTA() {
+        return `
+            <div class="preview-upgrade-cta">
+                <h3>Want the full quote?</h3>
+                <p>Subscribe to unlock exact pricing, complete cut lists, build instructions, and professional PDF downloads.</p>
+                <a href="/#pricing" class="btn btn-primary">Subscribe &mdash; Starting at $49/mo</a>
+            </div>
+        `;
     },
 };
 
