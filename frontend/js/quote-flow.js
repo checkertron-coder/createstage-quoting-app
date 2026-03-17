@@ -82,13 +82,14 @@ const QuoteFlow = {
             });
             if (!resp.ok) { localStorage.removeItem('cq_last_quote_id'); return; }
             const data = await resp.json();
-            if (data && data.outputs_json) {
+            const outputs = data.outputs || data.outputs_json;
+            if (data && outputs) {
                 this.quoteId = parseInt(savedId);
-                this.pricedQuote = data.outputs_json;
+                this.pricedQuote = outputs;
                 this._renderResults({
                     quote_id: this.quoteId,
                     quote_number: data.quote_number || '',
-                    priced_quote: data.outputs_json,
+                    priced_quote: outputs,
                 });
                 this._showStep('results');
             }
@@ -1662,11 +1663,13 @@ const QuoteHistory = {
             if (detail.outputs) {
                 QuoteFlow.quoteId = quoteId;
                 QuoteFlow.pricedQuote = detail.outputs;
+                QuoteFlow.currentStep = 'results'; // Prevent showView from re-rendering
+                App.showView('quote');
                 QuoteFlow._renderResults({
+                    quote_id: quoteId,
                     quote_number: detail.quote_number,
                     priced_quote: detail.outputs,
                 });
-                App.showView('quote');
                 QuoteFlow._showStep('results');
             }
         } catch (e) {
