@@ -444,7 +444,7 @@ def generate_client_scope(job_type, fields, job_description=""):
     prompt += "\nWrite the scope now. No heading, no bullet points — just paragraphs."
 
     try:
-        result = call_fast(prompt, json_mode=False)
+        result = call_fast(prompt, json_mode=False, timeout=10)
         if result and len(result.strip()) > 20:
             return result.strip()
     except Exception:

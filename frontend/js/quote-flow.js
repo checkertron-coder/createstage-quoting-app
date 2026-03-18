@@ -1369,16 +1369,6 @@ const QuoteFlow = {
     downloadPdf(mode) {
         if (this._isPreviewMode() && mode !== 'client') { this._previewGate(); return; }
         if (!this.quoteId) return;
-        // For client PDF, require customer name
-        if (mode === 'client') {
-            const nameInput = document.getElementById('customer-name');
-            if (nameInput && !nameInput.value.trim()) {
-                nameInput.focus();
-                nameInput.style.borderColor = 'var(--error)';
-                setTimeout(() => { nameInput.style.borderColor = ''; }, 3000);
-                return;
-            }
-        }
         // Open PDF in new tab with auth token as query param
         const url = API.getPdfUrl(this.quoteId, mode || null);
         window.open(url, '_blank');
