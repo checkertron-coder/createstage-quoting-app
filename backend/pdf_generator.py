@@ -462,6 +462,27 @@ class QuotePDF(FPDF):
         self.shop_info = shop_info
         self.set_auto_page_break(auto=True, margin=20)
 
+    def cell(self, *args, **kwargs):
+        """Override to sanitize text through _safe()."""
+        args = list(args)
+        # text is the 4th positional arg (w, h, text, ...) or named 'text'/'txt'
+        if len(args) > 2 and isinstance(args[2], str):
+            args[2] = _safe(args[2])
+        for key in ("text", "txt"):
+            if key in kwargs and isinstance(kwargs[key], str):
+                kwargs[key] = _safe(kwargs[key])
+        return super().cell(*args, **kwargs)
+
+    def multi_cell(self, *args, **kwargs):
+        """Override to sanitize text through _safe()."""
+        args = list(args)
+        if len(args) > 2 and isinstance(args[2], str):
+            args[2] = _safe(args[2])
+        for key in ("text", "txt"):
+            if key in kwargs and isinstance(kwargs[key], str):
+                kwargs[key] = _safe(kwargs[key])
+        return super().multi_cell(*args, **kwargs)
+
     def header(self):
         pass  # We handle headers manually per section
 
