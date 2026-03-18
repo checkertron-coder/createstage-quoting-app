@@ -104,11 +104,14 @@ class TestAIScope:
         assert callable(generate_client_scope)
 
     def test_generate_client_scope_fallback(self):
-        """When AI unavailable, falls back to job_description."""
+        """When AI unavailable, falls back to job summary (not raw description)."""
         from backend.pdf_generator import generate_client_scope
         with patch("backend.claude_client.call_fast", side_effect=Exception("unavailable")):
-            result = generate_client_scope("cantilever_gate", {}, "Build a 10ft gate")
-        assert result == "Build a 10ft gate"
+            result, is_ai = generate_client_scope("cantilever_gate", {}, "Build a 10ft gate")
+        # Should return summary (not raw description) and is_ai=False
+        assert not is_ai
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_client_pdf_accepts_scope_param(self):
         """generate_client_pdf should accept client_scope parameter."""

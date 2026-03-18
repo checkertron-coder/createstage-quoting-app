@@ -132,13 +132,14 @@ def download_pdf(
                 try:
                     fields = (inputs or {}).get("fields", {})
                     job_desc = outputs.get("job_description", "") or fields.get("description", "")
-                    client_scope = generate_client_scope(
+                    scope_text, is_ai = generate_client_scope(
                         outputs.get("job_type", ""),
                         fields,
                         job_desc,
                     )
-                    # Cache in outputs_json for future requests
-                    if client_scope:
+                    client_scope = scope_text
+                    # Only cache AI-generated scopes — fallbacks should retry next time
+                    if is_ai and client_scope:
                         from sqlalchemy.orm.attributes import flag_modified
                         outputs["_client_scope"] = client_scope
                         quote.outputs_json = outputs

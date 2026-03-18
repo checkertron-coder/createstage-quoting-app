@@ -406,13 +406,14 @@ def generate_client_scope(job_type, fields, job_description=""):
     """
     Generate a customer-friendly scope of work description using AI.
 
-    Returns 2-3 paragraphs suitable for a client-facing proposal.
-    Falls back to job description if AI is unavailable.
+    Returns a tuple: (scope_text, is_ai_generated)
+    - is_ai_generated=True means AI wrote it (safe to cache)
+    - is_ai_generated=False means it's a fallback (do NOT cache)
     """
     try:
         from .claude_client import call_fast
     except ImportError:
-        return job_description or ""
+        return generate_job_summary(job_type, fields), False
 
     jt_display = JOB_TYPE_NAMES.get(job_type, job_type.replace("_", " ").title())
     summary = generate_job_summary(job_type, fields)
@@ -444,13 +445,13 @@ def generate_client_scope(job_type, fields, job_description=""):
     prompt += "\nWrite the scope now. No heading, no bullet points — just paragraphs."
 
     try:
-        result = call_fast(prompt, json_mode=False, timeout=10)
+        result = call_fast(prompt, json_mode=False, timeout=25)
         if result and len(result.strip()) > 20:
-            return result.strip()
+            return result.strip(), True
     except Exception:
         logger.debug("AI scope generation failed — using fallback")
 
-    return job_description or summary
+    return summary, False
 
 
 class QuotePDF(FPDF):
