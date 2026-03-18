@@ -568,7 +568,7 @@ def generate_quote_pdf(
     pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
 
     # Client / customer info
-    customer = priced_quote.get("_customer", {})
+    customer = priced_quote.get("_customer") or {}
     client_name = customer.get("name", "") or priced_quote.get("client_name", "")
     if client_name:
         pdf.ln(2)
@@ -947,7 +947,7 @@ def generate_quote_pdf(
     pdf.ln()
 
     # Markup
-    markup_pct = priced_quote.get("selected_markup_pct", 0)
+    markup_pct = priced_quote.get("selected_markup_pct") or 0
     if markup_pct > 0:
         markup_amount = round(subtotal * markup_pct / 100.0, 2)
         pdf.set_font("Helvetica", "", 10)
@@ -1073,7 +1073,7 @@ def generate_client_pdf(
     pdf.cell(0, 5, "Valid for: 7 days", new_x="LMARGIN", new_y="NEXT")
 
     # Client / customer info
-    customer = priced_quote.get("_customer", {})
+    customer = priced_quote.get("_customer") or {}
     client_name = customer.get("name", "") or priced_quote.get("client_name", "")
     if client_name:
         pdf.ln(2)
@@ -1134,7 +1134,7 @@ def generate_client_pdf(
     pdf.section_header("PRICE SUMMARY")
     pdf.set_font("Helvetica", "", 10)
 
-    markup_pct = priced_quote.get("selected_markup_pct", 0)
+    markup_pct = priced_quote.get("selected_markup_pct") or 0
     multiplier = 1 + markup_pct / 100.0
 
     mat_hw_sub = round(
