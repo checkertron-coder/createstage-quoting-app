@@ -1366,11 +1366,15 @@ const QuoteFlow = {
         }
     },
 
-    downloadPdf(mode) {
+    async downloadPdf(mode) {
         if (this._isPreviewMode() && mode !== 'client') { this._previewGate(); return; }
         if (!this.quoteId) {
             alert('No quote ID — please run the quote pipeline first.');
             return;
+        }
+        // Refresh access token before opening — window.open can't auto-refresh
+        if (API._refreshToken) {
+            await API._tryRefresh();
         }
         if (!API._accessToken) {
             alert('Session expired — please log in again.');
@@ -1380,18 +1384,23 @@ const QuoteFlow = {
         const url = API.getPdfUrl(this.quoteId, mode || null);
         const win = window.open(url, '_blank');
         if (!win) {
-            // Popup blocked — fall back to same-tab navigation
             window.location.href = url;
         }
     },
 
-    downloadCsv() {
+    async downloadCsv() {
         if (this._isPreviewMode()) { this._previewGate(); return; }
         if (!this.quoteId) {
             alert('No quote ID — please run the quote pipeline first.');
             return;
         }
-        // CSV downloads as a file — use same URL pattern with materials-csv mode
+        if (API._refreshToken) {
+            await API._tryRefresh();
+        }
+        if (!API._accessToken) {
+            alert('Session expired — please log in again.');
+            return;
+        }
         const url = API.getPdfUrl(this.quoteId, 'materials-csv');
         const win = window.open(url, '_blank');
         if (!win) window.location.href = url;
