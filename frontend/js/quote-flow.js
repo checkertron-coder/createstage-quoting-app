@@ -1634,7 +1634,7 @@ const QuoteHistory = {
                     <div class="history-empty">
                         <h2>No quotes yet</h2>
                         <p>Start your first quote to see it here.</p>
-                        <button class="btn btn-primary" onclick="App.showView('quote')">+ New Quote</button>
+                        <button class="btn btn-primary" onclick="QuoteFlow.newQuote(); App.showView('quote')">+ New Quote</button>
                     </div>
                 `;
                 return;
@@ -1644,7 +1644,7 @@ const QuoteHistory = {
                 <div class="history-card">
                     <div class="history-header">
                         <h2>Your Quotes</h2>
-                        <button class="btn btn-primary btn-sm" onclick="App.showView('quote')">+ New Quote</button>
+                        <button class="btn btn-primary btn-sm" onclick="QuoteFlow.newQuote(); App.showView('quote')">+ New Quote</button>
                     </div>
                     <div class="history-list">
                         ${quotes.map(q => `

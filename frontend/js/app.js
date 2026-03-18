@@ -66,10 +66,9 @@ const App = {
             BidUpload.initBidUpload();
         }
 
-        // Reset quote view to describe step
-        if (view === 'quote' && QuoteFlow.currentStep === 'describe') {
-            QuoteFlow.renderQuoteView();
-        }
+        // Note: quote view rendering is handled by QuoteFlow.newQuote() or
+        // QuoteFlow.renderQuoteView() — not triggered here to avoid
+        // double-render and unwanted state restoration.
     },
 
     _setupNav() {

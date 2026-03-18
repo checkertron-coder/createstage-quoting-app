@@ -15,7 +15,7 @@
             <span class="nav-shop-name" id="nav-shop-name"></span>
         </div>
         <div class="nav-right">
-            <button class="nav-btn active" data-view="quote" onclick="App.showView('quote')">New Quote</button>
+            <button class="nav-btn active" data-view="quote" onclick="QuoteFlow.newQuote(); App.showView('quote')">New Quote</button>
             <button class="nav-btn" data-view="history" onclick="App.showView('history')">Quotes</button>
             <button class="nav-btn" data-view="bid" onclick="App.showView('bid')">Upload Bid</button>
             <button class="nav-btn" data-view="profile" onclick="Auth.renderProfileView(); App.showView('profile')">Profile</button>
