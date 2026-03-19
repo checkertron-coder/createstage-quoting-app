@@ -402,6 +402,65 @@ def _safe(text: str) -> str:
     )
 
 
+def _compute_deposit(priced_quote, user_profile):
+    """
+    Compute deposit amounts from quote data and shop deposit settings.
+
+    Returns dict with:
+        labor_pct, materials_pct, materials_deposit, labor_deposit,
+        total_deposit, remaining, terms_text
+    """
+    labor_pct = user_profile.get("deposit_labor_pct", 50) or 50
+    materials_pct = user_profile.get("deposit_materials_pct", 100) or 100
+
+    markup_pct = priced_quote.get("selected_markup_pct") or 0
+    multiplier = 1 + markup_pct / 100.0
+
+    # Materials portion: materials + hardware + consumables + shop stock (all with markup)
+    materials_base = (
+        priced_quote.get("material_subtotal", 0)
+        + priced_quote.get("hardware_subtotal", 0)
+        + priced_quote.get("consumable_subtotal", 0)
+        + priced_quote.get("shop_stock_subtotal", 0)
+    )
+    materials_with_markup = round(materials_base * multiplier, 2)
+    materials_deposit = round(materials_with_markup * materials_pct / 100.0, 2)
+
+    # Labor portion (with markup)
+    labor_base = priced_quote.get("labor_subtotal", 0)
+    labor_with_markup = round(labor_base * multiplier, 2)
+    labor_deposit = round(labor_with_markup * labor_pct / 100.0, 2)
+
+    total_deposit = round(materials_deposit + labor_deposit, 2)
+    total = priced_quote.get("total", 0)
+    remaining = round(total - total_deposit, 2)
+
+    # Build terms text
+    parts = []
+    if materials_pct > 0 and materials_with_markup > 0:
+        parts.append("%s (%d%% of materials)" % (_fmt(materials_deposit), materials_pct))
+    if labor_pct > 0 and labor_with_markup > 0:
+        parts.append("%s (%d%% of labor)" % (_fmt(labor_deposit), labor_pct))
+
+    if parts:
+        terms_text = "Deposit due at signing: %s = %s total deposit." % (
+            " + ".join(parts), _fmt(total_deposit))
+        if remaining > 0.01:
+            terms_text += " Remaining balance of %s due upon completion." % _fmt(remaining)
+    else:
+        terms_text = "Full payment of %s due upon completion." % _fmt(total)
+
+    return {
+        "labor_pct": labor_pct,
+        "materials_pct": materials_pct,
+        "materials_deposit": materials_deposit,
+        "labor_deposit": labor_deposit,
+        "total_deposit": total_deposit,
+        "remaining": remaining,
+        "terms_text": terms_text,
+    }
+
+
 def generate_client_scope(job_type, fields, job_description=""):
     """
     Generate a customer-friendly scope of work description using AI.
@@ -411,7 +470,7 @@ def generate_client_scope(job_type, fields, job_description=""):
     - is_ai_generated=False means it's a fallback (do NOT cache)
     """
     try:
-        from .claude_client import call_fast
+        from backend.claude_client import call_fast
     except ImportError:
         return generate_job_summary(job_type, fields), False
 
@@ -1013,11 +1072,12 @@ def generate_quote_pdf(
     pdf.ln(6)
 
     # Terms
+    deposit = _compute_deposit(priced_quote, user_profile)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(100, 100, 100)
     pdf.set_x(pdf.l_margin)
     pdf.cell(pw, 4, "This quote is valid for 7 days from the date above.", new_x="LMARGIN", new_y="NEXT")
-    pdf.multi_cell(pw, 4, "Payment terms: 50% deposit due at signing. Remaining 50% due upon completion.")
+    pdf.multi_cell(pw, 4, _safe("Payment terms: %s" % deposit["terms_text"]))
     pdf.set_text_color(0, 0, 0)
 
     return pdf.output()
@@ -1218,9 +1278,10 @@ def generate_client_pdf(
     pdf.section_header("TERMS & CONDITIONS")
     pdf.set_font("Helvetica", "", 9)
 
+    deposit = _compute_deposit(priced_quote, user_profile)
     terms = [
         "This proposal is valid for 7 days from the date above.",
-        "50% deposit due at signing. Remaining 50% due upon completion.",
+        deposit["terms_text"],
         "Timeline will be confirmed upon acceptance of this proposal.",
         "Any changes to the scope of work may result in additional charges.",
         "All work performed to industry standard practices.",

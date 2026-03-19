@@ -63,6 +63,8 @@ class ProfileUpdate(BaseModel):
     rate_inshop: Optional[float] = None
     rate_onsite: Optional[float] = None
     markup_default: Optional[int] = None
+    deposit_labor_pct: Optional[int] = None
+    deposit_materials_pct: Optional[int] = None
 
 
 class ValidateCodeRequest(BaseModel):
@@ -89,6 +91,8 @@ class UserResponse(BaseModel):
     rate_inshop: float
     rate_onsite: float
     markup_default: int
+    deposit_labor_pct: int
+    deposit_materials_pct: int
     tier: str
     subscription_status: Optional[str] = None
     trial_ends_at: Optional[str] = None
@@ -115,6 +119,8 @@ def _user_to_response(user: models.User) -> dict:
         "rate_inshop": user.rate_inshop,
         "rate_onsite": user.rate_onsite,
         "markup_default": user.markup_default,
+        "deposit_labor_pct": getattr(user, "deposit_labor_pct", 50) or 50,
+        "deposit_materials_pct": getattr(user, "deposit_materials_pct", 100) or 100,
         "tier": user.tier,
         "subscription_status": getattr(user, "subscription_status", "free"),
         "trial_ends_at": (

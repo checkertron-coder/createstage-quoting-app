@@ -99,6 +99,8 @@ def download_pdf(
         "shop_phone": current_user.shop_phone,
         "shop_email": current_user.shop_email,
         "logo_url": current_user.logo_url,
+        "deposit_labor_pct": getattr(current_user, "deposit_labor_pct", 50) or 50,
+        "deposit_materials_pct": getattr(current_user, "deposit_materials_pct", 100) or 100,
     }
 
     inputs = quote.inputs_json or {}

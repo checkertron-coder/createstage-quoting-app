@@ -36,11 +36,16 @@ class TestClientPDFBugs:
         src = inspect.getsource(generate_client_pdf)
         assert '%%' not in src, "Client PDF should not have '%%' in any string"
 
-    def test_client_pdf_terms_simplified(self):
-        """Client PDF terms should use simple '50% deposit' language."""
-        from backend.pdf_generator import generate_client_pdf
-        src = inspect.getsource(generate_client_pdf)
-        assert '50% deposit' in src
+    def test_client_pdf_terms_use_deposit_settings(self):
+        """Client PDF terms use configurable deposit settings via _compute_deposit."""
+        from backend.pdf_generator import _compute_deposit
+        deposit = _compute_deposit(
+            {"material_subtotal": 1000, "labor_subtotal": 500, "total": 1500},
+            {"deposit_labor_pct": 50, "deposit_materials_pct": 100},
+        )
+        assert "deposit" in deposit["terms_text"].lower()
+        assert deposit["materials_deposit"] == 1000
+        assert deposit["labor_deposit"] == 250
 
     def test_client_pdf_markup_distributed(self):
         """Client PDF should distribute markup into category totals."""

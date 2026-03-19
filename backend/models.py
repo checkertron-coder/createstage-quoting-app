@@ -116,6 +116,8 @@ class User(Base):
     terms_accepted_at = Column(DateTime, nullable=True)
     quotes_this_month = Column(Integer, default=0)
     billing_cycle_start = Column(DateTime, nullable=True)
+    deposit_labor_pct = Column(Integer, default=50)
+    deposit_materials_pct = Column(Integer, default=100)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
