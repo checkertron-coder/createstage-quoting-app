@@ -154,6 +154,16 @@ body {
     background: #fef2f2; color: var(--error); padding: 10px;
     border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 12px;
 }
+.auth-error.auth-success {
+    background: #ecfdf5; color: var(--success);
+}
+.auth-notice {
+    background: #fffbeb; color: #92400e; padding: 12px;
+    border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 12px;
+    border: 1px solid #fde68a;
+}
+.auth-notice p { margin-bottom: 8px; }
+.auth-notice .btn-sm { font-size: 0.8rem; padding: 4px 12px; }
 
 /* --- Auth Tabs --- */
 .auth-tabs {

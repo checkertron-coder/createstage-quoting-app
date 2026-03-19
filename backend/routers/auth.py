@@ -1,16 +1,22 @@
 """
-Auth endpoints — register, login, refresh, me, profile.
+Auth endpoints — register, login, refresh, me, profile, email verification, password reset.
 
 Registration flow:
 - POST /api/auth/register → create account (with optional invite code + terms acceptance)
 - POST /api/auth/login → authenticate with email + password
 - POST /api/auth/validate-code → check if invite code is valid
-- POST /api/auth/guest → 410 Gone (removed in P53)
+- POST /api/auth/forgot-password → send password reset email
+- POST /api/auth/reset-password → reset password with token
+- GET  /api/auth/verify-email → verify email with token
+- POST /api/auth/resend-verification → resend verification email
 """
 
 import base64
+import logging
+import os
+import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
@@ -30,6 +36,9 @@ from ..auth import (
 )
 from ..database import get_db
 from .. import stripe_service
+from .. import email_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -71,6 +80,19 @@ class ValidateCodeRequest(BaseModel):
     code: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -98,6 +120,7 @@ class UserResponse(BaseModel):
     trial_ends_at: Optional[str] = None
     quotes_this_month: Optional[int] = 0
     has_billing: Optional[bool] = False
+    email_verified: bool = False
     created_at: datetime
 
     class Config:
@@ -121,6 +144,7 @@ def _user_to_response(user: models.User) -> dict:
         "markup_default": user.markup_default,
         "deposit_labor_pct": getattr(user, "deposit_labor_pct", 50) or 50,
         "deposit_materials_pct": getattr(user, "deposit_materials_pct", 100) or 100,
+        "email_verified": getattr(user, "email_verified", False) or False,
         "tier": user.tier,
         "subscription_status": getattr(user, "subscription_status", "free"),
         "trial_ends_at": (
@@ -144,6 +168,28 @@ def _issue_tokens(user: models.User, db: Session) -> dict:
         "token_type": "bearer",
         "user_id": user.id,
     }
+
+
+def _create_email_token(user, token_type, db, expires_hours=48):
+    # type: (models.User, str, Session, int) -> str
+    """Create a single-use email token. Returns the token string."""
+    token = secrets.token_urlsafe(32)
+    email_token = models.EmailToken(
+        user_id=user.id,
+        token=token,
+        token_type=token_type,
+        expires_at=datetime.utcnow() + timedelta(hours=expires_hours),
+    )
+    db.add(email_token)
+    db.commit()
+    return token
+
+
+def _send_verification_email(user, db):
+    # type: (models.User, Session) -> bool
+    """Create a verification token and send the email."""
+    token = _create_email_token(user, "email_verification", db, expires_hours=48)
+    return email_service.send_verification_email(user.email, token)
 
 
 def _ensure_stripe_customer(user: models.User, db: Session):
@@ -306,6 +352,13 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
     _ensure_stripe_customer(user, db)
 
+    # Send verification email (auto-verify if email service not configured)
+    if email_service.is_configured():
+        _send_verification_email(user, db)
+    else:
+        user.email_verified = True
+        db.commit()
+
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
 
@@ -325,6 +378,15 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
+        )
+
+    # Email verification gate — admin bypass
+    admin_email = os.getenv("APP_ADMIN_EMAIL", "").strip()
+    email_verified = getattr(user, "email_verified", False)
+    if not email_verified and user.email != admin_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Check your inbox for the verification link.",
         )
 
     tokens = _issue_tokens(user, db)
@@ -626,3 +688,129 @@ def check_quote_access(
         )
 
     return current_user
+
+
+# --- Email verification & password reset endpoints ---
+
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Send a password reset email. Always returns 200 — never reveals
+    whether the email is registered (prevents email enumeration).
+    """
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if user and user.password_hash:
+        token = _create_email_token(user, "password_reset", db, expires_hours=1)
+        email_service.send_password_reset_email(user.email, token)
+
+    return {"message": "If that email is registered, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Reset password using a one-time token. Returns auth tokens so the
+    user is immediately logged in after resetting.
+    """
+    if not request.password or len(request.password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+
+    email_token = db.query(models.EmailToken).filter(
+        models.EmailToken.token == request.token,
+        models.EmailToken.token_type == "password_reset",
+    ).first()
+
+    if not email_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset link.",
+        )
+    if email_token.is_used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has already been used.",
+        )
+    if email_token.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link has expired. Request a new one.",
+        )
+
+    # Update password
+    user = db.query(models.User).filter(models.User.id == email_token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found.")
+
+    user.password_hash = hash_password(request.password)
+    user.is_provisional = False
+    user.email_verified = True  # Verifying ownership by resetting password via email
+    email_token.is_used = True
+    db.commit()
+    db.refresh(user)
+
+    tokens = _issue_tokens(user, db)
+    return {**tokens, "user": _user_to_response(user)}
+
+
+@router.get("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    """
+    Verify a user's email address using the token from the verification link.
+    """
+    email_token = db.query(models.EmailToken).filter(
+        models.EmailToken.token == token,
+        models.EmailToken.token_type == "email_verification",
+    ).first()
+
+    if not email_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification link.",
+        )
+    if email_token.is_used:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link has already been used.",
+        )
+    if email_token.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This verification link has expired. Request a new one.",
+        )
+
+    # Mark user as verified
+    user = db.query(models.User).filter(models.User.id == email_token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found.")
+
+    user.email_verified = True
+    email_token.is_used = True
+    db.commit()
+
+    return {"message": "Email verified successfully. You can now log in."}
+
+
+@router.post("/resend-verification")
+def resend_verification(request: ResendVerificationRequest, db: Session = Depends(get_db)):
+    """
+    Resend verification email. Invalidates any previous unused verification
+    tokens. Always returns 200 — never reveals if the email is registered.
+    """
+    user = db.query(models.User).filter(models.User.email == request.email).first()
+    if user and not getattr(user, "email_verified", False):
+        # Invalidate previous unused verification tokens
+        old_tokens = db.query(models.EmailToken).filter(
+            models.EmailToken.user_id == user.id,
+            models.EmailToken.token_type == "email_verification",
+            models.EmailToken.is_used == False,
+        ).all()
+        for t in old_tokens:
+            t.is_used = True
+        db.commit()
+
+        _send_verification_email(user, db)
+
+    return {"message": "If that email is registered and unverified, a new verification link has been sent."}

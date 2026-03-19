@@ -196,10 +196,40 @@ const Auth = {
                             <input type="email" id="login-email" placeholder="Email" autocomplete="email">
                             <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
                         </div>
+                        <div id="unverified-notice" class="auth-notice" style="display:none">
+                            <p>Your email hasn't been verified yet. Check your inbox for the verification link.</p>
+                            <button class="btn btn-secondary btn-sm" onclick="Auth.resendVerification()">Resend Verification Email</button>
+                        </div>
                         <div class="auth-buttons">
                             <button class="btn btn-primary btn-full" onclick="Auth.handleLogin()">Log In</button>
                         </div>
-                        <p class="auth-hint">Don't have an account? <a href="#" onclick="Auth.showTab('register');return false;">Register here</a></p>
+                        <p class="auth-hint">
+                            <a href="#" onclick="Auth.showForgotPassword();return false;">Forgot password?</a>
+                            &nbsp;&middot;&nbsp;
+                            Don't have an account? <a href="#" onclick="Auth.showTab('register');return false;">Register here</a>
+                        </p>
+                    </div>
+
+                    <!-- Forgot password -->
+                    <div id="forgot-fields" style="display:none">
+                        <div class="auth-fields">
+                            <input type="email" id="forgot-email" placeholder="Email" autocomplete="email">
+                        </div>
+                        <div class="auth-buttons">
+                            <button class="btn btn-primary btn-full" onclick="Auth.handleForgotPassword()">Send Reset Link</button>
+                        </div>
+                        <p class="auth-hint"><a href="#" onclick="Auth.showTab('login');return false;">&larr; Back to login</a></p>
+                    </div>
+
+                    <!-- Reset password (shown when ?action=reset-password) -->
+                    <div id="reset-fields" style="display:none">
+                        <div class="auth-fields">
+                            <input type="password" id="reset-password" placeholder="New password (min 8 characters)" autocomplete="new-password">
+                            <input type="password" id="reset-password-confirm" placeholder="Confirm new password" autocomplete="new-password">
+                        </div>
+                        <div class="auth-buttons">
+                            <button class="btn btn-primary btn-full" onclick="Auth.handleResetPassword()">Reset Password</button>
+                        </div>
                     </div>
 
                     <!-- Register fields -->
@@ -250,8 +280,17 @@ const Auth = {
     showTab(tab) {
         const loginFields = document.getElementById('login-fields');
         const registerFields = document.getElementById('register-fields');
+        const forgotFields = document.getElementById('forgot-fields');
+        const resetFields = document.getElementById('reset-fields');
         const tabLogin = document.getElementById('tab-login');
         const tabRegister = document.getElementById('tab-register');
+        const unverifiedNotice = document.getElementById('unverified-notice');
+
+        // Hide all form sections
+        if (forgotFields) forgotFields.style.display = 'none';
+        if (resetFields) resetFields.style.display = 'none';
+        if (unverifiedNotice) unverifiedNotice.style.display = 'none';
+
         if (tab === 'login') {
             loginFields.style.display = '';
             registerFields.style.display = 'none';
@@ -414,7 +453,123 @@ const Auth = {
             await this._checkDemoStatus();
             App.showView('quote');
         } catch (e) {
+            if (e.message && e.message.toLowerCase().includes('not verified')) {
+                // Show the unverified notice with resend button
+                const notice = document.getElementById('unverified-notice');
+                if (notice) notice.style.display = 'block';
+                // Store email for resend
+                this._unverifiedEmail = email;
+            }
             this.showError('auth-error', e.message);
+        }
+    },
+
+    showForgotPassword() {
+        const loginFields = document.getElementById('login-fields');
+        const registerFields = document.getElementById('register-fields');
+        const forgotFields = document.getElementById('forgot-fields');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+
+        if (loginFields) loginFields.style.display = 'none';
+        if (registerFields) registerFields.style.display = 'none';
+        if (forgotFields) forgotFields.style.display = '';
+        if (tabLogin) tabLogin.classList.remove('active');
+        if (tabRegister) tabRegister.classList.remove('active');
+    },
+
+    async handleForgotPassword() {
+        const email = document.getElementById('forgot-email').value.trim();
+        if (!email) return this.showError('auth-error', 'Please enter your email address.');
+        try {
+            const resp = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await resp.json();
+            this.showError('auth-error', data.message || 'If that email is registered, a reset link has been sent.');
+            // Style as success (green) not error
+            const el = document.getElementById('auth-error');
+            if (el) el.classList.add('auth-success');
+            setTimeout(() => { if (el) el.classList.remove('auth-success'); }, 5000);
+        } catch (e) {
+            this.showError('auth-error', 'Unable to send reset link. Please try again.');
+        }
+    },
+
+    showResetPassword(token) {
+        this._resetToken = token;
+        // Ensure auth view is rendered
+        if (!document.getElementById('reset-fields')) {
+            this.renderAuthView();
+        }
+        const loginFields = document.getElementById('login-fields');
+        const registerFields = document.getElementById('register-fields');
+        const forgotFields = document.getElementById('forgot-fields');
+        const resetFields = document.getElementById('reset-fields');
+        const tabLogin = document.getElementById('tab-login');
+        const tabRegister = document.getElementById('tab-register');
+
+        if (loginFields) loginFields.style.display = 'none';
+        if (registerFields) registerFields.style.display = 'none';
+        if (forgotFields) forgotFields.style.display = 'none';
+        if (resetFields) resetFields.style.display = '';
+        if (tabLogin) tabLogin.classList.remove('active');
+        if (tabRegister) tabRegister.classList.remove('active');
+    },
+
+    async handleResetPassword() {
+        const password = document.getElementById('reset-password').value;
+        const confirm = document.getElementById('reset-password-confirm').value;
+
+        if (!password || password.length < 8) {
+            return this.showError('auth-error', 'Password must be at least 8 characters.');
+        }
+        if (password !== confirm) {
+            return this.showError('auth-error', 'Passwords do not match.');
+        }
+        if (!this._resetToken) {
+            return this.showError('auth-error', 'Invalid reset link. Please request a new one.');
+        }
+
+        try {
+            const resp = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: this._resetToken, password }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Password reset failed.');
+
+            // Auto-login with returned tokens
+            API.setTokens(data.access_token, data.refresh_token);
+            this.currentUser = data.user;
+            this._resetToken = null;
+            // Clean URL
+            history.replaceState(null, '', '/app');
+            App.showView('quote');
+        } catch (e) {
+            this.showError('auth-error', e.message);
+        }
+    },
+
+    async resendVerification() {
+        const email = this._unverifiedEmail || document.getElementById('login-email').value.trim();
+        if (!email) return this.showError('auth-error', 'Please enter your email address first.');
+        try {
+            const resp = await fetch('/api/auth/resend-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            });
+            const data = await resp.json();
+            this.showError('auth-error', data.message || 'Verification email sent.');
+            const el = document.getElementById('auth-error');
+            if (el) el.classList.add('auth-success');
+            setTimeout(() => { if (el) el.classList.remove('auth-success'); }, 5000);
+        } catch (e) {
+            this.showError('auth-error', 'Unable to resend verification email. Please try again.');
         }
     },
 

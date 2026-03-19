@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     JWT_ACCESS_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
+    # Email (Resend)
+    RESEND_API_KEY: str = ""
+    RESEND_FROM: str = "CreateQuote <onboarding@resend.dev>"
+    APP_URL: str = "http://localhost:8000"
+    APP_ADMIN_EMAIL: str = ""  # Bypasses email verification gate
+
     # Cloudflare R2 — optional now, required in Session 3
     CLOUDFLARE_R2_ACCOUNT_ID: str = ""
     CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""

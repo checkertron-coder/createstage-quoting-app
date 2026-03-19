@@ -17,9 +17,39 @@ const App = {
         // Nav buttons
         this._setupNav();
 
+        // Handle URL action params (verify-email, reset-password)
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        const actionToken = params.get('token');
+
+        if (action === 'verify-email' && actionToken) {
+            // Call verify-email endpoint, show result on auth screen
+            this.showView('auth');
+            try {
+                const resp = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(actionToken)}`);
+                const data = await resp.json();
+                if (resp.ok) {
+                    Auth.showError('auth-error', data.message || 'Email verified! You can now log in.');
+                    const el = document.getElementById('auth-error');
+                    if (el) el.classList.add('auth-success');
+                } else {
+                    Auth.showError('auth-error', data.detail || 'Verification failed.');
+                }
+            } catch (e) {
+                Auth.showError('auth-error', 'Verification failed. Please try again.');
+            }
+            history.replaceState(null, '', '/app');
+            return;
+        }
+
+        if (action === 'reset-password' && actionToken) {
+            this.showView('auth');
+            Auth.showResetPassword(actionToken);
+            return;
+        }
+
         if (isAuth) {
             // Handle return from Stripe checkout
-            const params = new URLSearchParams(window.location.search);
             if (params.get('checkout') === 'success') {
                 // Refresh user data to pick up new tier
                 try { Auth.currentUser = await API.getMe(); } catch(e) {}

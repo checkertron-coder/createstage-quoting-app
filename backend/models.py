@@ -118,6 +118,7 @@ class User(Base):
     billing_cycle_start = Column(DateTime, nullable=True)
     deposit_labor_pct = Column(Integer, default=50)
     deposit_materials_pct = Column(Integer, default=100)
+    email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -348,6 +349,21 @@ class DemoLink(Base):
     used_at = Column(DateTime, nullable=True)
     demo_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EmailToken(Base):
+    """Single-use tokens for password reset and email verification."""
+    __tablename__ = "email_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    token_type = Column(String, nullable=False)  # 'password_reset' | 'email_verification'
+    is_used = Column(Boolean, default=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
 
 
 class MaterialPrice(Base):
