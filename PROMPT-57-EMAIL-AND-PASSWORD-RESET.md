@@ -21,8 +21,10 @@ There is currently zero email infrastructure in the codebase — no SMTP config,
 3. After clicking the reset link, the user sets a new password and is immediately logged in
 4. New registrations trigger a verification email — the user gets a "Verify your email" link
 5. Verification links are valid for 48 hours
-6. Unverified accounts can still log in and use the app (don't block access — just nudge)
-7. The email sender is configurable via environment variable (`SMTP_FROM` or equivalent)
+6. **Unverified accounts are blocked from logging in** — after clicking login, they see: "Please verify your email address. Check your inbox for a verification link." with a "Resend verification email" button. They cannot access the app until verified.
+7. **Exception: the account used to run tests / demo account is pre-verified** — any account with email matching `APP_ADMIN_EMAIL` env var (default: `info@createstage.co`) is always treated as verified
+8. **Post-deploy migration**: the Alembic migration that adds `email_verified` must set ALL existing users to `email_verified = FALSE` (not True). This forces every existing user to verify their email on next login. New registrations start as `FALSE` and must verify before accessing the app.
+9. The email sender is configurable via environment variable (`SMTP_FROM` or equivalent)
 8. The system degrades gracefully when no email config is present — log a warning, don't crash
 9. All existing tests pass
 
@@ -45,7 +47,6 @@ Use the Resend API (https://resend.com) — it's the simplest modern email API, 
 - Do not change quote calculation logic
 - Do not change Stripe billing
 - Do not change any existing auth flow (login, register, refresh tokens still work exactly as before)
-- Do not add email verification as a hard gate — users can use the app without verifying
 
 **Must not break:**
 - Existing invite-code registration flow
@@ -75,10 +76,10 @@ Add `resend` to `requirements.txt`.
 ### Chunk 2: Database — password reset tokens + email_verified flag
 
 In `backend/models.py`:
-- Add `email_verified: bool` column to `User` (default `False` for new users, `True` for existing — migration should set existing rows to `True` so current users aren't broken)
+- Add `email_verified: bool` column to `User` (default `False`)
 - Add a new `PasswordResetToken` table with: `id`, `user_id` (FK), `token_hash` (String, the hashed token — never store plain), `expires_at` (DateTime), `used_at` (DateTime, nullable), `created_at` (DateTime)
 
-Generate a new Alembic migration. Existing users get `email_verified = True`.
+Generate a new Alembic migration. **Set ALL existing users to `email_verified = FALSE`** — this is intentional. Every user must verify their email on next login. No exceptions except the admin account (see acceptance criteria #7).
 
 ### Chunk 3: Forgot password + reset password endpoints
 
@@ -123,12 +124,22 @@ New page `frontend/reset-password.html`:
 - On success: redirect to login (or auto-login if tokens are returned)
 - On error: show "This reset link has expired or already been used."
 
-### Chunk 6: Email verification nudge (non-blocking)
+### Chunk 6: Email verification gate (hard block)
 
-After login, if `user.email_verified` is `False`, show a dismissible banner at the top of the app:
-- "Please verify your email address. [Resend verification email]"
-- Clicking "Resend" calls a new endpoint `POST /api/auth/resend-verification` which generates a new token and sends the email
-- Do NOT block the app or any features — this is a nudge only
+In the login endpoint (`POST /api/auth/login`):
+- After verifying the password, check `user.email_verified`
+- If `False`, return HTTP 403 with body: `{ "detail": "email_not_verified", "email": "<user email>" }`
+- Do NOT issue tokens to unverified users
+
+On the frontend login page:
+- When the server returns `email_not_verified`, show: "Please verify your email address before logging in. Check your inbox." with a "Resend verification email" button
+- The resend button calls `POST /api/auth/resend-verification` with `{ "email": "..." }`
+- After resend: show "Verification email sent. Check your inbox."
+
+Add `POST /api/auth/resend-verification`:
+- Body: `{ "email": "..." }`
+- If the user exists and is unverified, generate a new verification token, invalidate any old ones, send the email
+- Always return 200 with generic message (no email existence leak)
 
 ### Chunk 7: Tests
 
@@ -163,11 +174,17 @@ Add tests covering:
 - POST `/api/auth/forgot-password` with nonexistent email
 - Returns 200 with generic message (same as valid email)
 
-### Test 5: Email verification
-- Register → `email_verified` is False
+### Test 5: Email verification gate
+- Register a new account → `email_verified` is False
+- Attempt to login → 403 with `email_not_verified`
 - Hit verify endpoint with valid token → `email_verified` is True
+- Login again → succeeds, tokens returned
 
-### Test 6: Regression
+### Test 6: Existing users blocked
+- Confirm all existing users in DB have `email_verified = FALSE` after migration runs
+- Confirm they cannot log in until they verify
+
+### Test 7: Regression
 - `pytest tests/ -x -q` — all existing tests pass
 
 ---
@@ -176,7 +193,9 @@ Add tests covering:
 
 After deploying, Burton needs to set in Railway:
 - `RESEND_API_KEY` — from https://resend.com (free tier: 3,000 emails/month)
-- `RESEND_FROM` — verified sender address (e.g., `noreply@createquote.app` or `noreply@createstage.com`)
+- `RESEND_FROM` — verified sender address (e.g., `onboarding@resend.dev` for testing, `noreply@createstage.com` for production)
+- `APP_ADMIN_EMAIL` — admin account email that bypasses verification gate (set to `info@createstage.co`)
+- `APP_URL` — the production URL (e.g., `https://createstage-quoting-app-production.up.railway.app`) — used to build reset/verify links
 
 ---
 
