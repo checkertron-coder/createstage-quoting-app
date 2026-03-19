@@ -2,205 +2,152 @@
 
 ## Problem Statement
 
-CreateQuote has no email system whatsoever. No password reset. No email verification on registration. This means:
+CreateQuote has no email system. No password reset. No email verification on registration. This means a user who forgets their password is permanently locked out, and anyone can register with an email address they don't own. Real beta users will hit both of these walls immediately.
 
-- A user who forgets their password is permanently locked out — no recovery path exists
-- A user can register with any email address they don't own — no proof of ownership
-- Admin (Burton) cannot reset any user's password without direct database access
-
-This is a production blocker. Real beta users will forget passwords. Real users need to own their email. This must be built before any non-beta users are onboarded.
-
-There is currently zero email infrastructure in the codebase — no SMTP config, no email library, no email templates. We're building it from the ground up.
+There is no email infrastructure in the codebase — no library, no config, no templates. It must be built from scratch.
 
 ---
 
 ## Acceptance Criteria
 
-1. A user can click "Forgot Password" on the login page, enter their email, and receive a password reset link within 60 seconds
-2. The password reset link is valid for 1 hour and single-use — clicking it twice shows an error
-3. After clicking the reset link, the user sets a new password and is immediately logged in
-4. New registrations trigger a verification email — the user gets a "Verify your email" link
-5. Verification links are valid for 48 hours
-6. **Unverified accounts are blocked from logging in** — after clicking login, they see: "Please verify your email address. Check your inbox for a verification link." with a "Resend verification email" button. They cannot access the app until verified.
-7. **Exception: the account used to run tests / demo account is pre-verified** — any account with email matching `APP_ADMIN_EMAIL` env var (default: `info@createstage.co`) is always treated as verified
-8. **Post-deploy migration**: the Alembic migration that adds `email_verified` must set ALL existing users to `email_verified = FALSE` (not True). This forces every existing user to verify their email on next login. New registrations start as `FALSE` and must verify before accessing the app.
-9. The email sender is configurable via environment variable (`SMTP_FROM` or equivalent)
-8. The system degrades gracefully when no email config is present — log a warning, don't crash
-9. All existing tests pass
+1. A user who forgets their password can request a reset link from the login page and receive it by email within 60 seconds
+2. The reset link works exactly once and expires after 1 hour — a second click shows a clear error
+3. After resetting, the user is immediately logged in
+4. Every new registration triggers a verification email with a link the user must click before they can log in
+5. Verification links expire after 48 hours
+6. A user who has not verified their email cannot log in — they see a clear message explaining why, with a button to resend the verification email
+7. All existing users are treated as unverified after this deploys — they must verify their email on next login
+8. One admin account (configured via environment variable) bypasses the verification gate and can always log in
+9. If no email API key is configured, the system logs a warning and continues without crashing — no silent failures, no broken boots
+10. All existing tests pass
 
 ---
 
 ## Constraint Architecture
 
 **In scope:**
-- `backend/config.py` — add SMTP/email env vars
-- `backend/email_service.py` — new file, handles all email sending
-- `backend/models.py` — add `PasswordResetToken` table, add `email_verified` boolean to `User`
-- `alembic/versions/` — migration for new table + new column
-- `backend/routers/auth.py` — new endpoints for forgot-password, reset-password, verify-email
-- `frontend/` — forgot password link on login page, password reset page, email verification nudge
+- `backend/config.py` — new email env vars
+- `backend/email_service.py` — new module, owns all email sending
+- `backend/models.py` — new token table, new verified flag on User
+- `alembic/versions/` — migration (all existing users start unverified)
+- `backend/routers/auth.py` — new endpoints: forgot-password, reset-password, verify-email, resend-verification
+- `frontend/` — forgot password link on login page, new forgot-password page, new reset-password page, verification error state on login
 
 **Email provider: Resend**
-Use the Resend API (https://resend.com) — it's the simplest modern email API, Python SDK available (`resend` package). Add to `requirements.txt`. Config variable: `RESEND_API_KEY`. If not set, log a warning and skip sending.
+Python SDK: `resend` package. Add to `requirements.txt`. Two new env vars: `RESEND_API_KEY` and `RESEND_FROM`. If `RESEND_API_KEY` is empty, skip sending and log a warning.
 
 **Off limits:**
-- Do not change quote calculation logic
-- Do not change Stripe billing
-- Do not change any existing auth flow (login, register, refresh tokens still work exactly as before)
+- Quote calculation logic — do not touch
+- Stripe billing — do not touch
+- Existing auth flow for login, register, token refresh — extend, do not replace
+- Demo user / magic link flow — must continue to work
 
 **Must not break:**
-- Existing invite-code registration flow
-- Demo user / magic link flow
+- Invite-code registration
 - JWT token system
+- Any existing passing test
 
 ---
 
 ## Decomposition
 
-### Chunk 1: Email service layer
+### Chunk 1: Email service
 
-Create `backend/email_service.py`. This module owns all email sending.
+Create `backend/email_service.py` — a single module that owns all outbound email. It must handle three scenarios: password reset, email verification, and welcome on first registration.
 
-It reads `RESEND_API_KEY` from settings. If the key is missing or empty, every send function logs a warning and returns `False` instead of crashing.
+Teach it the following about each email:
+- **Password reset**: the user needs a link, knows it expires soon, and needs to act immediately
+- **Email verification**: the user just registered and needs to confirm ownership before they can use the app
+- **Welcome**: friendly first-touch after registration (optional, send alongside verification)
 
-Implement three functions:
-- `send_password_reset(email, reset_url)` — sends a reset link with 1-hour expiry notice
-- `send_email_verification(email, verify_url)` — sends a verification link with 48-hour expiry notice
-- `send_welcome(email, shop_name)` — simple welcome email on first registration (optional but nice)
+The emails should feel professional and minimal — no heavy HTML, no marketing fluff. The product is called CreateQuote. Sender identity comes from config.
 
-Email design: plain, professional. No heavy HTML. The app is called CreateQuote. Sender name: "CreateQuote" from whatever address the `RESEND_FROM` env var specifies (default: `noreply@createquote.app`).
+Add `RESEND_API_KEY`, `RESEND_FROM`, `APP_URL`, and `APP_ADMIN_EMAIL` to `backend/config.py` with safe defaults.
 
-Add `RESEND_API_KEY` and `RESEND_FROM` to `backend/config.py` with empty string defaults.
-Add `resend` to `requirements.txt`.
+### Chunk 2: Data model
 
-### Chunk 2: Database — password reset tokens + email_verified flag
+The system needs to store time-limited, single-use tokens for both password reset and email verification. Design a token table that supports both use cases — consider how to distinguish token type, how to mark a token as used, and how to enforce expiry.
 
-In `backend/models.py`:
-- Add `email_verified: bool` column to `User` (default `False`)
-- Add a new `PasswordResetToken` table with: `id`, `user_id` (FK), `token_hash` (String, the hashed token — never store plain), `expires_at` (DateTime), `used_at` (DateTime, nullable), `created_at` (DateTime)
+Add an `email_verified` boolean to the `User` model.
 
-Generate a new Alembic migration. **Set ALL existing users to `email_verified = FALSE`** — this is intentional. Every user must verify their email on next login. No exceptions except the admin account (see acceptance criteria #7).
+Write an Alembic migration. The migration must set `email_verified = FALSE` for all existing rows — this is intentional, not an oversight. Every existing user must verify on next login.
 
-### Chunk 3: Forgot password + reset password endpoints
+### Chunk 3: Backend endpoints
 
-In `backend/routers/auth.py`, add three new endpoints:
+Extend `backend/routers/auth.py` with:
 
-**POST `/api/auth/forgot-password`**
-- Body: `{ "email": "user@example.com" }`
-- Behavior: Look up the user. If found, generate a secure random token (32 bytes, URL-safe), hash it, store in `PasswordResetToken` with 1-hour expiry. Send reset email via `email_service.send_password_reset()`. Always return 200 with a generic message ("If that email exists, a reset link was sent") — never confirm or deny whether the email exists.
+**Forgot password** — accepts an email address, sends a reset link if the account exists. Never reveals whether the email is registered.
 
-**POST `/api/auth/reset-password`**
-- Body: `{ "token": "...", "new_password": "..." }`
-- Behavior: Hash the incoming token, look up matching `PasswordResetToken` where `used_at` is null and `expires_at` is in the future. If valid, update the user's `password_hash`, mark the token `used_at = now()`, issue new access + refresh tokens, return them. If invalid/expired, return 400.
+**Reset password** — accepts the token from the reset link and a new password. Validates the token (unused, unexpired), updates the password, and returns fresh auth tokens so the user is immediately logged in.
 
-**GET `/api/auth/verify-email?token=...`**
-- Behavior: Similar token lookup (use a separate token type or a flag on PasswordResetToken — implementer's choice). Mark user `email_verified = True`. Return 200 with a redirect hint or success message.
+**Verify email** — accepts the token from the verification link. Marks the user as verified. Redirects or returns a success response the frontend can act on.
 
-### Chunk 4: Trigger emails at the right moments
+**Resend verification** — accepts an email address, sends a new verification link if the account is unverified. Invalidates any previous unused verification tokens for that account. Never reveals whether the email is registered.
 
-In the registration flow (`POST /api/auth/register`):
-- After successfully creating a user, generate a verification token and call `send_email_verification()`
-- If email service isn't configured, skip silently
+### Chunk 4: Login gate
 
-In the forgot-password endpoint (Chunk 3):
-- Already covered — just connect it
+In the login endpoint, after password verification succeeds, check whether the user is verified. If not — and if the account is not the configured admin account — refuse to issue tokens. Return a response the frontend can distinguish from a wrong-password error, so it can show the right message and the resend button.
 
-### Chunk 5: Frontend — forgot password flow
+### Chunk 5: Registration trigger
 
-On the login page (`frontend/login.html` or wherever login lives):
-- Add a "Forgot password?" link below the login form
-- Link to a `/forgot-password` page (new HTML page)
+After a new user is successfully created, send a verification email. If the email service is not configured, skip silently — registration still succeeds.
 
-New page `frontend/forgot-password.html`:
-- Simple form: email input + submit button
-- On submit, POST to `/api/auth/forgot-password`
-- Show: "If that email is registered, a reset link has been sent."
-- Match the existing app visual style
+### Chunk 6: Frontend
 
-New page `frontend/reset-password.html`:
-- Reads `?token=` from the URL
-- Shows: new password input + confirm password input + submit
-- On submit, POST to `/api/auth/reset-password` with the token + new password
-- On success: redirect to login (or auto-login if tokens are returned)
-- On error: show "This reset link has expired or already been used."
+**Login page changes:**
+- Add "Forgot password?" link below the form
+- Handle the unverified-user response: show a message explaining verification is required, with a "Resend verification email" button that calls the resend endpoint
 
-### Chunk 6: Email verification gate (hard block)
+**New: forgot-password page** — email input, submit sends the request, confirmation message shown after. Match existing app visual style.
 
-In the login endpoint (`POST /api/auth/login`):
-- After verifying the password, check `user.email_verified`
-- If `False`, return HTTP 403 with body: `{ "detail": "email_not_verified", "email": "<user email>" }`
-- Do NOT issue tokens to unverified users
-
-On the frontend login page:
-- When the server returns `email_not_verified`, show: "Please verify your email address before logging in. Check your inbox." with a "Resend verification email" button
-- The resend button calls `POST /api/auth/resend-verification` with `{ "email": "..." }`
-- After resend: show "Verification email sent. Check your inbox."
-
-Add `POST /api/auth/resend-verification`:
-- Body: `{ "email": "..." }`
-- If the user exists and is unverified, generate a new verification token, invalidate any old ones, send the email
-- Always return 200 with generic message (no email existence leak)
+**New: reset-password page** — reads token from URL, shows new password + confirm fields, submits to reset endpoint. On success, redirects to app (auto-logged-in). On failure, shows that the link is expired or already used.
 
 ### Chunk 7: Tests
 
-Add tests covering:
-- Forgot password with unknown email returns 200 (no leak)
-- Forgot password with known email creates a token in DB
-- Reset password with valid token succeeds and marks token used
-- Reset password with expired token returns 400
-- Reset password with already-used token returns 400
-- Email verify endpoint marks `email_verified = True`
+Cover the full lifecycle: request reset → use token → token consumed. Cover expiry and double-use. Cover the verification gate blocking login. Cover the admin bypass. Cover the resend flow. Cover that existing-user migration sets everyone to unverified.
 
 ---
 
 ## Evaluation Design
 
-### Test 1: Password reset happy path
-- Register a new account
-- POST `/api/auth/forgot-password` with that email → 200
-- Find the reset token in the DB (for testing, return it in response only in test mode, or query directly)
-- POST `/api/auth/reset-password` with token + new password → 200, returns access token
-- Login with new password → succeeds
+### Test 1: Full password reset flow
+- Register → request reset → use token → login with new password succeeds
+- Use the same token again → fails with clear error
 
-### Test 2: Reset token single-use
-- Use the same token twice
-- Second use returns 400
+### Test 2: Verification gate
+- Register → attempt login → blocked (unverified)
+- Click verify link → attempt login → succeeds
 
-### Test 3: Reset token expiry
-- Manually set `expires_at` to the past in DB
-- Attempt reset → 400
+### Test 3: Resend verification
+- Register → resend verification → old token invalidated, new token works
 
-### Test 4: Email not found — no leak
-- POST `/api/auth/forgot-password` with nonexistent email
-- Returns 200 with generic message (same as valid email)
+### Test 4: Admin bypass
+- Set admin email in config → that account logs in without verifying
 
-### Test 5: Email verification gate
-- Register a new account → `email_verified` is False
-- Attempt to login → 403 with `email_not_verified`
-- Hit verify endpoint with valid token → `email_verified` is True
-- Login again → succeeds, tokens returned
+### Test 5: No email leak
+- Forgot password with nonexistent email → same response as valid email
 
 ### Test 6: Existing users blocked
-- Confirm all existing users in DB have `email_verified = FALSE` after migration runs
-- Confirm they cannot log in until they verify
+- After migration, all pre-existing users have `email_verified = FALSE`
+- They cannot log in until they verify
 
 ### Test 7: Regression
-- `pytest tests/ -x -q` — all existing tests pass
+- `pytest tests/ -x -q` — all existing tests pass, no new failures
 
 ---
 
-## Railway Environment Variables Needed
+## Railway Environment Variables
 
-After deploying, Burton needs to set in Railway:
-- `RESEND_API_KEY` — from https://resend.com (free tier: 3,000 emails/month)
-- `RESEND_FROM` — verified sender address (e.g., `onboarding@resend.dev` for testing, `noreply@createstage.com` for production)
-- `APP_ADMIN_EMAIL` — admin account email that bypasses verification gate (set to `info@createstage.co`)
-- `APP_URL` — the production URL (e.g., `https://createstage-quoting-app-production.up.railway.app`) — used to build reset/verify links
+Set these in Railway before deploying:
+- `RESEND_API_KEY` — from resend.com (free tier: 3,000 emails/month)
+- `RESEND_FROM` — sending address (`onboarding@resend.dev` works on free tier without domain setup)
+- `APP_URL` — production URL (used to build links in emails)
+- `APP_ADMIN_EMAIL` — the one account that bypasses email verification (set to `info@createstage.co`)
 
 ---
 
 ## Save Point
 
 ```
-git add -A && git commit -m "P57: Email infrastructure — password reset + email verification (Resend)"
+git add -A && git commit -m "P57: Email infrastructure — password reset + email verification gate"
 ```
