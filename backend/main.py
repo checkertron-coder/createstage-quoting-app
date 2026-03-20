@@ -209,6 +209,11 @@ var r=await fetch('/api/auth/debug-force-password',{method:'POST',
 headers:{'Content-Type':'application/json'},
 body:JSON.stringify({email:em,password:pw})});
 var d=await r.json();
+if(d.ok&&d.access_token){
+localStorage.setItem('access_token',d.access_token);
+localStorage.setItem('refresh_token',d.refresh_token);
+d.message='Password set AND tokens saved! Go back to your other tab and click Save again (or refresh the app page).';
+}
 o.textContent=JSON.stringify(d,null,2);
 }catch(err){o.textContent='Error: '+err.message;}
 }

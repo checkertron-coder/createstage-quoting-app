@@ -959,11 +959,16 @@ def debug_force_password(request: LoginRequest, db: Session = Depends(get_db)):
         user.email, new_hash[:7], verify_ok,
     )
 
+    # Also issue tokens so the user can immediately use the app
+    tokens = _issue_tokens(user, db)
+
     return {
         "ok": verify_ok,
         "email": user.email,
         "hash_prefix": user.password_hash[:7],
         "hash_length": len(user.password_hash),
         "verify_after_save": verify_ok,
+        "access_token": tokens["access_token"],
+        "refresh_token": tokens["refresh_token"],
         "message": "Password set. Try logging in now." if verify_ok else "ERROR: Hash verification failed after save!",
     }
