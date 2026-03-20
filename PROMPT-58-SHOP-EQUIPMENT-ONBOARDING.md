@@ -56,7 +56,7 @@ The shop equipment profile needs to store what processes and capabilities a shop
 
 Key things to capture per shop:
 - Welding processes available (and for each: whether it's the primary process, any limitations)
-- Cutting capabilities (plasma table, hand torch, cold saw, angle grinder, etc.)
+- Cutting capabilities — and critically: distinguish between a hand plasma cutter (handheld torch, operator-guided) vs. a CNC plasma table (machine-guided, programmatic cuts, dramatically different speed, precision, and nesting capability). A shop with a CNC plasma table can also use the torch by hand, but the table changes everything about cut time estimates and part complexity. A "plasma table" with no CNC is just a flat slat table used as a cutting surface — it does NOT have automated cutting capability.
 - Forming equipment (press brake with tonnage/bed length/die count, tube bender, etc.)
 - Finishing (in-house spray, powder coat oven, media blast, or sends out)
 - Fixture table, clamps, any noteworthy shop infrastructure
@@ -72,7 +72,7 @@ Create a new onboarding UI that appears after first login when `onboarding_compl
 The flow asks three conversational questions — one at a time, not all at once:
 
 **Question 1 — Welding & Cutting:**
-"What welding and cutting processes do you have in your shop? (For example: MIG with flux core, TIG, stick, oxy-acetylene torch, plasma table, cold saw — or just tell us what you've got)"
+"What welding and cutting processes do you have in your shop? (For example: MIG with flux core, TIG, stick, oxy-acetylene torch, hand plasma cutter, CNC plasma table, cold saw — or just tell us what you've got)"
 
 **Question 2 — Forming & Fabrication:**
 "What forming equipment do you work with? (Press brake, tube bender, fixture table, anything for shaping metal)"
@@ -102,7 +102,7 @@ This function reads the user's equipment profile from DB and formats it into a c
 ```
 SHOP CAPABILITIES:
 - Welding: MIG (flux core only), no TIG, no stick
-- Cutting: Hand plasma torch (no table), angle grinder, cold saw
+- Cutting: Hand plasma cutter (no CNC table), angle grinder, cold saw
 - Forming: No press brake — outsource bending
 - Finishing: Sends out for powder coat, no in-house spray
 - Notes: Mobile-capable, single operator
