@@ -162,6 +162,40 @@ def health():
     return {"status": "ok", "app": "createstage-quoting-app", "version": "9baad06-debug-login"}
 
 
+@app.get("/debug-login")
+def debug_login_page():
+    """Temporary diagnostic page for login debugging. Remove after fix."""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse("""<!DOCTYPE html>
+<html><head><title>Login Debug</title>
+<style>body{font-family:sans-serif;max-width:500px;margin:60px auto;padding:20px}
+input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box;font-size:16px}
+button{padding:12px 24px;background:#2d3748;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer;width:100%;margin-top:12px}
+pre{background:#f0f0f0;padding:16px;border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:14px}
+h2{color:#1a202c}</style></head>
+<body><h2>Login Diagnostic</h2>
+<p>Enter your credentials below. This checks what's failing without logging you in.</p>
+<input type="email" id="e" placeholder="Email">
+<input type="password" id="p" placeholder="Password">
+<button onclick="go()">Check Login</button>
+<pre id="out" style="display:none"></pre>
+<script>
+async function go(){
+var o=document.getElementById('out');
+o.style.display='block';
+o.textContent='Checking...';
+try{
+var r=await fetch('/api/auth/debug-login',{method:'POST',
+headers:{'Content-Type':'application/json'},
+body:JSON.stringify({email:document.getElementById('e').value,
+password:document.getElementById('p').value})});
+var d=await r.json();
+o.textContent=JSON.stringify(d,null,2);
+}catch(err){o.textContent='Error: '+err.message;}
+}
+</script></body></html>""")
+
+
 @app.on_event("startup")
 def auto_migrate():
     """Run pending Alembic migrations on startup."""
