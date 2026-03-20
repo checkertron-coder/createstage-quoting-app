@@ -159,7 +159,7 @@ if os.path.exists(frontend_path):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "app": "createstage-quoting-app", "version": "de23c35-enforce"}
+    return {"status": "ok", "app": "createstage-quoting-app", "version": "9baad06-debug-login"}
 
 
 @app.on_event("startup")
