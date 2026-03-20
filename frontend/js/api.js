@@ -1,6 +1,6 @@
 /**
  * API Client — all fetch calls to the FastAPI backend.
- * Handles JWT token management and automatic refresh.
+ * Handles JWT token management, automatic refresh, and proactive renewal.
  */
 
 const API = {
@@ -9,10 +9,13 @@ const API = {
     // Token storage
     _accessToken: null,
     _refreshToken: null,
+    _refreshTimer: null,
 
     init() {
         this._accessToken = localStorage.getItem('access_token');
         this._refreshToken = localStorage.getItem('refresh_token');
+        // Start proactive token refresh cycle
+        this._startRefreshCycle();
     },
 
     setTokens(access, refresh) {
@@ -20,6 +23,8 @@ const API = {
         this._refreshToken = refresh;
         if (access) localStorage.setItem('access_token', access);
         if (refresh) localStorage.setItem('refresh_token', refresh);
+        // Restart the refresh cycle with the new token
+        this._startRefreshCycle();
     },
 
     clearTokens() {
@@ -27,16 +32,44 @@ const API = {
         this._refreshToken = null;
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
+        if (this._refreshTimer) {
+            clearInterval(this._refreshTimer);
+            this._refreshTimer = null;
+        }
     },
 
     isAuthenticated() {
-        return !!this._accessToken;
+        return !!(this._accessToken || localStorage.getItem('access_token'));
     },
 
     headers() {
+        // Always read the freshest token (another tab may have updated it)
+        const token = this._accessToken || localStorage.getItem('access_token');
         const h = { 'Content-Type': 'application/json' };
-        if (this._accessToken) h['Authorization'] = `Bearer ${this._accessToken}`;
+        if (token) h['Authorization'] = `Bearer ${token}`;
         return h;
+    },
+
+    /**
+     * Proactive token refresh — refreshes the access token every 45 minutes
+     * so it never expires during a work session. The access token lasts 60 min,
+     * so refreshing at 45 min gives a 15-min safety buffer.
+     */
+    _startRefreshCycle() {
+        if (this._refreshTimer) clearInterval(this._refreshTimer);
+        const refreshToken = this._refreshToken || localStorage.getItem('refresh_token');
+        if (!refreshToken) return;
+
+        // Refresh every 45 minutes (well before the 60-min access token expiry)
+        this._refreshTimer = setInterval(() => {
+            this._tryRefresh().then(ok => {
+                if (ok) {
+                    console.log('[API] Proactive token refresh succeeded');
+                } else {
+                    console.warn('[API] Proactive token refresh failed — user may need to re-login');
+                }
+            });
+        }, 45 * 60 * 1000);
     },
 
     async _fetch(path, opts = {}) {
@@ -47,14 +80,19 @@ const API = {
         });
 
         // Handle 401 — try refresh
-        if (resp.status === 401 && this._refreshToken) {
-            const refreshed = await this._tryRefresh();
-            if (refreshed) {
-                const retry = await fetch(url, {
-                    headers: this.headers(),
-                    ...opts,
-                });
-                return retry;
+        if (resp.status === 401) {
+            // Always check localStorage as fallback (another tab may have set tokens)
+            const refreshToken = this._refreshToken || localStorage.getItem('refresh_token');
+            if (refreshToken) {
+                this._refreshToken = refreshToken;
+                const refreshed = await this._tryRefresh();
+                if (refreshed) {
+                    const retry = await fetch(url, {
+                        headers: this.headers(),
+                        ...opts,
+                    });
+                    return retry;
+                }
             }
             // Refresh failed — clear tokens, redirect to auth
             this.clearTokens();
@@ -67,10 +105,14 @@ const API = {
 
     async _tryRefresh() {
         try {
+            // Always read freshest refresh token from localStorage
+            const refreshToken = this._refreshToken || localStorage.getItem('refresh_token');
+            if (!refreshToken) return false;
+
             const resp = await fetch(`${this.base}/auth/refresh`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: this._refreshToken }),
+                body: JSON.stringify({ refresh_token: refreshToken }),
             });
             if (resp.ok) {
                 const data = await resp.json();
@@ -78,7 +120,9 @@ const API = {
                 localStorage.setItem('access_token', data.access_token);
                 return true;
             }
-        } catch (e) { /* refresh failed */ }
+        } catch (e) {
+            console.warn('[API] Token refresh error:', e.message);
+        }
         return false;
     },
 
@@ -130,9 +174,11 @@ const API = {
 
     // --- Photos ---
     async uploadPhoto(formData) {
+        // Re-read token for freshness
+        const token = this._accessToken || localStorage.getItem('access_token');
         const resp = await fetch(`${this.base}/photos/upload`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${this._accessToken}` },
+            headers: { 'Authorization': `Bearer ${token}` },
             body: formData,
         });
         const data = await resp.json();
@@ -272,9 +318,10 @@ const API = {
     },
 
     async uploadLogo(formData) {
+        const token = this._accessToken || localStorage.getItem('access_token');
         const resp = await fetch(`${this.base}/auth/profile/logo`, {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${this._accessToken}` },
+            headers: { 'Authorization': `Bearer ${token}` },
             body: formData,
         });
         const data = await resp.json();
@@ -283,7 +330,8 @@ const API = {
     },
 
     getPdfUrl(quoteId, mode) {
-        let url = `${this.base}/quotes/${quoteId}/pdf?token=${this._accessToken}`;
+        const token = this._accessToken || localStorage.getItem('access_token');
+        let url = `${this.base}/quotes/${quoteId}/pdf?token=${token}`;
         if (mode) url += `&mode=${mode}`;
         return url;
     },
