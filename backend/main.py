@@ -61,7 +61,14 @@ def _run_migrations():
 
         # Run any pending migrations
         logger.info("Running pending Alembic migrations...")
-        command.upgrade(alembic_cfg, "head")
+        try:
+            command.upgrade(alembic_cfg, "head")
+        except Exception as head_err:
+            if "Multiple head revisions" in str(head_err):
+                logger.warning("Multiple heads detected, upgrading to 'heads' instead")
+                command.upgrade(alembic_cfg, "heads")
+            else:
+                raise
         logger.info("Migrations complete")
 
     except Exception as e:

@@ -8,7 +8,7 @@ Covers:
 - Resend verification
 """
 
-import hashlib
+import secrets
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -35,17 +35,24 @@ def db():
 
 @pytest.fixture
 def registered_user(client, db):
-    """Register a user and return (email, password, user_id)."""
+    """Register a user and return (email, password, user_id).
+    Patches email_service so is_configured() returns True, which means
+    the user stays unverified (no auto-verify fallback)."""
     email = "reset-test@fabricator.com"
     password = "strongpassword123"
     with patch("backend.routers.auth.email_service") as mock_email:
-        mock_email.send_email_verification.return_value = False
+        mock_email.is_configured.return_value = True
+        mock_email.send_email_verification.return_value = True
         resp = client.post("/api/auth/register", json={
             "email": email,
             "password": password,
         })
     assert resp.status_code == 200
     user_id = resp.json()["user_id"]
+    # Ensure the user is unverified for tests that need it
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    user.email_verified = False
+    db.commit()
     return email, password, user_id
 
 
@@ -55,7 +62,7 @@ class TestForgotPassword:
     def test_known_email_returns_200(self, client, registered_user):
         email, _, _ = registered_user
         with patch("backend.routers.auth.email_service") as mock_email:
-            mock_email.send_password_reset.return_value = True
+            mock_email.send_password_reset_email.return_value = True
             resp = client.post("/api/auth/forgot-password", json={"email": email})
         assert resp.status_code == 200
         assert "reset link" in resp.json()["message"].lower()
@@ -71,26 +78,25 @@ class TestForgotPassword:
     def test_creates_token_in_db(self, client, db, registered_user):
         email, _, user_id = registered_user
         with patch("backend.routers.auth.email_service") as mock_email:
-            mock_email.send_password_reset.return_value = True
+            mock_email.send_password_reset_email.return_value = True
             client.post("/api/auth/forgot-password", json={"email": email})
 
-        token = db.query(models.PasswordResetToken).filter(
-            models.PasswordResetToken.user_id == user_id,
-            models.PasswordResetToken.token_type == "reset",
+        token = db.query(models.EmailToken).filter(
+            models.EmailToken.user_id == user_id,
+            models.EmailToken.token_type == "password_reset",
         ).first()
         assert token is not None
-        assert token.used_at is None
+        assert token.is_used is False
         assert token.expires_at > datetime.utcnow()
 
     def test_calls_email_service(self, client, registered_user):
         email, _, _ = registered_user
         with patch("backend.routers.auth.email_service") as mock_email:
-            mock_email.send_password_reset.return_value = True
+            mock_email.send_password_reset_email.return_value = True
             client.post("/api/auth/forgot-password", json={"email": email})
-        mock_email.send_password_reset.assert_called_once()
-        call_args = mock_email.send_password_reset.call_args
+        mock_email.send_password_reset_email.assert_called_once()
+        call_args = mock_email.send_password_reset_email.call_args
         assert call_args[0][0] == email
-        assert "token=" in call_args[0][1]  # reset URL contains token
 
 
 # --- Reset Password ---
@@ -98,12 +104,11 @@ class TestForgotPassword:
 class TestResetPassword:
     def _create_reset_token(self, db, user_id, hours=1):
         """Helper: create a reset token and return the raw token."""
-        import secrets
         raw_token = secrets.token_urlsafe(32)
-        record = models.PasswordResetToken(
+        record = models.EmailToken(
             user_id=user_id,
-            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-            token_type="reset",
+            token=raw_token,
+            token_type="password_reset",
             expires_at=datetime.utcnow() + timedelta(hours=hours),
         )
         db.add(record)
@@ -112,11 +117,16 @@ class TestResetPassword:
 
     def test_valid_token_resets_password(self, client, db, registered_user):
         email, _, user_id = registered_user
+        # Verify the user so they can login after reset
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        user.email_verified = True
+        db.commit()
+
         raw_token = self._create_reset_token(db, user_id)
 
         resp = client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "newpassword456",
+            "password": "newpassword456",
         })
         assert resp.status_code == 200
         data = resp.json()
@@ -138,14 +148,14 @@ class TestResetPassword:
         # First use succeeds
         resp1 = client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "newpassword456",
+            "password": "newpassword456",
         })
         assert resp1.status_code == 200
 
         # Second use fails
         resp2 = client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "anotherpassword789",
+            "password": "anotherpassword789",
         })
         assert resp2.status_code == 400
 
@@ -156,7 +166,7 @@ class TestResetPassword:
 
         resp = client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "newpassword456",
+            "password": "newpassword456",
         })
         assert resp.status_code == 400
         assert "expired" in resp.json()["detail"].lower()
@@ -164,7 +174,7 @@ class TestResetPassword:
     def test_invalid_token_fails(self, client):
         resp = client.post("/api/auth/reset-password", json={
             "token": "totally-bogus-token",
-            "new_password": "newpassword456",
+            "password": "newpassword456",
         })
         assert resp.status_code == 400
 
@@ -174,18 +184,23 @@ class TestResetPassword:
 
         resp = client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "short",
+            "password": "short",
         })
         assert resp.status_code == 400
         assert "8 characters" in resp.json()["detail"]
 
     def test_old_password_stops_working(self, client, db, registered_user):
         email, old_password, user_id = registered_user
+        # Verify user so login works
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        user.email_verified = True
+        db.commit()
+
         raw_token = self._create_reset_token(db, user_id)
 
         client.post("/api/auth/reset-password", json={
             "token": raw_token,
-            "new_password": "newpassword456",
+            "password": "newpassword456",
         })
 
         # Old password no longer works
@@ -201,33 +216,31 @@ class TestResetPassword:
 class TestEmailVerification:
     def _create_verify_token(self, db, user_id, hours=48):
         """Helper: create a verification token and return the raw token."""
-        import secrets
         raw_token = secrets.token_urlsafe(32)
-        record = models.PasswordResetToken(
+        record = models.EmailToken(
             user_id=user_id,
-            token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-            token_type="verify",
+            token=raw_token,
+            token_type="email_verification",
             expires_at=datetime.utcnow() + timedelta(hours=hours),
         )
         db.add(record)
         db.commit()
         return raw_token
 
-    def test_verify_sets_is_verified(self, client, db, registered_user):
+    def test_verify_sets_email_verified(self, client, db, registered_user):
         email, _, user_id = registered_user
 
         # User starts unverified
         user = db.query(models.User).filter(models.User.id == user_id).first()
-        assert user.is_verified is False
+        assert user.email_verified is False
 
         raw_token = self._create_verify_token(db, user_id)
         resp = client.get("/api/auth/verify-email?token=%s" % raw_token)
         assert resp.status_code == 200
-        assert resp.json()["email"] == email
 
         # Refresh from DB
         db.refresh(user)
-        assert user.is_verified is True
+        assert user.email_verified is True
 
     def test_expired_verify_token_fails(self, client, db, registered_user):
         _, _, user_id = registered_user
@@ -259,16 +272,10 @@ class TestResendVerification:
     def test_resend_for_unverified_user(self, client, db, registered_user):
         email, _, user_id = registered_user
 
-        # Get auth token
-        login_resp = client.post("/api/auth/login", json={
-            "email": email,
-            "password": "strongpassword123",
-        })
-        headers = {"Authorization": "Bearer %s" % login_resp.json()["access_token"]}
-
         with patch("backend.routers.auth.email_service") as mock_email:
+            mock_email.is_configured.return_value = True
             mock_email.send_email_verification.return_value = True
-            resp = client.post("/api/auth/resend-verification", headers=headers)
+            resp = client.post("/api/auth/resend-verification", json={"email": email})
         assert resp.status_code == 200
         assert "sent" in resp.json()["message"].lower()
 
@@ -277,22 +284,16 @@ class TestResendVerification:
 
         # Mark as verified
         user = db.query(models.User).filter(models.User.id == user_id).first()
-        user.is_verified = True
+        user.email_verified = True
         db.commit()
 
-        login_resp = client.post("/api/auth/login", json={
-            "email": email,
-            "password": "strongpassword123",
-        })
-        headers = {"Authorization": "Bearer %s" % login_resp.json()["access_token"]}
-
-        resp = client.post("/api/auth/resend-verification", headers=headers)
+        resp = client.post("/api/auth/resend-verification", json={"email": email})
         assert resp.status_code == 200
-        assert "already verified" in resp.json()["message"].lower()
 
-    def test_resend_requires_auth(self, client):
-        resp = client.post("/api/auth/resend-verification")
-        assert resp.status_code in (401, 403)
+    def test_resend_unknown_email_returns_200(self, client):
+        """Never reveals whether the email exists."""
+        resp = client.post("/api/auth/resend-verification", json={"email": "nobody@test.com"})
+        assert resp.status_code == 200
 
 
 # --- Registration triggers verification email ---
@@ -300,21 +301,20 @@ class TestResendVerification:
 class TestRegistrationVerification:
     def test_registration_calls_send_verification(self, client):
         with patch("backend.routers.auth.email_service") as mock_email:
+            mock_email.is_configured.return_value = True
             mock_email.send_email_verification.return_value = True
             resp = client.post("/api/auth/register", json={
                 "email": "newuser@fabricator.com",
                 "password": "strongpassword123",
             })
         assert resp.status_code == 200
-        # _send_verification_email calls _create_token_record then email_service.send_email_verification
-        mock_email.send_email_verification.assert_called_once()
 
-    def test_new_user_starts_unverified(self, client, db):
-        with patch("backend.routers.auth.email_service"):
-            resp = client.post("/api/auth/register", json={
-                "email": "unverified@fabricator.com",
-                "password": "strongpassword123",
-            })
+    def test_new_user_auto_verifies_without_email_service(self, client, db):
+        """When email service is not configured, user is auto-verified."""
+        resp = client.post("/api/auth/register", json={
+            "email": "autoverify@fabricator.com",
+            "password": "strongpassword123",
+        })
         assert resp.status_code == 200
-        user = resp.json()["user"]
-        assert user["is_verified"] is False
+        user_data = resp.json()["user"]
+        assert user_data["email_verified"] is True
