@@ -23,6 +23,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
 
+from sqlalchemy import func
+
 from .. import models
 from ..auth import (
     create_access_token,
@@ -236,6 +238,9 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     - With demo_token: upgrades existing demo user to real account.
     - Without invite code: password required (min 8 chars).
     """
+    # Normalize email to lowercase
+    request.email = request.email.strip().lower()
+
     # Validate invite code if provided
     invite_code_record = None
     if request.invite_code:
@@ -368,15 +373,31 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/login")
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate with email + password. Returns access + refresh tokens."""
-    user = db.query(models.User).filter(models.User.email == request.email).first()
+    # Case-insensitive email matching
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == request.email.strip().lower()
+    ).first()
     logger.info("[LOGIN] email=%s found=%s", request.email, user is not None)
 
     if not user or not user.password_hash:
-        logger.info("[LOGIN] email=%s REJECT: no user or no password_hash", request.email)
+        logger.info(
+            "[LOGIN] email=%s REJECT: no user or no password_hash (has_user=%s, has_hash=%s)",
+            request.email, user is not None,
+            bool(user.password_hash) if user else False,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
+
+    # Diagnostic: log hash metadata (never the actual hash)
+    hash_prefix = user.password_hash[:7] if user.password_hash else "NONE"
+    hash_len = len(user.password_hash) if user.password_hash else 0
+    pw_input_len = len(request.password) if request.password else 0
+    logger.info(
+        "[LOGIN] email=%s hash_prefix=%s hash_len=%d pw_input_len=%d",
+        request.email, hash_prefix, hash_len, pw_input_len,
+    )
 
     pw_ok = verify_password(request.password, user.password_hash)
     logger.info("[LOGIN] email=%s password_match=%s", request.email, pw_ok)
@@ -711,7 +732,10 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
     Send a password reset email. Always returns 200 — never reveals
     whether the email is registered (prevents email enumeration).
     """
-    user = db.query(models.User).filter(models.User.email == request.email).first()
+    email_normalized = request.email.strip().lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email_normalized
+    ).first()
     if user and user.password_hash:
         token = _create_email_token(user, "password_reset", db, expires_hours=1)
         email_service.send_password_reset_email(user.email, token)
@@ -757,12 +781,26 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     if not user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User not found.")
 
-    user.password_hash = hash_password(request.password)
+    new_hash = hash_password(request.password)
+    logger.info(
+        "[RESET-PW] user_id=%d email=%s hash_prefix=%s hash_len=%d",
+        user.id, user.email, new_hash[:7], len(new_hash),
+    )
+    user.password_hash = new_hash
     user.is_provisional = False
     user.email_verified = True  # Verifying ownership by resetting password via email
     email_token.is_used = True
     db.commit()
     db.refresh(user)
+
+    # Verify the hash was persisted correctly
+    verify_ok = verify_password(request.password, user.password_hash)
+    logger.info(
+        "[RESET-PW] user_id=%d verify_after_commit=%s stored_hash_prefix=%s",
+        user.id, verify_ok, user.password_hash[:7] if user.password_hash else "NONE",
+    )
+    if not verify_ok:
+        logger.error("[RESET-PW] CRITICAL: hash verification failed after commit for user_id=%d", user.id)
 
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
@@ -812,7 +850,10 @@ def resend_verification(request: ResendVerificationRequest, db: Session = Depend
     Resend verification email. Invalidates any previous unused verification
     tokens. Always returns 200 — never reveals if the email is registered.
     """
-    user = db.query(models.User).filter(models.User.email == request.email).first()
+    email_normalized = request.email.strip().lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email_normalized
+    ).first()
     if user and not getattr(user, "email_verified", False):
         # Invalidate previous unused verification tokens
         old_tokens = db.query(models.EmailToken).filter(
@@ -827,3 +868,63 @@ def resend_verification(request: ResendVerificationRequest, db: Session = Depend
         _send_verification_email(user, db)
 
     return {"message": "If that email is registered and unverified, a new verification link has been sent."}
+
+
+@router.post("/debug-login")
+def debug_login(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    TEMPORARY diagnostic endpoint — returns detailed login check results
+    without issuing tokens. Remove after debugging is complete.
+    """
+    email_normalized = request.email.strip().lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email_normalized
+    ).first()
+
+    if not user:
+        return {
+            "step": "user_lookup",
+            "found": False,
+            "email_submitted": request.email,
+            "email_normalized": email_normalized,
+        }
+
+    has_hash = bool(user.password_hash)
+    hash_prefix = user.password_hash[:7] if user.password_hash else "NONE"
+    hash_len = len(user.password_hash) if user.password_hash else 0
+    pw_input_len = len(request.password) if request.password else 0
+
+    pw_ok = False
+    pw_error = None
+    if has_hash:
+        try:
+            pw_ok = verify_password(request.password, user.password_hash)
+        except Exception as e:
+            pw_error = str(e)
+
+    email_verified = getattr(user, "email_verified", False)
+    admin_email = os.getenv("APP_ADMIN_EMAIL", "").strip()
+    is_admin = (user.email == admin_email) if admin_email else False
+
+    return {
+        "step": "complete",
+        "found": True,
+        "email_in_db": user.email,
+        "email_submitted": request.email,
+        "email_case_match": user.email == request.email,
+        "has_password_hash": has_hash,
+        "hash_prefix": hash_prefix,
+        "hash_length": hash_len,
+        "password_input_length": pw_input_len,
+        "password_match": pw_ok,
+        "password_error": pw_error,
+        "email_verified": email_verified,
+        "is_admin_bypass": is_admin,
+        "is_provisional": user.is_provisional,
+        "would_login": pw_ok and (email_verified or is_admin),
+        "block_reason": (
+            "password_mismatch" if not pw_ok else
+            "email_not_verified" if not email_verified and not is_admin else
+            None
+        ),
+    }

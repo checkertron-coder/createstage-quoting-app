@@ -28,7 +28,15 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its bcrypt hash."""
-    return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8')[:72], hashed_password.encode('utf-8'))
+    except Exception as e:
+        import logging
+        logging.getLogger("backend.auth").error(
+            "bcrypt.checkpw raised exception: %s (hash_prefix=%s, hash_len=%d)",
+            e, hashed_password[:7] if hashed_password else "NONE", len(hashed_password or ""),
+        )
+        return False
 
 
 # --- JWT tokens ---
