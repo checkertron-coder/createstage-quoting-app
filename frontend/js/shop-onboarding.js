@@ -206,42 +206,116 @@ const ShopOnboarding = {
             return;
         }
 
-        const w = (equipment.welding_processes || []).map(p => {
-            let desc = p.process;
-            if (p.wire_type) desc += ` (${p.wire_type})`;
-            if (p.primary) desc += ' [primary]';
-            return desc;
-        }).join(', ') || 'None specified';
+        // AI-generated summary
+        const summary = equipment.shop_notes || '';
 
-        const c = (equipment.cutting_capabilities || []).map(p => {
-            let desc = p.tool;
-            if (p.cnc) desc += ' (CNC)';
-            return desc;
-        }).join(', ') || 'None specified';
+        // Build capability cards
+        const weldItems = (equipment.welding_processes || []).map(p => {
+            let label = p.process;
+            if (p.wire_type) label += ` — ${p.wire_type}`;
+            if (p.primary) label += ' <span class="cap-badge cap-primary">primary</span>';
+            let note = p.notes ? `<span class="cap-note">${p.notes}</span>` : '';
+            return `<li>${label}${note}</li>`;
+        }).join('');
 
-        const f = (equipment.forming_equipment || []).map(p => {
-            let desc = p.tool;
-            if (p.specs) desc += ` (${p.specs})`;
-            return desc;
-        }).join(', ') || 'None';
+        const cutItems = (equipment.cutting_capabilities || []).map(p => {
+            let label = p.tool;
+            if (p.cnc) label += ' <span class="cap-badge cap-cnc">CNC</span>';
+            let note = p.notes ? `<span class="cap-note">${p.notes}</span>` : '';
+            return `<li>${label}${note}</li>`;
+        }).join('');
 
-        const fin = (equipment.finishing_capabilities || []).map(p => {
-            let desc = p.method;
-            desc += p.in_house ? ' (in-house)' : ' (outsourced)';
-            return desc;
-        }).join(', ') || 'None specified';
+        const formItems = (equipment.forming_equipment || []).map(p => {
+            let label = p.tool;
+            if (p.specs) label += ` — ${p.specs}`;
+            let note = p.notes ? `<span class="cap-note">${p.notes}</span>` : '';
+            return `<li>${label}${note}</li>`;
+        }).join('');
+
+        const finItems = (equipment.finishing_capabilities || []).map(p => {
+            let label = p.method;
+            label += p.in_house
+                ? ' <span class="cap-badge cap-inhouse">in-house</span>'
+                : ' <span class="cap-badge cap-outsourced">outsourced</span>';
+            let note = p.notes ? `<span class="cap-note">${p.notes}</span>` : '';
+            return `<li>${label}${note}</li>`;
+        }).join('');
+
+        // Raw answers for expandable section
+        const rawW = equipment.raw_welding_answer || '';
+        const rawF = equipment.raw_forming_answer || '';
+        const rawFin = equipment.raw_finishing_answer || '';
+        const hasRaw = rawW || rawF || rawFin;
 
         container.innerHTML = `
             <div class="equipment-section">
-                <h3>Shop Equipment</h3>
-                <div class="equipment-grid">
-                    <div><strong>Welding & Cutting:</strong> ${w}</div>
-                    <div><strong>Cutting:</strong> ${c}</div>
-                    <div><strong>Forming:</strong> ${f}</div>
-                    <div><strong>Finishing:</strong> ${fin}</div>
+                <h3>Shop Equipment Profile</h3>
+
+                ${summary
+                    ? `<div class="shop-summary"><p>${summary}</p></div>`
+                    : `<div class="shop-summary shop-summary-empty">
+                        <p class="text-secondary">No shop summary yet.</p>
+                        <button class="btn btn-secondary btn-sm" id="btn-gen-summary" onclick="ShopOnboarding.regenerateSummary()">Generate AI Summary</button>
+                    </div>`
+                }
+
+                <div class="capability-cards">
+                    ${weldItems ? `
+                    <div class="cap-card">
+                        <div class="cap-card-title">Welding</div>
+                        <ul class="cap-list">${weldItems}</ul>
+                    </div>` : ''}
+                    ${cutItems ? `
+                    <div class="cap-card">
+                        <div class="cap-card-title">Cutting</div>
+                        <ul class="cap-list">${cutItems}</ul>
+                    </div>` : ''}
+                    ${formItems ? `
+                    <div class="cap-card">
+                        <div class="cap-card-title">Forming</div>
+                        <ul class="cap-list">${formItems}</ul>
+                    </div>` : ''}
+                    ${finItems ? `
+                    <div class="cap-card">
+                        <div class="cap-card-title">Finishing</div>
+                        <ul class="cap-list">${finItems}</ul>
+                    </div>` : ''}
                 </div>
-                <button class="btn btn-secondary btn-sm" style="margin-top: 12px" onclick="ShopOnboarding.render(); App.showView('onboarding')">Update Equipment</button>
+
+                ${hasRaw ? `
+                <details class="raw-answers-toggle">
+                    <summary>View your original answers</summary>
+                    <div class="raw-answers">
+                        ${rawW ? `<div class="raw-answer-block"><strong>Welding & Cutting:</strong><p>${rawW.replace(/\n/g, '<br>')}</p></div>` : ''}
+                        ${rawF ? `<div class="raw-answer-block"><strong>Forming & Fabrication:</strong><p>${rawF.replace(/\n/g, '<br>')}</p></div>` : ''}
+                        ${rawFin ? `<div class="raw-answer-block"><strong>Finishing:</strong><p>${rawFin.replace(/\n/g, '<br>')}</p></div>` : ''}
+                    </div>
+                </details>` : ''}
+
+                <button class="btn btn-secondary btn-sm" style="margin-top: 16px" onclick="ShopOnboarding.render(); App.showView('onboarding')">Update Equipment</button>
             </div>
         `;
+    },
+
+    async regenerateSummary() {
+        const btn = document.getElementById('btn-gen-summary');
+        if (btn) { btn.disabled = true; btn.textContent = 'Generating...'; }
+
+        try {
+            const resp = await fetch('/api/shop/equipment/regenerate-summary', {
+                method: 'POST',
+                headers: API.headers(),
+            });
+            if (!resp.ok) {
+                const data = await resp.json();
+                throw new Error(data.detail || 'Failed to generate summary');
+            }
+            // Re-render the section with the new summary
+            const container = document.getElementById('equipment-section-container');
+            if (container) await this.renderEquipmentSection(container);
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Generate AI Summary'; }
+            alert(e.message);
+        }
     },
 };

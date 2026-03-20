@@ -84,6 +84,7 @@ Question 3 — Finishing:
 
 Return ONLY valid JSON with this structure:
 {
+    "shop_summary": "A 2-4 sentence factual summary of this shop's capabilities, written in third person. Describe what kind of work this shop is set up for based on their equipment. Be specific — mention their primary welding process, key tools, and finishing approach. Sound like a knowledgeable fabricator describing a peer's shop, not a marketing brochure.",
     "welding_processes": [
         {"process": "MIG", "primary": true, "wire_type": "flux core", "notes": ""}
     ],
@@ -107,6 +108,7 @@ Rules:
 - For cutting: set "cnc": true ONLY if they explicitly mention CNC or automated table
 - For finishing: "in_house": false means they outsource it
 - Keep "notes" brief — only add if user gave specific details (tonnage, brand, etc.)
+- shop_summary: FACTUAL ONLY — only reference equipment and processes the user actually described. Do not assume or embellish.
 """ % (welding_answer, forming_answer, finishing_answer)
 
     try:
@@ -129,6 +131,12 @@ Rules:
                      "forming_equipment", "finishing_capabilities"]:
             if key not in result or not isinstance(result[key], list):
                 result[key] = []
+
+        # Extract shop summary if present
+        if "shop_summary" in result and isinstance(result["shop_summary"], str):
+            result["shop_summary"] = result["shop_summary"]
+        else:
+            result["shop_summary"] = ""
 
         return result
 
@@ -201,7 +209,28 @@ def _fallback_interpret(welding_answer: str, forming_answer: str, finishing_answ
         if not any(f.get("method") == "powder coat" for f in finishing):
             finishing.append({"method": "coating", "in_house": False, "notes": "outsourced"})
 
+    # Build a basic summary from detected capabilities
+    parts = []
+    if welding:
+        procs = [p["process"] for p in welding]
+        parts.append("Runs %s" % " and ".join(procs))
+    if cutting:
+        tools = [c["tool"] for c in cutting]
+        parts.append("cuts with %s" % ", ".join(tools))
+    if forming:
+        tools = [f["tool"] for f in forming]
+        parts.append("has %s for forming" % ", ".join(tools))
+    if finishing:
+        in_house = [f["method"] for f in finishing if f.get("in_house")]
+        outsourced = [f["method"] for f in finishing if not f.get("in_house")]
+        if in_house:
+            parts.append("handles %s in-house" % ", ".join(in_house))
+        if outsourced:
+            parts.append("sends out %s" % ", ".join(outsourced))
+    summary = ". ".join(parts) + "." if parts else ""
+
     return {
+        "shop_summary": summary,
         "welding_processes": welding,
         "cutting_capabilities": cutting,
         "forming_equipment": forming,
@@ -233,6 +262,8 @@ def submit_onboarding(
         models.ShopEquipment.user_id == current_user.id
     ).first()
 
+    shop_summary = profile.get("shop_summary", "")
+
     if equipment:
         equipment.welding_processes = profile.get("welding_processes", [])
         equipment.cutting_capabilities = profile.get("cutting_capabilities", [])
@@ -241,6 +272,7 @@ def submit_onboarding(
         equipment.raw_welding_answer = request.welding_answer
         equipment.raw_forming_answer = request.forming_answer
         equipment.raw_finishing_answer = request.finishing_answer
+        equipment.shop_notes = shop_summary
         equipment.updated_at = datetime.utcnow()
     else:
         equipment = models.ShopEquipment(
@@ -252,6 +284,7 @@ def submit_onboarding(
             raw_welding_answer=request.welding_answer,
             raw_forming_answer=request.forming_answer,
             raw_finishing_answer=request.finishing_answer,
+            shop_notes=shop_summary,
         )
         db.add(equipment)
 
@@ -307,6 +340,41 @@ def update_equipment(
     equipment.updated_at = datetime.utcnow()
     current_user.onboarding_complete = True
     current_user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(equipment)
+
+    return _equipment_to_response(equipment, current_user)
+
+
+@router.post("/equipment/regenerate-summary")
+def regenerate_summary(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Re-run AI interpretation on existing raw answers to generate a shop summary."""
+    equipment = db.query(models.ShopEquipment).filter(
+        models.ShopEquipment.user_id == current_user.id
+    ).first()
+
+    if not equipment:
+        raise HTTPException(status_code=404, detail="No equipment profile found")
+
+    raw_w = equipment.raw_welding_answer or ""
+    raw_f = equipment.raw_forming_answer or ""
+    raw_fin = equipment.raw_finishing_answer or ""
+
+    if not (raw_w or raw_f or raw_fin):
+        raise HTTPException(status_code=400, detail="No original answers to regenerate from")
+
+    profile = _interpret_with_opus(raw_w, raw_f, raw_fin)
+
+    # Update structured data + summary
+    equipment.welding_processes = profile.get("welding_processes", [])
+    equipment.cutting_capabilities = profile.get("cutting_capabilities", [])
+    equipment.forming_equipment = profile.get("forming_equipment", [])
+    equipment.finishing_capabilities = profile.get("finishing_capabilities", [])
+    equipment.shop_notes = profile.get("shop_summary", "")
+    equipment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(equipment)
 
