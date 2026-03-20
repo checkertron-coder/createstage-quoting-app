@@ -390,12 +390,20 @@ const Auth = {
 
                 ${this._renderPlanSection(u)}
 
+                <div id="equipment-section-container"></div>
+
                 <div class="profile-actions">
                     <button class="btn btn-primary" onclick="Auth.saveProfile()">Save & Continue</button>
                     <button class="btn btn-ghost" onclick="App.showView('quote')">Skip for Now &rarr;</button>
                 </div>
             </div>
         `;
+
+        // Load equipment section async
+        const eqContainer = document.getElementById('equipment-section-container');
+        if (eqContainer && typeof ShopOnboarding !== 'undefined') {
+            ShopOnboarding.renderEquipmentSection(eqContainer);
+        }
     },
 
     _renderPlanSection(u) {

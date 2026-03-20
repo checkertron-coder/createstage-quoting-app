@@ -121,6 +121,7 @@ class UserResponse(BaseModel):
     quotes_this_month: Optional[int] = 0
     has_billing: Optional[bool] = False
     email_verified: bool = False
+    onboarding_complete: bool = False
     created_at: datetime
 
     class Config:
@@ -145,6 +146,7 @@ def _user_to_response(user: models.User) -> dict:
         "deposit_labor_pct": getattr(user, "deposit_labor_pct", 50) or 50,
         "deposit_materials_pct": getattr(user, "deposit_materials_pct", 100) or 100,
         "email_verified": getattr(user, "email_verified", False) or False,
+        "onboarding_complete": getattr(user, "onboarding_complete", False) or False,
         "tier": user.tier,
         "subscription_status": getattr(user, "subscription_status", "free"),
         "trial_ends_at": (

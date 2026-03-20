@@ -302,6 +302,52 @@ body {
 .btn-locked { opacity: 0.5; cursor: not-allowed; }
 .preview-mode .grand-total span:last-child { font-size: 1.1rem; }
 
+/* --- Onboarding View --- */
+.onboarding-card {
+    max-width: 520px;
+    margin: 60px auto;
+    padding: 40px 32px;
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+}
+.onboarding-title { font-size: 1.5rem; margin-bottom: 4px; }
+.onboarding-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 28px; }
+.onboarding-progress {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; margin-bottom: 28px;
+}
+.progress-step {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.85rem; font-weight: 600;
+    background: var(--border); color: var(--text-secondary);
+    transition: all 0.2s;
+}
+.progress-step.active { background: var(--primary); color: white; }
+.progress-step.completed { background: var(--success); color: white; }
+.progress-line { width: 40px; height: 2px; background: var(--border); }
+.onboarding-q-text { font-size: 1.05rem; font-weight: 500; margin-bottom: 6px; }
+.onboarding-hint { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 16px; }
+.onboarding-textarea {
+    width: 100%; padding: 12px; border: 1px solid var(--border);
+    border-radius: var(--radius); font-size: 0.95rem; font-family: var(--font);
+    resize: vertical; min-height: 80px;
+}
+.onboarding-textarea:focus { outline: none; border-color: var(--accent); }
+.onboarding-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+.onboarding-summary h3 { margin-bottom: 16px; }
+.summary-section { margin-bottom: 12px; padding: 10px; background: var(--bg); border-radius: var(--radius); }
+.summary-section strong { display: block; margin-bottom: 4px; font-size: 0.85rem; color: var(--text-secondary); }
+.summary-section p { font-size: 0.95rem; }
+
+/* Equipment section in profile */
+.equipment-section { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border); }
+.equipment-section h3 { margin-bottom: 12px; }
+.equipment-grid { display: grid; gap: 8px; font-size: 0.9rem; }
+.equipment-grid div { padding: 6px 0; }
+.equipment-grid strong { color: var(--text-secondary); font-size: 0.8rem; }
+
 /* --- Profile View --- */
 .profile-card {
     max-width: 600px;

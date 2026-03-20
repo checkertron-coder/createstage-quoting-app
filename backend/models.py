@@ -119,6 +119,7 @@ class User(Base):
     deposit_labor_pct = Column(Integer, default=50)
     deposit_materials_pct = Column(Integer, default=100)
     email_verified = Column(Boolean, default=False)
+    onboarding_complete = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -126,6 +127,7 @@ class User(Base):
     auth_tokens = relationship("AuthToken", back_populates="user", cascade="all, delete-orphan")
     quote_sessions = relationship("QuoteSession", back_populates="user", cascade="all, delete-orphan")
     quotes = relationship("Quote", back_populates="user", foreign_keys="Quote.user_id")
+    shop_equipment = relationship("ShopEquipment", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class AuthToken(Base):
@@ -364,6 +366,28 @@ class EmailToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class ShopEquipment(Base):
+    """Shop equipment profile — stores capabilities parsed from onboarding."""
+    __tablename__ = "shop_equipment"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    # Structured capabilities (JSON)
+    welding_processes = Column(JSON, default=list)      # [{"process": "MIG", "primary": true, "wire_type": "flux core", "notes": ""}]
+    cutting_capabilities = Column(JSON, default=list)   # [{"tool": "hand plasma", "cnc": false, "notes": ""}]
+    forming_equipment = Column(JSON, default=list)      # [{"tool": "press brake", "specs": "60 ton, 6ft bed", "notes": ""}]
+    finishing_capabilities = Column(JSON, default=list)  # [{"method": "spray paint", "in_house": true}, {"method": "powder coat", "in_house": false}]
+    # Free-text answers (preserved for re-interpretation)
+    raw_welding_answer = Column(Text, nullable=True)
+    raw_forming_answer = Column(Text, nullable=True)
+    raw_finishing_answer = Column(Text, nullable=True)
+    shop_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", back_populates="shop_equipment")
 
 
 class MaterialPrice(Base):

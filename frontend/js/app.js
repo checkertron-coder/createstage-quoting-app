@@ -58,7 +58,14 @@ const App = {
                 history.replaceState(null, '', '/app');
             }
 
-            this.showView('quote');
+            // Check if user needs onboarding
+            const user = Auth.currentUser;
+            if (user && !user.onboarding_complete && !user.is_provisional) {
+                ShopOnboarding.render();
+                this.showView('onboarding');
+            } else {
+                this.showView('quote');
+            }
             // Show demo banner or upgrade banner
             Auth.renderDemoBanner();
             Auth.renderUpgradeBanner();
@@ -69,7 +76,7 @@ const App = {
 
     showView(view) {
         this.currentView = view;
-        const views = ['auth', 'profile', 'quote', 'history', 'bid'];
+        const views = ['auth', 'profile', 'onboarding', 'quote', 'history', 'bid'];
         views.forEach(v => {
             const el = document.getElementById(`view-${v}`);
             if (el) el.style.display = v === view ? 'block' : 'none';
@@ -83,7 +90,7 @@ const App = {
         // Show/hide nav based on auth state
         const nav = document.getElementById('main-nav');
         if (nav) {
-            nav.style.display = (view === 'auth') ? 'none' : 'flex';
+            nav.style.display = (view === 'auth' || view === 'onboarding') ? 'none' : 'flex';
         }
 
         // Load history data when showing history view

@@ -420,6 +420,12 @@ def calculate_materials(
             detail=f"No calculator registered for job type: {job_type}",
         )
 
+    # Inject shop equipment context into params for AI prompts
+    from ..shop_context import build_shop_context_block
+    shop_ctx = build_shop_context_block(current_user.id, db)
+    if shop_ctx:
+        current_params["_shop_context"] = shop_ctx
+
     # Run calculator
     print(f"CALCULATE DEBUG: fields keys = {list(current_params.keys())}")
     print(f"CALCULATE DEBUG: description = {str(current_params.get('description', 'NOT FOUND'))[:100]}")
@@ -602,6 +608,9 @@ def estimate_labor(
         # Build enforced dimensions for the build instructions prompt
         build_fields = {k: v for k, v in current_params.items()
                         if not k.startswith("_")}
+        # Pass shop context through to AI prompt
+        if current_params.get("_shop_context"):
+            build_fields["_shop_context"] = current_params["_shop_context"]
         enforced_dims = None
         if session.job_type == "cantilever_gate":
             enforced_dims = {}

@@ -423,6 +423,9 @@ SHOP KNOWLEDGE BASE (use this to inform your output):
 ---
 """ % knowledge_snippet
 
+        # Shop equipment context (injected via _shop_context field)
+        shop_context_block = str(fields.get("_shop_context", "") or "")
+
         # Build structured context blocks for compound/complex jobs
         context_blocks = self._build_field_context(job_type, fields)
 
@@ -442,7 +445,7 @@ This project uses ALUMINUM, not steel. You MUST:
         prompt = """You are an expert metal fabricator generating a cut list for a fabrication project.
 
 JOB TYPE: %s
-%s%s
+%s%s%s
 PROJECT INFO:
 %s
 %s
@@ -507,7 +510,7 @@ Return ONLY valid JSON — an array of objects:
         "sheets_needed": 1,
         "notes": "Back panel 138x28, fits on 4'x12' sheet."
     }
-]""" % (job_type, knowledge_block, material_context, fields_text,
+]""" % (job_type, knowledge_block, shop_context_block, material_context, fields_text,
         context_blocks, weld_guidance, gauge_constraint, profiles_text)
 
         return prompt
@@ -1075,11 +1078,14 @@ Do NOT include vinegar bath, acid wash, or mill scale removal steps.
             "Do not round or invent dimensions." % (len(rules_lines) + 1))
         rules_block = "\n".join(rules_lines)
 
+        # Shop equipment context
+        shop_context_block = str(fields.get("_shop_context", "") or "")
+
         prompt = """You are an expert metal fabricator creating step-by-step build instructions.
 A journeyman fabricator should be able to follow these instructions and build this project.
 
 JOB TYPE: %s
-%s
+%s%s
 PROJECT DETAILS:
 %s
 
@@ -1103,7 +1109,7 @@ Return ONLY valid JSON — an array of step objects:
         "weld_process": null,
         "safety_notes": "Wear gloves when handling raw steel — sharp edges and mill scale."
     }
-]""" % (job_type, knowledge_block, fields_text, cuts_text,
+]""" % (job_type, knowledge_block, shop_context_block, fields_text, cuts_text,
         geometry_block, enforced_dims_block, weld_note, finish_context,
         rules_block)
 
@@ -1398,6 +1404,9 @@ Return ONLY valid JSON — an array of step objects:
         if knowledge_snippet:
             knowledge_block = "\nSHOP KNOWLEDGE BASE:\n%s\n---\n" % knowledge_snippet
 
+        # Shop equipment context
+        shop_context_block = str(fields.get("_shop_context", "") or "")
+
         context_blocks = self._build_field_context(job_type, fields)
 
         # Material context — from explicit selection or legacy detection
@@ -1430,7 +1439,7 @@ Only include materials, hardware, and processes that the user EXPLICITLY describ
 - The user is a fabricator — they know what they need. Quote what they asked for, nothing more.
 
 JOB TYPE: %s
-%s%s
+%s%s%s
 PROJECT INFO:
 %s
 %s
@@ -1546,7 +1555,7 @@ HARDWARE PRICING RULES:
     "finishing_method": "paint",
     "assumptions": ["assumption 1"],
     "exclusions": ["exclusion 1"]
-}""" % (job_type, knowledge_block, material_context, fields_text,
+}""" % (job_type, knowledge_block, shop_context_block, material_context, fields_text,
         context_blocks, weld_guidance, gauge_constraint,
         profiles_text, labor_calibration)
 
