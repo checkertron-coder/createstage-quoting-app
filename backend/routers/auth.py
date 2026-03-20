@@ -928,3 +928,42 @@ def debug_login(request: LoginRequest, db: Session = Depends(get_db)):
             None
         ),
     }
+
+
+@router.post("/debug-force-password")
+def debug_force_password(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    TEMPORARY — force-set a user's password. Remove after debugging.
+    """
+    email_normalized = request.email.strip().lower()
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == email_normalized
+    ).first()
+
+    if not user:
+        return {"ok": False, "error": "User not found"}
+
+    if not request.password or len(request.password) < 8:
+        return {"ok": False, "error": "Password must be at least 8 characters"}
+
+    new_hash = hash_password(request.password)
+    user.password_hash = new_hash
+    db.commit()
+    db.refresh(user)
+
+    # Verify it works immediately
+    verify_ok = verify_password(request.password, user.password_hash)
+
+    logger.info(
+        "[FORCE-PW] email=%s hash_prefix=%s verify=%s",
+        user.email, new_hash[:7], verify_ok,
+    )
+
+    return {
+        "ok": verify_ok,
+        "email": user.email,
+        "hash_prefix": user.password_hash[:7],
+        "hash_length": len(user.password_hash),
+        "verify_after_save": verify_ok,
+        "message": "Password set. Try logging in now." if verify_ok else "ERROR: Hash verification failed after save!",
+    }
