@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Auth — v2
     JWT_SECRET: str = ""  # REQUIRED in production — fail loudly if missing at auth time
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_EXPIRE_MINUTES: int = 15
+    JWT_ACCESS_EXPIRE_MINUTES: int = 60
     JWT_REFRESH_EXPIRE_DAYS: int = 30
 
     # Email (Resend)

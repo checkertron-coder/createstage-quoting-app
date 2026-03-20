@@ -369,14 +369,18 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate with email + password. Returns access + refresh tokens."""
     user = db.query(models.User).filter(models.User.email == request.email).first()
+    logger.info("[LOGIN] email=%s found=%s", request.email, user is not None)
 
     if not user or not user.password_hash:
+        logger.info("[LOGIN] email=%s REJECT: no user or no password_hash", request.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
-    if not verify_password(request.password, user.password_hash):
+    pw_ok = verify_password(request.password, user.password_hash)
+    logger.info("[LOGIN] email=%s password_match=%s", request.email, pw_ok)
+    if not pw_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -385,12 +389,19 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Email verification gate — admin bypass
     admin_email = os.getenv("APP_ADMIN_EMAIL", "").strip()
     email_verified = getattr(user, "email_verified", False)
-    if not email_verified and user.email != admin_email:
+    is_admin_bypass = (user.email == admin_email) if admin_email else False
+    logger.info(
+        "[LOGIN] email=%s email_verified=%s admin_bypass=%s",
+        request.email, email_verified, is_admin_bypass,
+    )
+    if not email_verified and not is_admin_bypass:
+        logger.info("[LOGIN] email=%s REJECT: email not verified", request.email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Check your inbox for the verification link.",
         )
 
+    logger.info("[LOGIN] email=%s SUCCESS", request.email)
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
 

@@ -138,6 +138,16 @@ body {
     transition: border-color 0.15s;
 }
 .auth-fields input:focus { border-color: var(--accent); }
+
+/* Password toggle */
+.password-wrapper { position: relative; }
+.password-wrapper input { width: 100%; padding-right: 44px; }
+.password-toggle {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: var(--text-secondary); display: flex; align-items: center;
+}
+.password-toggle:hover { color: var(--text); }
 .auth-buttons { display: flex; gap: 8px; margin-bottom: 16px; }
 .auth-buttons .btn { flex: 1; }
 .auth-divider {
