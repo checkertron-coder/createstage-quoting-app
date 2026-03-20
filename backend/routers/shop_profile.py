@@ -61,17 +61,16 @@ def _interpret_with_opus(welding_answer: str, forming_answer: str, finishing_ans
     Returns a dict with welding_processes, cutting_capabilities, forming_equipment,
     finishing_capabilities.
     """
-    prompt = """You are interpreting a fabricator's description of their shop equipment.
-They answered three questions about their capabilities. Extract structured data from their answers.
+    prompt = """You are a veteran fabricator reading another shop owner's description of their equipment.
+Your job: extract structured data AND write a shop summary that captures what makes THIS shop different.
 
-IMPORTANT DISTINCTIONS:
-- "Hand plasma" / "plasma cutter" = handheld plasma torch (operator-guided, freehand cuts)
-- "CNC plasma table" / "plasma table with CNC" = automated CNC machine (programmatic cuts, nesting)
-- A "plasma table" with no mention of CNC is just a flat cutting surface — NOT automated
-- "Cold saw" vs "chop saw" vs "band saw" — these are distinct tools
-- "Flux core" / "FCAW" = self-shielded wire (no gas needed, outdoor-capable, more spatter)
-- "MIG" / "GMAW" = gas-shielded solid wire (cleaner, requires gas bottle)
-- "Dual shield" = flux core with gas shielding (best penetration)
+TERMINOLOGY:
+- "Hand plasma" / "plasma cutter" = handheld torch (freehand cuts)
+- "CNC plasma table" / "plasma table with CNC" = automated CNC (programmatic cuts, nesting)
+- "Plasma table" with no CNC mention = flat cutting surface, NOT automated
+- "Flux core" / "FCAW" = self-shielded wire (no gas, outdoor-capable)
+- "MIG" / "GMAW" = gas-shielded solid wire (cleaner, requires gas)
+- "Dual shield" = flux core + gas shielding
 
 Question 1 — Welding & Cutting:
 "%s"
@@ -82,33 +81,40 @@ Question 2 — Forming & Fabrication:
 Question 3 — Finishing:
 "%s"
 
-Return ONLY valid JSON with this structure:
+Return ONLY valid JSON:
 {
-    "shop_summary": "A 2-4 sentence factual summary of this shop's capabilities, written in third person. Describe what kind of work this shop is set up for based on their equipment. Be specific — mention their primary welding process, key tools, and finishing approach. Sound like a knowledgeable fabricator describing a peer's shop, not a marketing brochure.",
+    "shop_summary": "...",
     "welding_processes": [
-        {"process": "MIG", "primary": true, "wire_type": "flux core", "notes": ""}
+        {"process": "MIG", "primary": true, "wire_type": "flux core", "notes": "Lincoln 256, runs .035 wire"}
     ],
     "cutting_capabilities": [
-        {"tool": "hand plasma", "cnc": false, "notes": ""},
+        {"tool": "hand plasma", "cnc": false, "notes": "Hypertherm 45XP"},
         {"tool": "cold saw", "cnc": false, "notes": ""}
     ],
     "forming_equipment": [
         {"tool": "press brake", "specs": "60 ton, 6ft bed", "notes": ""}
     ],
     "finishing_capabilities": [
-        {"method": "spray paint", "in_house": true, "notes": ""},
-        {"method": "powder coat", "in_house": false, "notes": "sends out"}
+        {"method": "spray paint", "in_house": true, "notes": "HVLP setup, does own primer+topcoat"},
+        {"method": "powder coat", "in_house": false, "notes": "sends to Joe's Coatings, 3 day turnaround"}
     ]
 }
 
-Rules:
-- Only include capabilities the user actually mentioned — do NOT invent
-- If user says "no" to something or doesn't mention it, leave it out
+RULES FOR STRUCTURED DATA:
+- Only include what the user actually mentioned — never invent capabilities
 - "primary": true for the process they use most or mention first
-- For cutting: set "cnc": true ONLY if they explicitly mention CNC or automated table
-- For finishing: "in_house": false means they outsource it
-- Keep "notes" brief — only add if user gave specific details (tonnage, brand, etc.)
-- shop_summary: FACTUAL ONLY — only reference equipment and processes the user actually described. Do not assume or embellish.
+- "cnc": true ONLY if they explicitly say CNC or automated
+- "in_house": false means they outsource it
+- NOTES MATTER: This is where the shop's personality lives. Capture brand names, model numbers, machine specs, wire sizes, gas types, capacity limits, workarounds, vendor names, turnaround times — anything specific they mentioned. If they said "Lincoln 210" not just "MIG". If they said "80 ton JMT brake" not just "press brake". Empty notes = generic shop. Specific notes = THIS shop.
+
+RULES FOR SHOP SUMMARY:
+Write 3-5 sentences like one fabricator sizing up another's shop after a walkthrough. Be specific and concrete — reference the actual equipment, processes, and details they described. What kind of work is this shop set up to handle? What are they strong at? What do they outsource and why? What's their workflow like?
+
+DO NOT write generic filler like "This is a well-equipped fabrication shop." Every sentence should contain a specific detail from their answers. If two shops gave different answers, their summaries should read completely differently.
+
+Good example: "This is a MIG-first shop running a Lincoln 256 with dual-shield flux core — set up for heavy structural work, not cosmetic TIG jobs. Cuts with a Hypertherm 45XP plasma and a 14-inch cold saw, no CNC table so all cuts are hand-laid. Has a 60-ton press brake for bending but sends out anything over 3/8. Finishes in-house with HVLP spray paint for primer and topcoat, sends powder coating to a local vendor."
+
+Bad example: "This shop has MIG and plasma cutting capabilities with forming and finishing equipment."
 """ % (welding_answer, forming_answer, finishing_answer)
 
     try:
