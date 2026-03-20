@@ -110,7 +110,7 @@ Rules:
 """ % (welding_answer, forming_answer, finishing_answer)
 
     try:
-        from ..gemini_client import call_fast
+        from ..claude_client import call_fast
         raw = call_fast(prompt, timeout=30)
         if not raw:
             return _fallback_interpret(welding_answer, forming_answer, finishing_answer)

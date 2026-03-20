@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - CreateQuote</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="auth-card" style="margin-top: 80px;">
+        <h1 class="auth-title">CreateQuote</h1>
+        <p class="auth-subtitle" id="verify-subtitle">Verifying your email...</p>
+
+        <div id="verify-error" class="auth-error" style="display:none"></div>
+        <div id="verify-success" class="auth-success" style="display:none"></div>
+
+        <p class="auth-hint"><a href="/app">Go to CreateQuote</a></p>
+    </div>
+
+    <script>
+        (async function() {
+            var params = new URLSearchParams(window.location.search);
+            var token = params.get('token');
+            var subtitle = document.getElementById('verify-subtitle');
+            var errorEl = document.getElementById('verify-error');
+            var successEl = document.getElementById('verify-success');
+
+            if (!token) {
+                subtitle.textContent = 'Email Verification';
+                errorEl.textContent = 'Invalid verification link.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            try {
+                var resp = await fetch('/api/auth/verify-email?token=' + encodeURIComponent(token));
+                var data = await resp.json();
+
+                if (resp.ok) {
+                    subtitle.textContent = 'Email Verified!';
+                    successEl.textContent = 'Your email has been verified. You can now use all features.';
+                    successEl.style.display = 'block';
+                } else {
+                    subtitle.textContent = 'Verification Failed';
+                    errorEl.textContent = data.detail || 'This verification link has expired or already been used.';
+                    errorEl.style.display = 'block';
+                }
+            } catch (e) {
+                subtitle.textContent = 'Verification Failed';
+                errorEl.textContent = 'Something went wrong. Please try again.';
+                errorEl.style.display = 'block';
+            }
+        })();
+    </script>
+</body>
+</html>
