@@ -38,11 +38,21 @@ def _register(client, email=None, password="testpass123"):
 
 
 def _make_unverified_user(client, db, email=None, password="testpass123"):
-    """Register a user, then set email_verified=False to simulate unverified state."""
+    """Register a user, then set email_verified=False to simulate unverified state.
+    Also creates an email_verification token so the login auto-verify logic
+    (which auto-verifies legacy users with no tokens) doesn't kick in."""
     from backend import models
     data = _register(client, email=email, password=password)
     user = db.query(models.User).filter(models.User.id == data["user_id"]).first()
     user.email_verified = False
+    # Create a verification token to mark this as a "real" unverified user
+    token = models.EmailToken(
+        user_id=user.id,
+        token="fake_verify_%s" % uuid.uuid4().hex[:8],
+        token_type="email_verification",
+        expires_at=datetime.utcnow() + timedelta(hours=48),
+    )
+    db.add(token)
     db.commit()
     return data, user
 

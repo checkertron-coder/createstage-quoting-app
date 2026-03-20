@@ -386,10 +386,26 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    # Email verification gate — admin bypass
+    # Email verification gate — admin bypass + legacy user auto-verify
     admin_email = os.getenv("APP_ADMIN_EMAIL", "").strip()
     email_verified = getattr(user, "email_verified", False)
     is_admin_bypass = (user.email == admin_email) if admin_email else False
+
+    # Auto-verify legacy users: accounts created before email verification
+    # existed have email_verified=False but no verification token was ever sent.
+    # If they have a password_hash AND no email_tokens exist, they're legacy.
+    if not email_verified and not is_admin_bypass:
+        has_verification_tokens = db.query(models.EmailToken).filter(
+            models.EmailToken.user_id == user.id,
+            models.EmailToken.token_type == "email_verification",
+        ).first() is not None
+        if not has_verification_tokens:
+            # Legacy user — auto-verify
+            logger.info("[LOGIN] email=%s auto-verifying legacy user (no verification tokens)", request.email)
+            user.email_verified = True
+            db.commit()
+            email_verified = True
+
     logger.info(
         "[LOGIN] email=%s email_verified=%s admin_bypass=%s",
         request.email, email_verified, is_admin_bypass,

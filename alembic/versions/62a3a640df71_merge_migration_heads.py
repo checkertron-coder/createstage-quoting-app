@@ -19,7 +19,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    pass
+    # Backfill: set email_verified=True for all existing users who have
+    # a password_hash. These users registered before email verification
+    # existed and should not be locked out.
+    from sqlalchemy import text
+    conn = op.get_bind()
+    conn.execute(text(
+        "UPDATE users SET email_verified = 1 "
+        "WHERE password_hash IS NOT NULL AND "
+        "(email_verified IS NULL OR NOT email_verified)"
+    ))
 
 
 def downgrade() -> None:
