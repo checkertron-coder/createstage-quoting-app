@@ -642,6 +642,8 @@ const Auth = {
             this.demoStatus = null;
             const demoBanner = document.getElementById('demo-banner');
             if (demoBanner) demoBanner.remove();
+            // Track signup in Plausible
+            if (window.plausible) plausible('signup');
             App.showView('profile');
         } catch (e) {
             this.showError('auth-error', e.message);

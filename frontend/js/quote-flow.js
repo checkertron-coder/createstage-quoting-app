@@ -585,6 +585,8 @@ const QuoteFlow = {
             try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
             this._renderResults(result);
             this._showStep('results');
+            // Track quote completion in Plausible
+            if (window.plausible) plausible('quote_completed');
         } catch (e) {
             this._showError(e.message);
         }
