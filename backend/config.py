@@ -1,4 +1,10 @@
+import logging
+import os
+import sys
+
 from pydantic_settings import BaseSettings
+
+_logger = logging.getLogger("createstage.config")
 
 
 class Settings(BaseSettings):
@@ -38,3 +44,33 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def validate_production_config():
+    """Validate config when PRODUCTION=1. Fail fast if secrets are weak."""
+    is_prod = os.environ.get("PRODUCTION") == "1"
+
+    # Always log env var checklist
+    env_checklist = {
+        "DATABASE_URL": bool(os.environ.get("DATABASE_URL")),
+        "JWT_SECRET": bool(os.environ.get("JWT_SECRET")),
+        "ADMIN_SECRET": bool(os.environ.get("ADMIN_SECRET")),
+        "RESEND_API_KEY": bool(os.environ.get("RESEND_API_KEY")),
+        "STRIPE_SECRET_KEY": bool(os.environ.get("STRIPE_SECRET_KEY")),
+        "ALLOWED_ORIGINS": bool(os.environ.get("ALLOWED_ORIGINS")),
+    }
+    for var, present in env_checklist.items():
+        status = "SET" if present else "MISSING"
+        _logger.info("[CONFIG] %s: %s", var, status)
+
+    if not is_prod:
+        return
+
+    # Production-only checks — fail hard
+    if settings.SECRET_KEY == "dev-secret-key":
+        _logger.critical("FATAL: SECRET_KEY is the dev default in production. Set a real secret.")
+        sys.exit(1)
+
+    if not settings.JWT_SECRET:
+        _logger.critical("FATAL: JWT_SECRET is empty in production. Set it to a random 256-bit hex string.")
+        sys.exit(1)

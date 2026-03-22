@@ -13,6 +13,7 @@ Railway's 30s proxy timeout from returning 503 HTML.
 import json
 import threading
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.requests import Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -20,6 +21,7 @@ from .. import models
 from ..database import get_db
 from ..claude_client import call_deep, get_model_name, is_configured
 from ..quote_jobs import create_job, get_job, run_in_background, mark_db_saved
+from ..rate_limit import limiter, _get_user_or_ip
 
 router = APIRouter(prefix="/ai", tags=["ai-quoting"])
 
@@ -305,7 +307,8 @@ def estimate_total(estimate):
 
 
 @router.post("/estimate")
-def ai_estimate(request: AIQuoteRequest):
+@limiter.limit("20/hour", key_func=_get_user_or_ip)
+def ai_estimate(request: Request, body: AIQuoteRequest):
     """
     Describe a job in plain English — get back a structured estimate.
     Does NOT save to database. Use /ai/quote to create a saved quote.
@@ -313,9 +316,9 @@ def ai_estimate(request: AIQuoteRequest):
     Returns immediately with status="complete" on cache hit, or
     status="pending" + job_id on cache miss (poll GET /ai/job/{job_id}).
     """
-    prompt = request.job_description
-    if request.additional_context:
-        prompt += "\n\nAdditional context: %s" % request.additional_context
+    prompt = body.job_description
+    if body.additional_context:
+        prompt += "\n\nAdditional context: %s" % body.additional_context
 
     # Fast path: cache hit — return immediately
     cache_key = prompt[:100]
@@ -343,7 +346,8 @@ def ai_estimate(request: AIQuoteRequest):
 
 
 @router.post("/quote")
-def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
+@limiter.limit("20/hour", key_func=_get_user_or_ip)
+def ai_create_quote(request: Request, body: AIQuoteRequest, db: Session = Depends(get_db)):
     """
     Describe a job in plain English — AI estimates it and saves a draft quote.
     Requires customer_id. Returns a saved quote ready to review and adjust.
@@ -352,31 +356,31 @@ def ai_create_quote(request: AIQuoteRequest, db: Session = Depends(get_db)):
     Without: returns job_id, poll GET /ai/job/{job_id}. DB save happens on
     first poll after completion.
     """
-    if not request.customer_id:
+    if not body.customer_id:
         raise HTTPException(status_code=400, detail="customer_id required to save a quote")
 
-    customer = db.query(models.Customer).filter(models.Customer.id == request.customer_id).first()
+    customer = db.query(models.Customer).filter(models.Customer.id == body.customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    if request.pre_computed_estimate:
+    if body.pre_computed_estimate:
         # Synchronous path — no AI call needed
-        estimate = request.pre_computed_estimate
+        estimate = body.pre_computed_estimate
         _normalize_estimate(estimate)
-        result = _save_quote_to_db(estimate, request, db)
+        result = _save_quote_to_db(estimate, body, db)
         result["status"] = "complete"
         return result
 
     # Async path — Claude needed
-    prompt = request.job_description
-    if request.additional_context:
-        prompt += "\n\nAdditional context: %s" % request.additional_context
+    prompt = body.job_description
+    if body.additional_context:
+        prompt += "\n\nAdditional context: %s" % body.additional_context
 
     job_id = create_job("quote", {
         "prompt": prompt,
-        "customer_id": request.customer_id,
-        "job_description": request.job_description,
-        "additional_context": request.additional_context,
+        "customer_id": body.customer_id,
+        "job_description": body.job_description,
+        "additional_context": body.additional_context,
     })
     run_in_background(job_id, _run_quote_estimate, (prompt,))
 

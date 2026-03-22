@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from starlette.requests import Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -37,6 +38,7 @@ from ..auth import (
     verify_password,
 )
 from ..database import get_db
+from ..rate_limit import limiter
 from .. import stripe_service
 from .. import email_service
 
@@ -230,7 +232,8 @@ def _validate_invite_code(code_str: str, db: Session):
 # --- Endpoints ---
 
 @router.post("/register")
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, body: RegisterRequest, db: Session = Depends(get_db)):
     """
     Create a new account or claim a provisional one.
 
@@ -239,12 +242,12 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     - Without invite code: password required (min 8 chars).
     """
     # Normalize email to lowercase
-    request.email = request.email.strip().lower()
+    body.email = body.email.strip().lower()
 
     # Validate invite code if provided
     invite_code_record = None
-    if request.invite_code:
-        invite_code_record = _validate_invite_code(request.invite_code, db)
+    if body.invite_code:
+        invite_code_record = _validate_invite_code(body.invite_code, db)
         if not invite_code_record:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -252,8 +255,8 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             )
 
     # Password validation: required unless invite code is provided
-    has_password = request.password and len(request.password) >= 8
-    if request.password and len(request.password) < 8:
+    has_password = body.password and len(body.password) >= 8
+    if body.password and len(body.password) < 8:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 8 characters",
@@ -265,9 +268,9 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         )
 
     # Demo token upgrade: transfer demo user to real account
-    if request.demo_token:
+    if body.demo_token:
         demo_link = db.query(models.DemoLink).filter(
-            models.DemoLink.token == request.demo_token,
+            models.DemoLink.token == body.demo_token,
         ).first()
         if demo_link and demo_link.demo_user_id:
             demo_user = db.query(models.User).filter(
@@ -275,9 +278,9 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
             ).first()
             if demo_user and demo_user.is_provisional:
                 # Upgrade demo user — change email, set password, keep quotes
-                demo_user.email = request.email
+                demo_user.email = body.email
                 if has_password:
-                    demo_user.password_hash = hash_password(request.password)
+                    demo_user.password_hash = hash_password(body.password)
                     demo_user.is_provisional = False
                 demo_user.updated_at = datetime.utcnow()
 
@@ -289,7 +292,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                     demo_user.tier = "free"
 
                 demo_user.subscription_status = "active" if invite_code_record else "free"
-                if request.terms_accepted:
+                if body.terms_accepted:
                     demo_user.terms_accepted_at = datetime.utcnow()
 
                 db.commit()
@@ -298,13 +301,13 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 tokens = _issue_tokens(demo_user, db)
                 return {**tokens, "user": _user_to_response(demo_user), "upgraded_demo": True}
 
-    existing = db.query(models.User).filter(models.User.email == request.email).first()
+    existing = db.query(models.User).filter(models.User.email == body.email).first()
 
     if existing:
         if existing.is_provisional and not existing.password_hash:
             # Claim provisional account
             if has_password:
-                existing.password_hash = hash_password(request.password)
+                existing.password_hash = hash_password(body.password)
                 existing.is_provisional = False
             existing.updated_at = datetime.utcnow()
 
@@ -318,7 +321,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
             existing.subscription_status = "active" if invite_code_record else "free"
 
-            if request.terms_accepted:
+            if body.terms_accepted:
                 existing.terms_accepted_at = datetime.utcnow()
 
             db.commit()
@@ -337,17 +340,17 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if invite_code_record:
         tier = invite_code_record.tier
 
-    password_hash = hash_password(request.password) if has_password else None
+    password_hash = hash_password(body.password) if has_password else None
 
     user = models.User(
-        email=request.email,
+        email=body.email,
         password_hash=password_hash,
         is_provisional=not has_password,
         is_verified=False,
         tier=tier,
         subscription_status="active" if invite_code_record else "free",
         invite_code_used=invite_code_record.code if invite_code_record else None,
-        terms_accepted_at=datetime.utcnow() if request.terms_accepted else None,
+        terms_accepted_at=datetime.utcnow() if body.terms_accepted else None,
     )
     db.add(user)
 
@@ -371,18 +374,19 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login")
-def login(request: LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate with email + password. Returns access + refresh tokens."""
     # Case-insensitive email matching
     user = db.query(models.User).filter(
-        func.lower(models.User.email) == request.email.strip().lower()
+        func.lower(models.User.email) == body.email.strip().lower()
     ).first()
-    logger.info("[LOGIN] email=%s found=%s", request.email, user is not None)
+    logger.info("[LOGIN] email=%s found=%s", body.email, user is not None)
 
     if not user or not user.password_hash:
         logger.info(
             "[LOGIN] email=%s REJECT: no user or no password_hash (has_user=%s, has_hash=%s)",
-            request.email, user is not None,
+            body.email, user is not None,
             bool(user.password_hash) if user else False,
         )
         raise HTTPException(
@@ -393,14 +397,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Diagnostic: log hash metadata (never the actual hash)
     hash_prefix = user.password_hash[:7] if user.password_hash else "NONE"
     hash_len = len(user.password_hash) if user.password_hash else 0
-    pw_input_len = len(request.password) if request.password else 0
+    pw_input_len = len(body.password) if body.password else 0
     logger.info(
         "[LOGIN] email=%s hash_prefix=%s hash_len=%d pw_input_len=%d",
-        request.email, hash_prefix, hash_len, pw_input_len,
+        body.email, hash_prefix, hash_len, pw_input_len,
     )
 
-    pw_ok = verify_password(request.password, user.password_hash)
-    logger.info("[LOGIN] email=%s password_match=%s", request.email, pw_ok)
+    pw_ok = verify_password(body.password, user.password_hash)
+    logger.info("[LOGIN] email=%s password_match=%s", body.email, pw_ok)
     if not pw_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -413,16 +417,16 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     is_admin_bypass = (user.email == admin_email) if admin_email else False
     logger.info(
         "[LOGIN] email=%s email_verified=%s admin_bypass=%s",
-        request.email, email_verified, is_admin_bypass,
+        body.email, email_verified, is_admin_bypass,
     )
     if not email_verified and not is_admin_bypass:
-        logger.info("[LOGIN] email=%s REJECT: email not verified", request.email)
+        logger.info("[LOGIN] email=%s REJECT: email not verified", body.email)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Email not verified. Check your inbox for the verification link.",
         )
 
-    logger.info("[LOGIN] email=%s SUCCESS", request.email)
+    logger.info("[LOGIN] email=%s SUCCESS", body.email)
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
 
@@ -727,12 +731,13 @@ def check_quote_access(
 # --- Email verification & password reset endpoints ---
 
 @router.post("/forgot-password")
-def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, body: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     Send a password reset email. Always returns 200 — never reveals
     whether the email is registered (prevents email enumeration).
     """
-    email_normalized = request.email.strip().lower()
+    email_normalized = body.email.strip().lower()
     user = db.query(models.User).filter(
         func.lower(models.User.email) == email_normalized
     ).first()
@@ -868,107 +873,3 @@ def resend_verification(request: ResendVerificationRequest, db: Session = Depend
         _send_verification_email(user, db)
 
     return {"message": "If that email is registered and unverified, a new verification link has been sent."}
-
-
-@router.post("/debug-login")
-def debug_login(request: LoginRequest, db: Session = Depends(get_db)):
-    """
-    TEMPORARY diagnostic endpoint — returns detailed login check results
-    without issuing tokens. Remove after debugging is complete.
-    """
-    email_normalized = request.email.strip().lower()
-    user = db.query(models.User).filter(
-        func.lower(models.User.email) == email_normalized
-    ).first()
-
-    if not user:
-        return {
-            "step": "user_lookup",
-            "found": False,
-            "email_submitted": request.email,
-            "email_normalized": email_normalized,
-        }
-
-    has_hash = bool(user.password_hash)
-    hash_prefix = user.password_hash[:7] if user.password_hash else "NONE"
-    hash_len = len(user.password_hash) if user.password_hash else 0
-    pw_input_len = len(request.password) if request.password else 0
-
-    pw_ok = False
-    pw_error = None
-    if has_hash:
-        try:
-            pw_ok = verify_password(request.password, user.password_hash)
-        except Exception as e:
-            pw_error = str(e)
-
-    email_verified = getattr(user, "email_verified", False)
-    admin_email = os.getenv("APP_ADMIN_EMAIL", "").strip()
-    is_admin = (user.email == admin_email) if admin_email else False
-
-    return {
-        "step": "complete",
-        "found": True,
-        "email_in_db": user.email,
-        "email_submitted": request.email,
-        "email_case_match": user.email == request.email,
-        "has_password_hash": has_hash,
-        "hash_prefix": hash_prefix,
-        "hash_length": hash_len,
-        "password_input_length": pw_input_len,
-        "password_match": pw_ok,
-        "password_error": pw_error,
-        "email_verified": email_verified,
-        "is_admin_bypass": is_admin,
-        "is_provisional": user.is_provisional,
-        "would_login": pw_ok and (email_verified or is_admin),
-        "block_reason": (
-            "password_mismatch" if not pw_ok else
-            "email_not_verified" if not email_verified and not is_admin else
-            None
-        ),
-    }
-
-
-@router.post("/debug-force-password")
-def debug_force_password(request: LoginRequest, db: Session = Depends(get_db)):
-    """
-    TEMPORARY — force-set a user's password. Remove after debugging.
-    """
-    email_normalized = request.email.strip().lower()
-    user = db.query(models.User).filter(
-        func.lower(models.User.email) == email_normalized
-    ).first()
-
-    if not user:
-        return {"ok": False, "error": "User not found"}
-
-    if not request.password or len(request.password) < 8:
-        return {"ok": False, "error": "Password must be at least 8 characters"}
-
-    new_hash = hash_password(request.password)
-    user.password_hash = new_hash
-    db.commit()
-    db.refresh(user)
-
-    # Verify it works immediately
-    verify_ok = verify_password(request.password, user.password_hash)
-
-    logger.info(
-        "[FORCE-PW] email=%s hash_prefix=%s verify=%s",
-        user.email, new_hash[:7], verify_ok,
-    )
-
-    # Also issue tokens so the user can immediately use the app
-    tokens = _issue_tokens(user, db)
-
-    return {
-        "ok": verify_ok,
-        "email": user.email,
-        "hash_prefix": user.password_hash[:7],
-        "hash_length": len(user.password_hash),
-        "verify_after_save": verify_ok,
-        "access_token": tokens["access_token"],
-        "refresh_token": tokens["refresh_token"],
-        "message": "Password set. Try logging in now." if verify_ok else "ERROR: Hash verification failed after save!",
-    }

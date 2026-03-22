@@ -274,7 +274,7 @@ def test_admin_create_invite_code(client):
         "code": "ADMIN-TEST-CODE",
         "tier": "starter",
         "max_uses": 10,
-    }, headers={"x-admin-secret": "createstage-admin-2026"})
+    }, headers={"x-admin-secret": "test-admin-secret"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["code"] == "ADMIN-TEST-CODE"
@@ -289,7 +289,7 @@ def test_admin_list_invite_codes(client, db):
     _seed_code(db, "LIST-CODE-1")
     _seed_code(db, "LIST-CODE-2")
     resp = client.get("/api/admin/invite-codes",
-                      headers={"x-admin-secret": "createstage-admin-2026"})
+                      headers={"x-admin-secret": "test-admin-secret"})
     assert resp.status_code == 200
     codes = [c["code"] for c in resp.json()]
     assert "LIST-CODE-1" in codes

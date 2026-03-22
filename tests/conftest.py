@@ -9,9 +9,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Set JWT_SECRET before importing app modules
+# Set env vars before importing app modules
 os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only"
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["TESTING"] = "1"  # Disables rate limiting in backend/rate_limit.py
+os.environ["ADMIN_SECRET"] = "test-admin-secret"  # Required now that hardcoded fallback is removed
 
 from backend.database import Base, get_db
 from backend.main import app

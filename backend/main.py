@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 import logging
 import os
 import sys
@@ -17,6 +19,7 @@ logging.basicConfig(
 )
 
 from .database import engine, Base
+from .rate_limit import limiter
 from .routers import quotes, customers, materials, process_rates, ai_quote, auth, quote_session, pdf, bid_parser, photos, admin, stripe_billing, shop_profile
 
 logger = logging.getLogger("createstage")
@@ -81,13 +84,26 @@ app = FastAPI(
     version="2.0.0"
 )
 
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8000,http://localhost:3000",
+    ).split(",")
+    if o.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Wire slowapi rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # API routes
 app.include_router(quotes.router, prefix="/api")
@@ -159,65 +175,14 @@ if os.path.exists(frontend_path):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "app": "createstage-quoting-app", "version": "9baad06-debug-login"}
+    return {"status": "ok", "app": "createstage-quoting-app", "version": "2.0.0"}
 
 
-@app.get("/debug-login")
-def debug_login_page():
-    """Temporary diagnostic page for login debugging. Remove after fix."""
-    from fastapi.responses import HTMLResponse
-    return HTMLResponse("""<!DOCTYPE html>
-<html><head><title>Login Debug</title>
-<style>body{font-family:sans-serif;max-width:500px;margin:60px auto;padding:20px}
-input{width:100%;padding:10px;margin:8px 0;box-sizing:border-box;font-size:16px}
-button{padding:12px 24px;background:#2d3748;color:#fff;border:none;border-radius:6px;font-size:16px;cursor:pointer;width:100%;margin-top:12px}
-.btn-reset{background:#e53e3e}
-pre{background:#f0f0f0;padding:16px;border-radius:8px;white-space:pre-wrap;word-break:break-all;font-size:14px}
-h2{color:#1a202c}
-hr{margin:30px 0;border:none;border-top:1px solid #ccc}</style></head>
-<body><h2>Login Diagnostic</h2>
-<p>Enter your credentials to check what's failing, or force-set a new password.</p>
-<input type="email" id="e" placeholder="Email">
-<input type="password" id="p" placeholder="Password">
-<button onclick="go()">Check Login</button>
-<button class="btn-reset" onclick="forceSet()">Force Set This Password</button>
-<pre id="out" style="display:none"></pre>
-<script>
-async function go(){
-var o=document.getElementById('out');
-o.style.display='block';
-o.textContent='Checking...';
-try{
-var r=await fetch('/api/auth/debug-login',{method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({email:document.getElementById('e').value,
-password:document.getElementById('p').value})});
-var d=await r.json();
-o.textContent=JSON.stringify(d,null,2);
-}catch(err){o.textContent='Error: '+err.message;}
-}
-async function forceSet(){
-var o=document.getElementById('out');
-var em=document.getElementById('e').value;
-var pw=document.getElementById('p').value;
-if(!em||!pw||pw.length<8){o.style.display='block';o.textContent='Enter email and password (min 8 chars)';return;}
-if(!confirm('Set password for '+em+'?'))return;
-o.style.display='block';
-o.textContent='Setting password...';
-try{
-var r=await fetch('/api/auth/debug-force-password',{method:'POST',
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({email:em,password:pw})});
-var d=await r.json();
-if(d.ok&&d.access_token){
-localStorage.setItem('access_token',d.access_token);
-localStorage.setItem('refresh_token',d.refresh_token);
-d.message='Password set AND tokens saved! Go back to your other tab and click Save again (or refresh the app page).';
-}
-o.textContent=JSON.stringify(d,null,2);
-}catch(err){o.textContent='Error: '+err.message;}
-}
-</script></body></html>""")
+@app.on_event("startup")
+def validate_config():
+    """Validate production config on startup — fail fast if secrets are weak."""
+    from .config import validate_production_config
+    validate_production_config()
 
 
 @app.on_event("startup")

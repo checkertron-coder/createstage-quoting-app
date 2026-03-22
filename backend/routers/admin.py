@@ -18,11 +18,16 @@ from ..database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "createstage-admin-2026")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
 
 def _require_admin(x_admin_secret: Optional[str] = Header(None)):
-    """Verify admin secret header."""
+    """Verify admin secret header. Returns 503 if ADMIN_SECRET not configured."""
+    if not ADMIN_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Admin endpoints not configured — set ADMIN_SECRET env var",
+        )
     if x_admin_secret != ADMIN_SECRET:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

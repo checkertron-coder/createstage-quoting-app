@@ -26,7 +26,7 @@ from backend import models
 # --- Helpers ---
 
 def _admin_headers():
-    return {"x-admin-secret": "createstage-admin-2026"}
+    return {"x-admin-secret": "test-admin-secret"}
 
 
 def _create_demo_link(client, label="Test Demo", max_quotes=3, expires_hours=48):
