@@ -65,7 +65,7 @@ Replace `allow_origins=["*"]` with a dynamic list read from env var `ALLOWED_ORI
 In `backend/config.py`, after the settings class is defined, add a validation function that runs at import time. It should:
 - Check that `SECRET_KEY` is not `"dev-secret-key"` or empty in production
 - Check that `JWT_SECRET` is not empty in production
-- "Production" = when a `RAILWAY_ENVIRONMENT` or `PRODUCTION` env var is set
+- "Production" = when a `PRODUCTION` env var is set to `true` (note: do NOT use `RAILWAY_ENVIRONMENT` — that is a reserved Railway internal Postgres variable)
 - If validation fails, raise a `RuntimeError` with a clear message listing which secrets are missing
 - Add a comment block listing ALL required Railway env vars: `SECRET_KEY`, `JWT_SECRET`, `ADMIN_SECRET`, `ANTHROPIC_API_KEY`, `DATABASE_URL`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `APP_URL`, `ALLOWED_ORIGINS`
 
@@ -101,7 +101,7 @@ Start the app locally. Using curl or httpx, send a request with `Origin: https:/
 Send with `Origin: http://localhost:3000`. Expected: response includes `Access-Control-Allow-Origin: http://localhost:3000`.
 
 ### Test 2: Startup validation
-Temporarily set `RAILWAY_ENVIRONMENT=production` and `SECRET_KEY=dev-secret-key` in local env. Run:
+Temporarily set `PRODUCTION=true` and `SECRET_KEY=dev-secret-key` in local env. Run:
 ```bash
 python3 -c "from backend.config import settings"
 ```
@@ -128,7 +128,7 @@ After the code is merged and Railway redeploys, verify ALL of these are set in R
 - `JWT_SECRET` — random 32+ char string  
 - `ADMIN_SECRET` — random string, not guessable
 - `ALLOWED_ORIGINS` — `https://createquote.app,https://www.createquote.app`
-- `RAILWAY_ENVIRONMENT` — `production` (triggers startup validation)
+- `PRODUCTION` — `true` (triggers startup validation — do NOT use RAILWAY_ENVIRONMENT, that's a reserved Postgres internal var)
 - `ANTHROPIC_API_KEY` — live key
 - `DATABASE_URL` — Railway postgres URL
 - `STRIPE_SECRET_KEY` — live `sk_live_...`
