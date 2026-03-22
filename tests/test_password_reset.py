@@ -36,20 +36,18 @@ def db():
 @pytest.fixture
 def registered_user(client, db):
     """Register a user and return (email, password, user_id).
-    Patches email_service so is_configured() returns True, which means
-    the user stays unverified (no auto-verify fallback)."""
+    Registers in dev mode (no email service → auto-verified), then
+    manually sets email_verified=False so tests can exercise the
+    verification flow."""
     email = "reset-test@fabricator.com"
     password = "strongpassword123"
-    with patch("backend.routers.auth.email_service") as mock_email:
-        mock_email.is_configured.return_value = True
-        mock_email.send_email_verification.return_value = True
-        resp = client.post("/api/auth/register", json={
-            "email": email,
-            "password": password,
-        })
+    resp = client.post("/api/auth/register", json={
+        "email": email,
+        "password": password,
+    })
     assert resp.status_code == 200
     user_id = resp.json()["user_id"]
-    # Ensure the user is unverified for tests that need it
+    # Set the user back to unverified for tests that need it
     user = db.query(models.User).filter(models.User.id == user_id).first()
     user.email_verified = False
     db.commit()

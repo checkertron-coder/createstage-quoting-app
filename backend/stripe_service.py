@@ -21,11 +21,10 @@ STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 
-# Price IDs — set in env, or use defaults for test mode
-# These map to Stripe Products created in the dashboard or via seed script
-STRIPE_PRICE_STARTER = os.environ.get("STRIPE_PRICE_STARTER", "")
-STRIPE_PRICE_PROFESSIONAL = os.environ.get("STRIPE_PRICE_PROFESSIONAL", "")
-STRIPE_PRICE_SHOP = os.environ.get("STRIPE_PRICE_SHOP", "")
+# Price IDs — accept both naming conventions (Railway may use either)
+STRIPE_PRICE_STARTER = os.environ.get("STRIPE_PRICE_STARTER") or os.environ.get("STRIPE_STARTER_PRICE_ID", "")
+STRIPE_PRICE_PROFESSIONAL = os.environ.get("STRIPE_PRICE_PROFESSIONAL") or os.environ.get("STRIPE_PRO_PRICE_ID", "")
+STRIPE_PRICE_SHOP = os.environ.get("STRIPE_PRICE_SHOP") or os.environ.get("STRIPE_SHOP_PRICE_ID", "")
 
 TIER_TO_PRICE_ID = {
     "starter": STRIPE_PRICE_STARTER,

@@ -193,7 +193,18 @@ def _create_email_token(user, token_type, db, expires_hours=48):
 
 def _send_verification_email(user, db):
     # type: (models.User, Session) -> bool
-    """Create a verification token and send the email."""
+    """Invalidate old verification tokens, create a fresh one, and send the email."""
+    # Always invalidate existing unused verification tokens first
+    old_tokens = db.query(models.EmailToken).filter(
+        models.EmailToken.user_id == user.id,
+        models.EmailToken.token_type == "email_verification",
+        models.EmailToken.is_used == False,
+    ).all()
+    for t in old_tokens:
+        t.is_used = True
+    if old_tokens:
+        db.commit()
+
     token = _create_email_token(user, "email_verification", db, expires_hours=48)
     return email_service.send_verification_email(user.email, token)
 
@@ -362,13 +373,21 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     db.refresh(user)
     _ensure_stripe_customer(user, db)
 
-    # Send verification email (auto-verify if email service not configured)
-    if email_service.is_configured():
-        _send_verification_email(user, db)
-    else:
+    # Invite code users are trusted — auto-verify and issue tokens immediately
+    if invite_code_record:
         user.email_verified = True
         db.commit()
+        tokens = _issue_tokens(user, db)
+        return {**tokens, "user": _user_to_response(user)}
 
+    # Standard registration — require email verification before granting access
+    if email_service.is_configured():
+        _send_verification_email(user, db)
+        return {"message": "verification_required", "email": user.email}
+
+    # Dev mode (no email service) — auto-verify so local dev isn't blocked
+    user.email_verified = True
+    db.commit()
     tokens = _issue_tokens(user, db)
     return {**tokens, "user": _user_to_response(user)}
 
@@ -860,16 +879,7 @@ def resend_verification(request: ResendVerificationRequest, db: Session = Depend
         func.lower(models.User.email) == email_normalized
     ).first()
     if user and not getattr(user, "email_verified", False):
-        # Invalidate previous unused verification tokens
-        old_tokens = db.query(models.EmailToken).filter(
-            models.EmailToken.user_id == user.id,
-            models.EmailToken.token_type == "email_verification",
-            models.EmailToken.is_used == False,
-        ).all()
-        for t in old_tokens:
-            t.is_used = True
-        db.commit()
-
+        # _send_verification_email invalidates old tokens before creating a fresh one
         _send_verification_email(user, db)
 
     return {"message": "If that email is registered and unverified, a new verification link has been sent."}

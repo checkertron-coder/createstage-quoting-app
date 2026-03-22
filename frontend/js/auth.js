@@ -303,6 +303,10 @@ const Auth = {
 
     showTab(tab) {
         const loginFields = document.getElementById('login-fields');
+        // If the auth form was replaced (e.g., by verification screen), re-render it
+        if (!loginFields) {
+            this.renderAuthView();
+        }
         const registerFields = document.getElementById('register-fields');
         const forgotFields = document.getElementById('forgot-fields');
         const resetFields = document.getElementById('reset-fields');
@@ -617,6 +621,25 @@ const Auth = {
         }
     },
 
+    _showVerificationRequired(email) {
+        // Replace the auth form with a "check your email" screen
+        this._unverifiedEmail = email;
+        const formEl = document.getElementById('auth-form');
+        if (!formEl) return;
+        formEl.innerHTML = `
+            <div class="verification-required">
+                <div class="verification-icon">&#9993;</div>
+                <h2>Check Your Email</h2>
+                <p>We sent a verification link to <strong>${email}</strong>.</p>
+                <p>Click the link in your email to activate your account, then come back here to log in.</p>
+                <div class="verification-actions">
+                    <button class="btn btn-secondary" onclick="Auth.resendVerification()">Resend Verification Email</button>
+                    <button class="btn btn-ghost" onclick="Auth.showTab('login')">Back to Login</button>
+                </div>
+            </div>
+        `;
+    },
+
     async handleRegister() {
         const email = document.getElementById('reg-email').value.trim();
         const password = document.getElementById('reg-password').value;
@@ -636,6 +659,13 @@ const Auth = {
             // Include demo token if upgrading from demo
             const demoToken = localStorage.getItem('demo_token');
             const data = await API.register(email, password || null, inviteCode, termsChecked, demoToken);
+
+            // Server requires email verification — no tokens returned
+            if (data.message === 'verification_required') {
+                this._showVerificationRequired(data.email || email);
+                return;
+            }
+
             this.currentUser = data.user;
             // Clear demo state on successful registration
             localStorage.removeItem('demo_token');

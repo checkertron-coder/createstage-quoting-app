@@ -140,7 +140,10 @@ const API = {
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || 'Registration failed');
-        this.setTokens(data.access_token, data.refresh_token);
+        // Only store tokens if the server returned them (verification_required has none)
+        if (data.access_token) {
+            this.setTokens(data.access_token, data.refresh_token);
+        }
         return data;
     },
 
