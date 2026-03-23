@@ -58,6 +58,13 @@ const App = {
                 history.replaceState(null, '', '/app');
             }
 
+            // Handle upgrade redirect from landing page
+            const upgradeTier = params.get('upgrade');
+            if (upgradeTier) {
+                history.replaceState(null, '', '/app');
+                Auth.startCheckout(upgradeTier);
+            }
+
             // Check if user needs onboarding
             const user = Auth.currentUser;
             if (user && !user.onboarding_complete && !user.is_provisional) {

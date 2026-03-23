@@ -1608,7 +1608,7 @@ const QuoteFlow = {
     },
 
     _previewGate() {
-        window.location.href = '/#pricing';
+        Auth.startCheckout('professional');
     },
 
     _renderPreviewCTA() {
@@ -1616,7 +1616,7 @@ const QuoteFlow = {
             <div class="preview-upgrade-cta">
                 <h3>Want the full quote?</h3>
                 <p>Subscribe to unlock exact pricing, complete cut lists, build instructions, and professional PDF downloads.</p>
-                <a href="/#pricing" class="btn btn-primary">Subscribe &mdash; Starting at $49/mo</a>
+                <a href="#" class="btn btn-primary" onclick="Auth.startCheckout('professional');return false;">Subscribe &mdash; Starting at $49/mo</a>
             </div>
         `;
     },

@@ -113,7 +113,7 @@ const Auth = {
             banner.className = 'upgrade-banner';
             banner.innerHTML = `
                 <span>You're on the Free plan &mdash; 1 preview quote included.</span>
-                <a href="/#pricing">Subscribe to unlock full quotes &rarr;</a>
+                <a href="#" onclick="Auth.startCheckout('professional');return false;">Subscribe to unlock full quotes &rarr;</a>
             `;
             document.body.insertBefore(banner, document.body.firstChild);
         } else if (subStatus === 'past_due') {
@@ -466,8 +466,8 @@ const Auth = {
     },
 
     showUpgradeOptions() {
-        // Redirect to landing page pricing section (works whether or not Stripe is configured)
-        window.location.href = '/#pricing';
+        // Start checkout directly — Stripe is the only upgrade path
+        Auth.startCheckout('professional');
     },
 
     togglePassword(inputId, btn) {

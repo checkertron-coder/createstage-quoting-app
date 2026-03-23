@@ -159,21 +159,8 @@
         function handlePricingClick(tier) {
             var token = localStorage.getItem('access_token');
             if (!token) return true; // Not logged in — follow href to /app#register
-            // Logged in — create checkout session
-            fetch('/api/stripe/create-checkout', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({
-                    tier: tier,
-                    success_url: window.location.origin + '/app?checkout=success',
-                    cancel_url: window.location.origin + '/app?checkout=cancelled',
-                }),
-            }).then(function(r) { return r.json(); }).then(function(data) {
-                if (data.url) window.location.href = data.url;
-                else window.location.href = '/app#register';
-            }).catch(function() {
-                window.location.href = '/app#register';
-            });
+            // Logged in — redirect into app where full checkout infrastructure exists
+            window.location.href = '/app?upgrade=' + encodeURIComponent(tier);
             return false; // Prevent default href
         }
         </script>
