@@ -98,3 +98,15 @@ In `auto_seed()`, after the new-code creation block, add a backfill pass: query 
 1. After deploy: check DB — BETA-CHECKER should have `used_by_email` set to the email that used it
 2. Try registering with BETA-CHECKER using any email → EXPECTED: "This invite code has already been used"
 3. Try with a fresh unused code → works once, locked on second attempt with different email
+
+---
+
+## DEPLOYMENT — REQUIRED FINAL STEP
+
+After all chunks are complete and the full test suite passes:
+
+1. `git add -A`
+2. `git commit -m "P65B: email verification gate fix + invite code backfill"`
+3. `git push origin main`
+
+Do not consider this prompt done until the push is confirmed and Railway deploys successfully. Verify by checking `https://createquote.app/health` returns `{"status": "ok"}`.
