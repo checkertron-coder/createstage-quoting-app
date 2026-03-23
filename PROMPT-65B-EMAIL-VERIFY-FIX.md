@@ -110,3 +110,15 @@ After all chunks are complete and the full test suite passes:
 3. `git push origin main`
 
 Do not consider this prompt done until the push is confirmed and Railway deploys successfully. Verify by checking `https://createquote.app/health` returns `{"status": "ok"}`.
+
+## BRAIN SYNC — REQUIRED AFTER DEPLOY
+
+After Railway confirms healthy:
+
+1. `cd ~/brain && git pull origin master`
+2. Write a session summary to `agents/cc-createquote/sessions/2026-03-23-p65b-email-verify.md` covering:
+   - What was broken and why
+   - What was changed (files + line numbers)
+   - Current state of email verification in production
+   - Current state of invite code locking in production
+3. `git add -A && git commit -m "P65B: email verify fix + invite code backfill" && git push origin master`
