@@ -76,39 +76,26 @@ The grand total on a free quote currently renders as `_fmtRange(pq.total)` — a
 
 ## 4. DECOMPOSITION
 
-**Chunk 1 — Database: NDA acceptance table + invite code column**
-Add a `NdaAcceptance` model with: `id`, `email` (indexed), `ip_address`, `user_agent`, `accepted_at`, `nda_version`, `user_id` (nullable FK to users — nullable because acceptance is logged before account creation). Add `used_by_email` (String, nullable) to `InviteCode`. Write and test the Alembic migration.
+**Chunk 1 — Data layer**
+The system needs two new things in the database: a permanent record of NDA acceptance (capturing who agreed, when, from what IP, and under which NDA version — before their account even exists), and a way to lock an invite code to the specific email that first used it. Design the schema, write the migration, make sure NDA acceptance records survive even if the associated user is later deleted.
 
-**Chunk 2 — Backend: NDA acceptance endpoint**
-Create `POST /api/auth/nda-accept` — accepts `{email, nda_version}`, reads IP from request, writes to `NdaAcceptance` table, returns `{accepted: true, token: <short-lived acceptance token>}`. This token is passed by the frontend when the registration form submits, so the backend can link the acceptance record to the new user_id after account creation. No auth required (user doesn't exist yet).
+**Chunk 2 — NDA acceptance backend**
+Build an unauthenticated endpoint that records NDA acceptance before registration happens. The challenge: the user doesn't exist yet when they agree, but after registration completes, the system needs to be able to connect that acceptance record to the new user account. Figure out the right mechanism. The acceptance record must be written to the DB at agree-time, not at registration-time.
 
-**Chunk 3 — Backend: Invite code hardening**
-In `_validate_invite_code()`: after confirming code exists and is not expired/max-used, check if `used_by_email` is set and does not match `body.email` — raise 400 "This invite code has already been used." In the registration completion path, after user is created, set `invite_code_record.used_by_email = user.email`. Write a one-time script (or admin endpoint) to: set BETA-FOUNDER `max_uses=1` and `used_by_email="info@createstage.co"`, set all other BETA-* codes to `max_uses=1` if currently NULL or >1, create `BETA-CHECKER` code.
+**Chunk 3 — Invite code hardening + data fix**
+Add the one-email-per-code rule to the validation logic: a code that's already been used by one email must reject any different email. After a new user registers with a code, permanently record their email against that code. Then fix the existing data: BETA-FOUNDER must be locked to `info@createstage.co` with max 1 use. All other BETA-* codes must have max_uses=1. BETA-CHECKER must exist as a new code with professional tier and 1 use. This chunk is not done until the DB reflects these values in production.
 
-**Chunk 4 — Backend: Free tier limit update**
-In `TIER_QUOTE_LIMITS`, update `"free": 1` → `"free": 5`.
+**Chunk 4 — Free tier limit**
+The free tier quote limit is currently 1. It needs to be 5. One-line change in `TIER_QUOTE_LIMITS` in `auth.py`. Simple, but verify the limit is enforced correctly after the change.
 
-**Chunk 5 — Frontend: NDA modal**
-In `auth.js`, before the registration form submits (intercept the submit handler), show a full-screen modal overlay. Modal structure:
-- Header: "Non-Disclosure Agreement — Required Before Continuing"
-- Warning banner (amber/red): "This is a legally binding agreement. Violations will result in legal action."
-- Excerpted NDA text block (key sections: Purpose, Obligations, what's prohibited) — enough to read, not the full document. Link to full `/nda` at bottom.
-- "I Agree — Continue Registration" button (primary, green)
-- "I Do Not Agree — Exit" button (secondary, red/gray)
-On agree: call `POST /api/auth/nda-accept`, store the acceptance token in memory, pre-check and disable the NDA checkbox, proceed with form submission (include acceptance token in registration payload).
-On disagree: close modal, redirect to `/`.
+**Chunk 5 — NDA modal (frontend)**
+Registration currently submits with a Terms checkbox. The NDA agreement must happen as a deliberate, unavoidable step before the form submits — not an afterthought checkbox. The experience should feel like signing something, not clicking through. Key NDA obligations must be visible in the modal itself (not hidden behind a link). The user has exactly two choices: agree or leave. Agreeing calls the backend acceptance endpoint and passes proof of acceptance through to the registration payload. Disagreeing sends them back to the landing page. After agreeing, the NDA state in the form is locked — they cannot uncheck it.
 
-**Chunk 6 — Frontend: Grand total lockdown for free tier**
-In `quote-flow.js`, in `_renderResults()`, where the grand total currently renders `this._fmtRange(pq.total)` for preview mode: replace with a locked element showing "Upgrade to See Your Full Estimate" with a button that calls `Auth.startCheckout('professional')`. No dollar amount, no range, no number of any kind.
+**Chunk 6 — Grand total lockdown (frontend)**
+In `quote-flow.js`, the preview mode grand total currently shows `_fmtRange(pq.total)` — a ±20% band around the real number. That's too much information for a free user. Replace it with an upgrade prompt. No number, no range, no dollar sign of any kind. The `_fmtRange()` function itself stays intact — it may be used elsewhere. Just don't call it in the grand total for preview users.
 
 **Chunk 7 — Tests**
-Write tests covering:
-- NDA acceptance endpoint: valid call logs record, returns token
-- Invite code `used_by_email` enforcement: second use with different email → 400
-- BETA-FOUNDER cannot be used by any email other than info@createstage.co
-- BETA-CHECKER can be used once, then blocked
-- Free tier quota: 6th quote attempt → 403
-- Preview mode grand total: no dollar amount in rendered HTML
+Cover: NDA endpoint logs correctly, invite code email-lock enforcement, BETA-FOUNDER rejection for non-Burton emails, BETA-CHECKER one-use behavior, free tier 6th quote blocked, preview grand total contains no currency value.
 
 ---
 
