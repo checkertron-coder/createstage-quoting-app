@@ -224,9 +224,19 @@ def auto_seed():
                 db.add(models.MaterialPrice(material_type=mat_type, **price_data))
         # Seed invite codes
         default_codes = [
-            {"code": "BETA-FOUNDER", "tier": "professional", "max_uses": None,
+            {"code": "BETA-FOUNDER", "tier": "professional", "max_uses": 1,
              "created_by": "system", "expires_at": None},
             {"code": "BETA-KEVIN", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-JIM", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-JASON", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-TJ", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-ISSAM", "tier": "professional", "max_uses": 1,
+             "created_by": "system", "expires_at": None},
+            {"code": "BETA-CHECKER", "tier": "professional", "max_uses": 1,
              "created_by": "system", "expires_at": None},
             {"code": "BETA-TESTER", "tier": "professional", "max_uses": 50,
              "created_by": "system",
@@ -238,6 +248,24 @@ def auto_seed():
             ).first()
             if not existing:
                 db.add(models.InviteCode(**code_data))
+
+        # Harden existing BETA-FOUNDER: lock to Burton's email, max 1 use
+        founder = db.query(models.InviteCode).filter(
+            models.InviteCode.code == "BETA-FOUNDER"
+        ).first()
+        if founder:
+            founder.max_uses = 1
+            founder.used_by_email = "info@createstage.co"
+
+        # Ensure all BETA-* codes (except BETA-TESTER) have max_uses=1
+        beta_codes = db.query(models.InviteCode).filter(
+            models.InviteCode.code.like("BETA-%"),
+            models.InviteCode.code != "BETA-TESTER",
+        ).all()
+        for bc in beta_codes:
+            if bc.max_uses is None or bc.max_uses > 1:
+                bc.max_uses = 1
+
         db.commit()
     finally:
         db.close()

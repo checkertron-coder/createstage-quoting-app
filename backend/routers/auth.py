@@ -55,6 +55,7 @@ class RegisterRequest(BaseModel):
     invite_code: Optional[str] = None
     terms_accepted: Optional[bool] = False
     nda_accepted: Optional[bool] = False  # Kept for backward compat, ignored
+    nda_acceptance_id: Optional[int] = None  # ID from POST /api/auth/accept-nda
     demo_token: Optional[str] = None  # If upgrading a demo user
 
 
@@ -95,6 +96,11 @@ class ResetPasswordRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: str
+
+
+class NdaAcceptRequest(BaseModel):
+    email: str
+    nda_version: str = "2026-03-16"
 
 
 class TokenResponse(BaseModel):
@@ -209,6 +215,19 @@ def _send_verification_email(user, db):
     return email_service.send_verification_email(user.email, token)
 
 
+def _link_nda_acceptance(acceptance_id, user_id, db):
+    # type: (Optional[int], int, Session) -> None
+    """Link an NDA acceptance record to the newly-created user."""
+    if not acceptance_id:
+        return
+    record = db.query(models.NdaAcceptance).filter(
+        models.NdaAcceptance.id == acceptance_id,
+    ).first()
+    if record and not record.user_id:
+        record.user_id = user_id
+        db.commit()
+
+
 def _ensure_stripe_customer(user: models.User, db: Session):
     """Create a Stripe customer for the user if Stripe is configured and they don't have one."""
     if user.stripe_customer_id:
@@ -224,8 +243,12 @@ def _ensure_stripe_customer(user: models.User, db: Session):
         pass
 
 
-def _validate_invite_code(code_str: str, db: Session):
-    """Validate an invite code. Returns the InviteCode record or None."""
+def _validate_invite_code(code_str: str, db: Session, email: Optional[str] = None):
+    """Validate an invite code. Returns the InviteCode record or None.
+
+    If email is provided and the code is already locked to a different email,
+    returns None (code rejected).
+    """
     code = db.query(models.InviteCode).filter(
         models.InviteCode.code == code_str.strip().upper()
     ).first()
@@ -237,10 +260,40 @@ def _validate_invite_code(code_str: str, db: Session):
         return None
     if code.max_uses is not None and code.uses >= code.max_uses:
         return None
+    # Email lock: if code was already used by a different email, reject
+    if email and code.used_by_email and code.used_by_email.lower() != email.lower():
+        return None
     return code
 
 
 # --- Endpoints ---
+
+@router.post("/accept-nda")
+def accept_nda(request: Request, body: NdaAcceptRequest, db: Session = Depends(get_db)):
+    """
+    Record NDA acceptance BEFORE registration.
+
+    Returns the acceptance ID which the frontend passes to /register.
+    No auth required — user doesn't exist yet.
+    """
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent", "")
+
+    record = models.NdaAcceptance(
+        email=body.email.strip().lower(),
+        ip_address=ip,
+        user_agent=ua[:500] if ua else None,
+        nda_version=body.nda_version,
+        accepted_at=datetime.utcnow(),
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    logger.info("[NDA] Accepted by email=%s ip=%s version=%s id=%d",
+                body.email, ip, body.nda_version, record.id)
+    return {"nda_acceptance_id": record.id, "accepted": True}
+
 
 @router.post("/register")
 @limiter.limit("5/minute")
@@ -255,10 +308,10 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     # Normalize email to lowercase
     body.email = body.email.strip().lower()
 
-    # Validate invite code if provided
+    # Validate invite code if provided (pass email for used_by_email lock check)
     invite_code_record = None
     if body.invite_code:
-        invite_code_record = _validate_invite_code(body.invite_code, db)
+        invite_code_record = _validate_invite_code(body.invite_code, db, email=body.email)
         if not invite_code_record:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -299,12 +352,17 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
                     demo_user.tier = invite_code_record.tier
                     demo_user.invite_code_used = invite_code_record.code
                     invite_code_record.uses += 1
+                    if not invite_code_record.used_by_email:
+                        invite_code_record.used_by_email = body.email
                 else:
                     demo_user.tier = "free"
 
                 demo_user.subscription_status = "active" if invite_code_record else "free"
                 if body.terms_accepted:
                     demo_user.terms_accepted_at = datetime.utcnow()
+
+                # Link NDA acceptance record to user
+                _link_nda_acceptance(body.nda_acceptance_id, demo_user.id, db)
 
                 db.commit()
                 db.refresh(demo_user)
@@ -327,6 +385,8 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
                 existing.tier = invite_code_record.tier
                 existing.invite_code_used = invite_code_record.code
                 invite_code_record.uses += 1
+                if not invite_code_record.used_by_email:
+                    invite_code_record.used_by_email = body.email
             else:
                 existing.tier = "free"
 
@@ -334,6 +394,9 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
 
             if body.terms_accepted:
                 existing.terms_accepted_at = datetime.utcnow()
+
+            # Link NDA acceptance record to user
+            _link_nda_acceptance(body.nda_acceptance_id, existing.id, db)
 
             db.commit()
             db.refresh(existing)
@@ -365,12 +428,18 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     )
     db.add(user)
 
-    # Increment invite code uses
+    # Increment invite code uses + lock to email
     if invite_code_record:
         invite_code_record.uses += 1
+        if not invite_code_record.used_by_email:
+            invite_code_record.used_by_email = body.email
 
     db.commit()
     db.refresh(user)
+
+    # Link NDA acceptance record to user
+    _link_nda_acceptance(body.nda_acceptance_id, user.id, db)
+
     _ensure_stripe_customer(user, db)
 
     # Invite code users are trusted — auto-verify and issue tokens immediately
@@ -670,7 +739,7 @@ async def upload_logo(
 
 # Quota limits per tier
 TIER_QUOTE_LIMITS = {
-    "free": 1,            # 1 quote total (preview mode)
+    "free": 5,            # 5 preview quotes
     "starter": 3,         # 3 per month
     "professional": 25,   # 25 per month
     "shop": None,         # unlimited

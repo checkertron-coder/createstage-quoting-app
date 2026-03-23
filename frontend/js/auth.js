@@ -640,6 +640,8 @@ const Auth = {
         `;
     },
 
+    _ndaAcceptanceId: null,  // Set after NDA modal acceptance
+
     async handleRegister() {
         const email = document.getElementById('reg-email').value.trim();
         const password = document.getElementById('reg-password').value;
@@ -655,10 +657,91 @@ const Auth = {
         }
         if (!termsChecked) return this.showError('auth-error', 'You must agree to the Terms of Service to continue.');
 
+        // Show NDA modal if not yet accepted this session
+        if (!this._ndaAcceptanceId) {
+            this._showNdaModal(email);
+            return;
+        }
+
+        await this._completeRegistration();
+    },
+
+    _showNdaModal(email) {
+        // Remove existing modal if any
+        const existing = document.getElementById('nda-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'nda-modal';
+        modal.className = 'nda-modal-overlay';
+        modal.innerHTML = `
+            <div class="nda-modal">
+                <h2>Non-Disclosure Agreement</h2>
+                <p class="nda-modal-intro">Before creating your account, please review and acknowledge the following confidentiality obligations:</p>
+                <div class="nda-modal-content">
+                    <p><strong>By creating a CreateQuote account, you agree to the following:</strong></p>
+                    <ul>
+                        <li><strong>Confidential Information</strong> includes CreateQuote's algorithms, AI models, pricing logic, calculator methods, labor estimation techniques, material databases, and fabrication knowledge systems.</li>
+                        <li>You agree to <strong>hold all Confidential Information in strict confidence</strong> and not disclose it to any third party without prior written consent.</li>
+                        <li>You agree to <strong>use Confidential Information only for the purpose of using the Service</strong> — not to reverse-engineer, decompile, or derive the algorithms, methods, or logic.</li>
+                        <li>Your business data (shop rates, quotes, customer info) is also protected — <strong>we will never share it</strong> with other users or third parties.</li>
+                        <li>These obligations <strong>survive for 2 years</strong> after account termination.</li>
+                    </ul>
+                    <p class="nda-modal-version">NDA Version: 2026-03-16 &mdash; <a href="/nda" target="_blank">Read Full Agreement</a></p>
+                </div>
+                <div class="nda-modal-actions">
+                    <button class="btn btn-primary btn-full" id="nda-agree-btn" onclick="Auth._handleNdaAgree()">I Agree &mdash; Continue Registration</button>
+                    <button class="btn btn-ghost btn-full" onclick="Auth._handleNdaDecline()">I Do Not Agree &mdash; Exit</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    },
+
+    async _handleNdaAgree() {
+        const email = document.getElementById('reg-email').value.trim();
+        const btn = document.getElementById('nda-agree-btn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Recording...'; }
+
         try {
-            // Include demo token if upgrading from demo
+            const resp = await fetch('/api/auth/accept-nda', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, nda_version: '2026-03-16' }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) throw new Error(data.detail || 'Failed to record NDA acceptance');
+
+            this._ndaAcceptanceId = data.nda_acceptance_id;
+
+            // Remove modal
+            const modal = document.getElementById('nda-modal');
+            if (modal) modal.remove();
+
+            // Now complete registration
+            await this._completeRegistration();
+        } catch (e) {
+            this.showError('auth-error', 'Unable to record NDA acceptance. Please try again.');
+            const modal = document.getElementById('nda-modal');
+            if (modal) modal.remove();
+        }
+    },
+
+    _handleNdaDecline() {
+        const modal = document.getElementById('nda-modal');
+        if (modal) modal.remove();
+        window.location.href = '/';
+    },
+
+    async _completeRegistration() {
+        const email = document.getElementById('reg-email').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const inviteCode = document.getElementById('reg-invite-code').value.trim();
+        const termsChecked = document.getElementById('reg-terms').checked;
+
+        try {
             const demoToken = localStorage.getItem('demo_token');
-            const data = await API.register(email, password || null, inviteCode, termsChecked, demoToken);
+            const data = await API.register(email, password || null, inviteCode, termsChecked, demoToken, this._ndaAcceptanceId);
 
             // Server requires email verification — no tokens returned
             if (data.message === 'verification_required') {

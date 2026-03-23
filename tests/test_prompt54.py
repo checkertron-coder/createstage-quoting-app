@@ -208,21 +208,21 @@ def test_webhook_unhandled_event(db):
 # === 9. Tier enforcement: free tier limited to 1 ===
 
 def test_free_tier_limit(client, db):
-    """Free tier user gets 403 after 1 quote."""
+    """Free tier user gets 403 after 5 quotes (P65: raised from 1)."""
     headers = _auth_headers(client, "free-limit@test.com")
-    # Set user to free with 1 quote used
+    # Set user to free with 5 quotes used (the limit)
     user = db.query(models.User).filter(
         models.User.email == "free-limit@test.com"
     ).first()
     user.tier = "free"
-    user.quotes_this_month = 1
+    user.quotes_this_month = 5
     db.commit()
 
     resp = client.post("/api/session/start", json={
         "description": "test gate",
     }, headers=headers)
     assert resp.status_code == 403
-    assert "1-quote limit" in resp.json()["detail"]
+    assert "5-quote limit" in resp.json()["detail"]
 
 
 # === 10. Tier enforcement: starter limited to 3 ===

@@ -102,10 +102,10 @@ def test_quotes_counter_incremented(client, db):
 # === 4. Free tier blocked after 1 quote ===
 
 def test_free_tier_blocked_after_one(client, db):
-    """Free user with quotes_this_month=1 gets 403 on /start."""
+    """Free user with quotes_this_month=5 gets 403 on /start (P65: limit is 5)."""
     headers = _auth(client, "blocked@test.com")
     user = db.query(models.User).filter(models.User.email == "blocked@test.com").first()
-    user.quotes_this_month = 1
+    user.quotes_this_month = 5
     db.commit()
 
     resp = client.post("/api/session/start", json={
@@ -118,12 +118,12 @@ def test_free_tier_blocked_after_one(client, db):
 # === 5. Legacy "trial" status treated as free ===
 
 def test_legacy_trial_treated_as_free(client, db):
-    """Existing user with subscription_status='trial', tier='free' is treated as free."""
+    """Existing user with subscription_status='trial', tier='free' is treated as free (P65: limit 5)."""
     headers = _auth(client, "legacy@test.com")
     user = db.query(models.User).filter(models.User.email == "legacy@test.com").first()
     user.subscription_status = "trial"
     user.tier = "free"
-    user.quotes_this_month = 1
+    user.quotes_this_month = 5
     db.commit()
 
     resp = client.post("/api/session/start", json={

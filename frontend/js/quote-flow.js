@@ -732,9 +732,11 @@ const QuoteFlow = {
                     </div>
                     `}
 
-                    <div class="grand-total">
-                        <span>ESTIMATED RANGE</span>
-                        <span id="grand-total-amount">${isPreview ? this._fmtRange(pq.total) : this._fmt(pq.total)}</span>
+                    <div class="grand-total${isPreview ? ' preview-total-locked' : ''}">
+                        <span>${isPreview ? 'ESTIMATED TOTAL' : 'ESTIMATED RANGE'}</span>
+                        <span id="grand-total-amount">${isPreview
+                            ? '<a href="#" onclick="Auth.startCheckout(\'professional\');return false;" class="upgrade-total-link">Upgrade to See Your Full Estimate</a>'
+                            : this._fmt(pq.total)}</span>
                     </div>
                 </div>
 

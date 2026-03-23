@@ -192,7 +192,7 @@ def test_free_tier_quota_enforced(client, db):
     # Set quotes_this_month to the free limit
     user = db.query(models.User).filter(
         models.User.id == resp.json()["user_id"]).first()
-    user.quotes_this_month = 3  # free limit
+    user.quotes_this_month = 5  # free limit (P65: raised from 1 to 5)
     db.commit()
 
     # Try to start a session

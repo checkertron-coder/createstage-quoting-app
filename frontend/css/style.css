@@ -1046,6 +1046,39 @@ body {
 .bid-item label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 .bid-hint { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.5rem; }
 
+/* --- NDA Modal --- */
+.nda-modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+}
+.nda-modal {
+    background: var(--surface, #fff); border-radius: var(--radius-lg, 12px);
+    max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;
+    padding: 32px;
+}
+.nda-modal h2 { font-size: 1.5rem; margin-bottom: 8px; }
+.nda-modal-intro { color: var(--text-secondary); margin-bottom: 16px; font-size: 0.95rem; }
+.nda-modal-content {
+    background: var(--bg, #f8f9fa); border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius, 8px); padding: 20px; margin-bottom: 24px;
+    font-size: 0.9rem; line-height: 1.65;
+}
+.nda-modal-content ul { padding-left: 20px; margin: 12px 0; }
+.nda-modal-content li { margin-bottom: 8px; }
+.nda-modal-version { margin-top: 16px; font-size: 0.85rem; color: var(--text-secondary); }
+.nda-modal-actions { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- Preview grand total lockdown --- */
+.preview-total-locked {
+    text-align: center; padding: 12px 16px;
+    background: var(--bg, #f8f9fa); border-radius: var(--radius, 8px);
+    border: 1px dashed var(--border, #e5e7eb);
+}
+.preview-total-locked a { font-weight: 600; color: var(--accent, #f97316); text-decoration: none; }
+.preview-total-locked a:hover { text-decoration: underline; }
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
     .app-nav { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }

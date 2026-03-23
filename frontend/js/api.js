@@ -127,12 +127,13 @@ const API = {
     },
 
     // --- Auth ---
-    async register(email, password, inviteCode, termsAccepted, demoToken) {
+    async register(email, password, inviteCode, termsAccepted, demoToken, ndaAcceptanceId) {
         const body = { email };
         if (password) body.password = password;
         if (inviteCode) body.invite_code = inviteCode;
         if (termsAccepted) body.terms_accepted = true;
         if (demoToken) body.demo_token = demoToken;
+        if (ndaAcceptanceId) body.nda_acceptance_id = ndaAcceptanceId;
         const resp = await fetch(`${this.base}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

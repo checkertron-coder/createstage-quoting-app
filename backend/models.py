@@ -330,6 +330,7 @@ class InviteCode(Base):
     tier = Column(String, default="professional")  # tier granted to user
     max_uses = Column(Integer, nullable=True)  # null = unlimited
     uses = Column(Integer, default=0)
+    used_by_email = Column(String, nullable=True)  # Lock code to first user's email
     expires_at = Column(DateTime, nullable=True)
     created_by = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -366,6 +367,19 @@ class EmailToken(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User")
+
+
+class NdaAcceptance(Base):
+    """Permanent record of NDA acceptance — survives user deletion."""
+    __tablename__ = "nda_acceptances"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, nullable=True)  # Set after account creation; no FK cascade
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    nda_version = Column(String, nullable=False, default="2026-03-16")
+    accepted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class ShopEquipment(Base):
