@@ -72,3 +72,29 @@ Currently if `_send_verification_email()` fails (exception), the registration si
 5. Click verification link in email → EXPECTED: account activated, can now log in
 6. Register WITH a valid invite code → EXPECTED: immediate access, no email required
 7. Run full test suite: `python -m pytest tests/ -v` → all pass
+
+---
+
+## ADDENDUM — Invite Code Lock Not Working in Live DB
+
+### Additional Problem Found After P65 Deploy
+
+The `used_by_email` lock logic is correct in code but failed silently for codes that already existed in the DB before P65 ran. The `auto_seed()` function uses `if not existing: db.add(...)` — so pre-existing codes like BETA-CHECKER were skipped entirely. Their `used_by_email` was never set after first use, meaning the lock never fired.
+
+### Additional Acceptance Criteria
+
+- After a code is used for the first time, `used_by_email` is immediately set to that email — verified in the DB
+- A code that has `uses >= max_uses` AND `used_by_email` already set must reject any new registration attempt regardless of email
+- The `auto_seed()` hardening block must run on EVERY deploy (not just first-time), updating `used_by_email` for all codes that have `uses > 0` but `used_by_email = NULL` — backfill from the `invite_code_used` field on the User model
+- BETA-CHECKER specifically: if it has `uses=1` and `used_by_email=NULL` in the live DB, backfill `used_by_email` from the user who used it
+
+### Additional Decomposition Chunk
+
+**Chunk 5 — Backfill used_by_email for existing codes**
+In `auto_seed()`, after the new-code creation block, add a backfill pass: query all InviteCodes where `used_by_email IS NULL` and `uses > 0`. For each, find the User record where `invite_code_used = code.code` and set `code.used_by_email = user.email`. This repairs the live DB state without a migration.
+
+### Additional Evaluation
+
+1. After deploy: check DB — BETA-CHECKER should have `used_by_email` set to the email that used it
+2. Try registering with BETA-CHECKER using any email → EXPECTED: "This invite code has already been used"
+3. Try with a fresh unused code → works once, locked on second attempt with different email
