@@ -1,0 +1,74 @@
+# PROMPT 65B — Email Verification Gate Fix
+*Spec-engineered using Nate B. Jones' 5 Primitives*
+
+---
+
+## 1. PROBLEM STATEMENT
+
+Users who register WITHOUT an invite code are supposed to receive an email verification link before gaining access. Instead, they are being granted immediate access with no email sent.
+
+The root cause is a dev-mode fallback in `backend/routers/auth.py` that unconditionally sets `email_verified = True` and issues tokens if `email_service.is_configured()` returns False. In production on Railway, `RESEND_API_KEY` IS set and `is_configured()` should return True — but the fallback is still running. This means either: (a) `is_configured()` is returning False in production for an unknown reason, or (b) the fallback is being reached before the `is_configured()` check.
+
+The result: every user who registers without an invite code gets in immediately, the NDA acceptance record exists but is never tied to a verified email, and the email gate is completely non-functional in production.
+
+---
+
+## 2. ACCEPTANCE CRITERIA
+
+- A user who registers without an invite code receives a verification email and cannot log in until they verify
+- A user who registers WITH a valid invite code is auto-verified and logs in immediately (this behavior is intentional — do not change it)
+- The dev-mode fallback (`email_verified = True` on line ~458) is removed entirely or guarded such that it NEVER runs in production (`PRODUCTION=1`)
+- If `RESEND_API_KEY` is set and `email_service.is_configured()` returns True but email sending fails (exception), the user sees an error — not silent auto-verify
+- Add logging at every branch of the registration path so future failures are visible in Railway logs
+- Existing verified users are not affected
+
+---
+
+## 3. CONSTRAINT ARCHITECTURE
+
+**In scope:**
+- `backend/routers/auth.py` — the registration endpoint, specifically the block starting at "Standard registration — require email verification before granting access"
+- `backend/email_service.py` — add debug logging so `is_configured()` result is visible in Railway logs on every registration attempt
+- `backend/config.py` — confirm PRODUCTION env var is accessible and check if it can be used as a secondary guard
+
+**Out of scope — do not touch:**
+- Invite code auto-verify path (lines ~445-450) — intentional, leave it alone
+- NDA modal, invite code hardening — P65 work is correct
+- Any calculator, quote, or PDF logic
+- Frontend
+
+**Must not break:**
+- Invite code users: auto-verify + immediate token issuance
+- Password reset email flow
+- Existing logged-in sessions
+
+---
+
+## 4. DECOMPOSITION
+
+**Chunk 1 — Diagnose why is_configured() may be returning False in production**
+Add a log statement at the top of the registration endpoint that logs: `is_configured()` result, whether `RESEND_API_KEY` env var is present (bool, not the value), and the `PRODUCTION` env var value. Deploy and trigger a registration to see what Railway logs show. This tells us whether Resend is truly configured from the app's perspective at runtime.
+
+**Chunk 2 — Remove the unconditional dev bypass**
+The fallback block (lines ~457-461) that sets `email_verified = True` when email service is not configured must be replaced with a hard error in production. The logic should be: if email is configured → send verification email and require it. If email is NOT configured AND we're in production → raise a 500 with a clear error ("Email service not configured — cannot complete registration"). If email is NOT configured AND we're NOT in production → dev mode auto-verify is acceptable. This eliminates the silent bypass in production.
+
+**Chunk 3 — Harden the email send path**
+Currently if `_send_verification_email()` fails (exception), the registration silently succeeds without sending the email. The user gets no email and no error. Fix this: if `_send_verification_email()` returns False or raises, return an error to the user ("Failed to send verification email — please try again") rather than silently proceeding or auto-verifying.
+
+**Chunk 4 — Tests**
+- Test: non-invite-code registration with email configured → returns `verification_required`, no token issued
+- Test: non-invite-code registration with email NOT configured + PRODUCTION=0 → dev auto-verify (existing behavior preserved for local dev)
+- Test: non-invite-code registration with email NOT configured + PRODUCTION=1 → 500 error
+- Test: invite code registration → immediate token, email_verified=True (unchanged)
+
+---
+
+## 5. EVALUATION DESIGN
+
+1. Register a new account on createquote.app WITHOUT an invite code
+2. EXPECTED: "Check your email to verify your account" message — no access granted
+3. EXPECTED: Verification email arrives at the registered address
+4. Log into Railway → check deployment logs → confirm `is_configured()` logged as True
+5. Click verification link in email → EXPECTED: account activated, can now log in
+6. Register WITH a valid invite code → EXPECTED: immediate access, no email required
+7. Run full test suite: `python -m pytest tests/ -v` → all pass
