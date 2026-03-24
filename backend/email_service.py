@@ -24,7 +24,15 @@ def _get_from():
 
 def _get_app_url():
     # type: () -> str
-    return os.getenv("APP_URL", "http://localhost:8000").rstrip("/")
+    """Get the public app URL. Falls back to RAILWAY_PUBLIC_DOMAIN if APP_URL not set."""
+    url = os.getenv("APP_URL", "").strip()
+    if url:
+        return url.rstrip("/")
+    # Railway auto-sets RAILWAY_PUBLIC_DOMAIN (without protocol)
+    railway_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if railway_domain:
+        return "https://%s" % railway_domain
+    return "http://localhost:8000"
 
 
 def send_verification_email(to_email, token):
@@ -36,6 +44,7 @@ def send_verification_email(to_email, token):
 
     app_url = _get_app_url()
     verify_url = "%s/app?action=verify-email&token=%s" % (app_url, token)
+    logger.info("[EMAIL] Verification email to=%s app_url=%s from=%s", to_email, app_url, _get_from())
 
     html = (
         "<div style='font-family: -apple-system, BlinkMacSystemFont, sans-serif; "
@@ -49,10 +58,14 @@ def send_verification_email(to_email, token):
         "text-decoration: none; font-weight: 600; margin: 20px 0;'>"
         "Verify Email</a>"
         "<p style='color: #718096; font-size: 13px;'>This link expires in 48 hours.</p>"
+        "<p style='color: #718096; font-size: 13px;'>"
+        "If the button above doesn't work, copy and paste this link into your browser:</p>"
+        "<p style='color: #4a5568; font-size: 13px; word-break: break-all;'>"
+        "<a href='%s' style='color: #2d3748;'>%s</a></p>"
         "<p style='color: #a0aec0; font-size: 12px; margin-top: 30px;'>"
         "If you didn't create an account, ignore this email.</p>"
         "</div>"
-    ) % verify_url
+    ) % (verify_url, verify_url, verify_url)
 
     return _send(to_email, "Verify your CreateQuote email", html)
 
