@@ -51,8 +51,10 @@ def create_checkout(
             detail="Invalid tier. Choose starter, professional, or shop.",
         )
 
-    # Ensure user has a Stripe customer ID
-    if not current_user.stripe_customer_id:
+    # Ensure user has a valid Stripe customer ID
+    # If stale (e.g. created in test mode, now using live key), recreate
+    customer_id = current_user.stripe_customer_id
+    if not customer_id:
         try:
             customer_id = stripe_service.create_customer(
                 current_user.email, current_user.id,
@@ -65,8 +67,6 @@ def create_checkout(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Stripe customer creation failed: %s" % str(e),
             )
-    else:
-        customer_id = current_user.stripe_customer_id
 
     success_url = request.success_url or "/app?checkout=success"
     cancel_url = request.cancel_url or "/app?checkout=cancelled"
@@ -91,11 +91,33 @@ def create_checkout(
             detail=str(e),
         )
     except Exception as e:
-        logger.error("Stripe checkout failed: %s: %s", type(e).__name__, e)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Stripe error: %s" % str(e),
-        )
+        # If stale customer ID (test→live switch), recreate and retry once
+        if "No such customer" in str(e):
+            logger.warning("Stale customer %s — recreating in live mode", customer_id)
+            try:
+                customer_id = stripe_service.create_customer(
+                    current_user.email, current_user.id,
+                )
+                current_user.stripe_customer_id = customer_id
+                db.commit()
+                checkout_url = stripe_service.create_checkout_session(
+                    customer_id=customer_id,
+                    tier=request.tier,
+                    success_url=success_url,
+                    cancel_url=cancel_url,
+                )
+            except Exception as retry_err:
+                logger.error("Stripe retry failed: %s: %s", type(retry_err).__name__, retry_err)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Stripe error: %s" % str(retry_err),
+                )
+        else:
+            logger.error("Stripe checkout failed: %s: %s", type(e).__name__, e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Stripe error: %s" % str(e),
+            )
 
     return {"url": checkout_url}
 
