@@ -122,3 +122,16 @@ After Railway confirms healthy:
    - Current state of email verification in production
    - Current state of invite code locking in production
 3. `git add -A && git commit -m "P65B: email verify fix + invite code backfill" && git push origin master`
+
+---
+
+## ADDENDUM — BETA-CHECKER Code Reset
+
+BETA-CHECKER was used by an unauthorized email during testing. It must be reset so the Checker test account can use it.
+
+In `auto_seed()`, after the backfill pass, add a specific reset for BETA-CHECKER:
+- Find the BETA-CHECKER invite code record
+- Set `uses = 0`
+- Set `used_by_email = NULL`
+
+This runs on every deploy (idempotent is fine — if uses=0 and used_by_email=NULL already, no change). After this reset, BETA-CHECKER is clean and ready for the Checker test account to use once.
