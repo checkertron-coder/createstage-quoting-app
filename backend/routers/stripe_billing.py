@@ -53,16 +53,30 @@ def create_checkout(
 
     # Ensure user has a Stripe customer ID
     if not current_user.stripe_customer_id:
-        customer_id = stripe_service.create_customer(
-            current_user.email, current_user.id,
-        )
-        current_user.stripe_customer_id = customer_id
-        db.commit()
+        try:
+            customer_id = stripe_service.create_customer(
+                current_user.email, current_user.id,
+            )
+            current_user.stripe_customer_id = customer_id
+            db.commit()
+        except Exception as e:
+            logger.error("Stripe customer creation failed: %s: %s", type(e).__name__, e)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Stripe customer creation failed: %s" % str(e),
+            )
     else:
         customer_id = current_user.stripe_customer_id
 
     success_url = request.success_url or "/app?checkout=success"
     cancel_url = request.cancel_url or "/app?checkout=cancelled"
+
+    # Log what we're sending to Stripe for diagnostics
+    price_id = stripe_service.TIER_TO_PRICE_ID.get(request.tier, "")
+    logger.info(
+        "Checkout: user=%d tier=%s price_id=%s customer=%s success=%s",
+        current_user.id, request.tier, price_id or "MISSING", customer_id, success_url,
+    )
 
     try:
         checkout_url = stripe_service.create_checkout_session(
@@ -77,10 +91,10 @@ def create_checkout(
             detail=str(e),
         )
     except Exception as e:
-        logger.error("Stripe checkout creation failed: %s", e)
+        logger.error("Stripe checkout failed: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to create checkout session. Please try again.",
+            detail="Stripe error: %s" % str(e),
         )
 
     return {"url": checkout_url}
