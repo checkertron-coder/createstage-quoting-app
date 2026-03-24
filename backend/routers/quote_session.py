@@ -23,6 +23,7 @@ from .. import models
 from ..auth import get_current_user
 from .auth import check_quote_access
 from ..database import get_db
+from ..claude_client import is_configured as ai_is_configured
 from ..question_trees.engine import QuestionTreeEngine, detect_job_type
 from ..question_trees.universal_intake import (
     generate_intake_questions,
@@ -77,15 +78,14 @@ def start_session(
     """
     Start a new quote session using Universal Intake.
 
-    1. Detects job_type (for calculator routing only)
-    2. Runs vision on photos (if any) to get observations
-    3. Calls Universal Intake AI to extract known facts + generate questions
-    4. Returns session_id, job_type, extracted fields, and AI-generated questions
+    Returns immediately with session_id + status="processing".
+    AI intake runs in a background thread to avoid Railway's 30s proxy timeout.
+    Frontend polls GET /session/{id}/status until status="active".
     """
     logger.info("/start called: desc_len=%d, photo_urls=%s",
                 len(request.description), request.photo_urls or request.photos)
 
-    # --- Step 1: Detect job type (kept for calculator routing) ---
+    # --- Step 1: Detect job type (fast keyword match, no AI) ---
     if request.job_type:
         job_type = request.job_type
         detection_confidence = 1.0
@@ -96,10 +96,67 @@ def start_session(
         detection_confidence = detection.get("confidence", 0.0)
         ambiguous = detection.get("ambiguous", True)
 
-    # Merge photo_urls from both fields (backward compat + new field)
     photo_urls = list(request.photo_urls or request.photos or [])
 
-    # --- Step 2: Vision extraction (if photos) ---
+    # --- Decide: sync (instant fallback) vs async (real AI, needs background) ---
+    use_async = ai_is_configured()
+
+    if use_async:
+        # --- ASYNC PATH: return immediately, AI runs in background ---
+        session_id = str(uuid.uuid4())
+        params_for_storage = {
+            "description": request.description,
+            "_known_facts": {},
+            "_qa_history": [],
+            "_readiness": "needs_questions",
+        }
+        initial_messages = [{
+            "role": "user",
+            "content": request.description,
+            "timestamp": datetime.utcnow().isoformat(),
+        }]
+
+        session = models.QuoteSession(
+            id=session_id,
+            user_id=current_user.id,
+            job_type=job_type,
+            stage="intake",
+            params_json=params_for_storage,
+            messages_json=initial_messages,
+            photo_urls=photo_urls,
+            status="processing",
+        )
+        db.add(session)
+        db.commit()
+
+        _run_intake_background(
+            session_id=session_id,
+            description=request.description,
+            job_type=job_type,
+            photo_urls=photo_urls,
+        )
+
+        logger.info("SESSION START (async): session=%s, job_type=%s", session_id, job_type)
+
+        return {
+            "session_id": session_id,
+            "job_type": job_type,
+            "detection_confidence": detection_confidence,
+            "ambiguous": ambiguous,
+            "status": "processing",
+        }
+
+    # --- SYNC PATH: no AI configured, fallback is instant ---
+    return _start_session_sync(
+        request, job_type, detection_confidence, ambiguous,
+        photo_urls, db, current_user,
+    )
+
+
+def _start_session_sync(request, job_type, detection_confidence, ambiguous,
+                        photo_urls, db, current_user):
+    """Original synchronous intake — used when AI is not configured (instant fallback)."""
+    # Photo extraction (will no-op without AI key)
     photo_observations = ""
     photo_extracted_fields = {}
     if photo_urls:
@@ -110,10 +167,9 @@ def start_session(
             photo_observations = photo_result.get("photo_observations", "")
             photo_extracted_fields = photo_result.get("extracted_fields", {})
         except Exception as e:
-            logger.error("Photo extraction failed: %s: %s",
-                         type(e).__name__, e)
+            logger.error("Photo extraction failed: %s: %s", type(e).__name__, e)
 
-    # --- Step 3: Universal Intake AI call ---
+    # Universal Intake (will use fallback questions without AI)
     intake_result = generate_intake_questions(
         description=request.description,
         photo_observations=photo_observations,
@@ -123,22 +179,18 @@ def start_session(
     questions = intake_result.get("questions", [])
     readiness = intake_result.get("readiness", "needs_questions")
 
-    # Merge photo-extracted fields into known facts (AI text wins on conflict)
     for k, v in photo_extracted_fields.items():
         if k not in known_facts:
             known_facts[k] = v
 
-    # Build frontend-compatible response shapes
     extracted_fields = build_extracted_fields_from_known(known_facts)
     completion = build_completion_from_readiness(readiness, known_facts, questions)
 
-    # --- Step 4: Create session record ---
     session_id = str(uuid.uuid4())
     params_for_storage = dict(known_facts)
     params_for_storage["description"] = request.description
     if photo_observations:
         params_for_storage["photo_observations"] = photo_observations
-    # Store intake state for followup calls
     params_for_storage["_known_facts"] = known_facts
     params_for_storage["_qa_history"] = []
     params_for_storage["_readiness"] = readiness
@@ -148,7 +200,6 @@ def start_session(
         "content": request.description,
         "timestamp": datetime.utcnow().isoformat(),
     }]
-    # Store questions so /answer can match field IDs to question text
     if questions:
         initial_messages.append({
             "role": "ai_questions",
@@ -170,7 +221,7 @@ def start_session(
     db.commit()
 
     logger.info(
-        "SESSION START (universal): job_type=%s, known=%d facts, %d questions, readiness=%s",
+        "SESSION START (sync): job_type=%s, known=%d, questions=%d, readiness=%s",
         job_type, len(known_facts), len(questions), readiness,
     )
 
@@ -179,13 +230,111 @@ def start_session(
         "job_type": job_type,
         "detection_confidence": detection_confidence,
         "ambiguous": ambiguous,
-        "tree_loaded": True,  # Always true — universal intake handles all types
+        "tree_loaded": True,
         "extracted_fields": extracted_fields,
         "photo_extracted_fields": photo_extracted_fields,
         "photo_observations": photo_observations,
         "next_questions": _serialize_questions(questions),
         "completion": completion,
     }
+
+
+def _run_intake_background(session_id, description, job_type, photo_urls):
+    """Spawn a daemon thread to run AI intake and update the session."""
+
+    def _worker():
+        from ..database import SessionLocal
+        bg_db = SessionLocal()
+        try:
+            # --- Photo extraction (if photos) ---
+            photo_observations = ""
+            photo_extracted_fields = {}
+            if photo_urls:
+                try:
+                    photo_result = engine.extract_from_photos(
+                        job_type, photo_urls, description
+                    )
+                    photo_observations = photo_result.get("photo_observations", "")
+                    photo_extracted_fields = photo_result.get("extracted_fields", {})
+                except Exception as e:
+                    logger.error("BG photo extraction failed: %s: %s",
+                                 type(e).__name__, e)
+
+            # --- Universal Intake AI call ---
+            intake_result = generate_intake_questions(
+                description=description,
+                photo_observations=photo_observations,
+            )
+
+            known_facts = intake_result.get("known_facts", {})
+            questions = intake_result.get("questions", [])
+            readiness = intake_result.get("readiness", "needs_questions")
+
+            # Merge photo-extracted fields (AI text wins on conflict)
+            for k, v in photo_extracted_fields.items():
+                if k not in known_facts:
+                    known_facts[k] = v
+
+            # Build storage
+            params_for_storage = dict(known_facts)
+            params_for_storage["description"] = description
+            if photo_observations:
+                params_for_storage["photo_observations"] = photo_observations
+            params_for_storage["_known_facts"] = known_facts
+            params_for_storage["_qa_history"] = []
+            params_for_storage["_readiness"] = readiness
+
+            messages = [{
+                "role": "user",
+                "content": description,
+                "timestamp": datetime.utcnow().isoformat(),
+            }]
+            if questions:
+                messages.append({
+                    "role": "ai_questions",
+                    "content": questions,
+                    "timestamp": datetime.utcnow().isoformat(),
+                })
+
+            # Build frontend-compatible shapes and store them for the status endpoint
+            extracted_fields = build_extracted_fields_from_known(known_facts)
+            completion = build_completion_from_readiness(readiness, known_facts, questions)
+
+            # Update session in DB
+            session = bg_db.query(models.QuoteSession).filter(
+                models.QuoteSession.id == session_id,
+            ).first()
+            if session:
+                session.params_json = params_for_storage
+                session.messages_json = messages
+                session.stage = "clarify" if questions else "calculate"
+                session.status = "active"
+                bg_db.commit()
+                logger.info(
+                    "BG INTAKE DONE: session=%s, known=%d, questions=%d, readiness=%s",
+                    session_id, len(known_facts), len(questions), readiness,
+                )
+            else:
+                logger.error("BG intake: session %s not found in DB", session_id)
+
+        except Exception as e:
+            logger.error("BG intake failed for session %s: %s: %s",
+                         session_id, type(e).__name__, e)
+            # Mark session as failed so frontend can show error
+            try:
+                session = bg_db.query(models.QuoteSession).filter(
+                    models.QuoteSession.id == session_id,
+                ).first()
+                if session:
+                    session.status = "error"
+                    bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            bg_db.close()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
 
 
 @router.post("/{session_id}/answer")
@@ -349,6 +498,7 @@ def get_session_status(
 ):
     """
     Return current state: answered fields, remaining questions, completion %.
+    Frontend polls this after /start returns status="processing".
     """
     session = db.query(models.QuoteSession).filter(
         models.QuoteSession.id == session_id,
@@ -358,15 +508,38 @@ def get_session_status(
     if session.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not your session")
 
+    # If still processing, return minimal status for polling
+    if session.status == "processing":
+        return {
+            "session_id": session_id,
+            "job_type": session.job_type,
+            "stage": session.stage,
+            "status": "processing",
+        }
+
     current_params = dict(session.params_json or {})
 
     # Universal intake: use stored readiness state
     known_facts = current_params.get("_known_facts", {})
     readiness = current_params.get("_readiness", "needs_questions")
-    completion = build_completion_from_readiness(readiness, known_facts, [])
+
+    # Retrieve questions from messages_json (stored by background intake)
+    questions = []
+    for msg in (session.messages_json or []):
+        if msg.get("role") == "ai_questions":
+            questions = msg.get("content", [])
+            break
+
+    completion = build_completion_from_readiness(readiness, known_facts, questions)
     # Answered fields = everything except internal keys
     answered_fields = {k: v for k, v in current_params.items()
                        if not str(k).startswith("_")}
+    extracted_fields = build_extracted_fields_from_known(known_facts)
+
+    # Photo data
+    photo_observations = current_params.get("photo_observations", "")
+    photo_extracted_fields = {k: v for k, v in current_params.items()
+                              if k.startswith("photo_") and k != "photo_observations"}
 
     return {
         "session_id": session_id,
@@ -374,7 +547,10 @@ def get_session_status(
         "stage": session.stage,
         "status": session.status,
         "answered_fields": answered_fields,
-        "next_questions": [],  # Questions only generated on /answer calls
+        "extracted_fields": extracted_fields,
+        "photo_extracted_fields": photo_extracted_fields,
+        "photo_observations": photo_observations,
+        "next_questions": _serialize_questions(questions),
         "completion": completion,
         "photo_urls": session.photo_urls or [],
         "created_at": session.created_at.isoformat() if session.created_at else None,

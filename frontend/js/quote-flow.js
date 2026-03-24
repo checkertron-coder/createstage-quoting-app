@@ -227,19 +227,52 @@ const QuoteFlow = {
             const data = await API.startSession(description, jobType, this.sessionPhotoUrls);
             this.sessionId = data.session_id;
             this._currentJobType = data.job_type || jobType || '';
-            this.extractedFields = data.extracted_fields || {};
-            this.allQuestions = data.next_questions || [];
 
-            if (data.next_questions && data.next_questions.length > 0) {
-                this._renderClarifyStep(data);
-                this._showStep('clarify');
-            } else if (data.completion && data.completion.is_complete) {
-                await this._runPipeline();
-            } else {
-                this._showProcessing('No questions available for this job type yet.');
+            // Async intake: backend returns immediately, AI runs in background
+            if (data.status === 'processing') {
+                await this._pollForIntakeResult(data.session_id);
+                return;
             }
+
+            // Legacy sync path (fallback)
+            await this._handleIntakeResult(data);
         } catch (e) {
             this._showError(e.message);
+        }
+    },
+
+    async _pollForIntakeResult(sessionId) {
+        const MAX_POLLS = 60;  // 2s interval x 60 = 2 minutes max
+        for (let i = 0; i < MAX_POLLS; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+                const status = await API.getSessionStatus(sessionId);
+                if (status.status === 'processing') continue;
+                if (status.status === 'error') {
+                    this._showError('AI analysis failed. Please try again.');
+                    return;
+                }
+                // status is "active" — intake complete
+                await this._handleIntakeResult(status);
+                return;
+            } catch (e) {
+                console.error('Poll error:', e);
+            }
+        }
+        this._showError('Analysis timed out. Please try again.');
+    },
+
+    async _handleIntakeResult(data) {
+        this.extractedFields = data.extracted_fields || {};
+        this.allQuestions = data.next_questions || [];
+
+        if (data.next_questions && data.next_questions.length > 0) {
+            this._renderClarifyStep(data);
+            this._showStep('clarify');
+        } else if (data.completion && data.completion.is_complete) {
+            await this._runPipeline();
+        } else {
+            this._showProcessing('No questions available for this job type yet.');
         }
     },
 
