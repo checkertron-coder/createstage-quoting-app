@@ -446,15 +446,44 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
     if invite_code_record:
         user.email_verified = True
         db.commit()
+        logger.info("[REGISTER] invite-code path — auto-verified email=%s code=%s",
+                     body.email, invite_code_record.code)
         tokens = _issue_tokens(user, db)
         return {**tokens, "user": _user_to_response(user)}
 
     # Standard registration — require email verification before granting access
-    if email_service.is_configured():
-        _send_verification_email(user, db)
+    is_prod = os.environ.get("PRODUCTION") == "1"
+    email_configured = email_service.is_configured()
+    logger.info(
+        "[REGISTER] email gate — email=%s email_configured=%s PRODUCTION=%s "
+        "RESEND_API_KEY_present=%s",
+        body.email, email_configured, os.environ.get("PRODUCTION", "unset"),
+        bool(os.environ.get("RESEND_API_KEY", "").strip()),
+    )
+
+    if email_configured:
+        sent = _send_verification_email(user, db)
+        if not sent:
+            logger.error("[REGISTER] verification email FAILED to send for email=%s", body.email)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send verification email. Please try again.",
+            )
+        logger.info("[REGISTER] verification email sent to %s", body.email)
         return {"message": "verification_required", "email": user.email}
 
-    # Dev mode (no email service) — auto-verify so local dev isn't blocked
+    # Email NOT configured
+    if is_prod:
+        # Production without email service = hard error — don't silently bypass
+        logger.error("[REGISTER] PRODUCTION=1 but email service not configured! "
+                     "Cannot verify email=%s", body.email)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Email service not configured. Please contact support.",
+        )
+
+    # Dev mode only (PRODUCTION != 1, no email service) — auto-verify for local dev
+    logger.info("[REGISTER] dev-mode auto-verify for email=%s", body.email)
     user.email_verified = True
     db.commit()
     tokens = _issue_tokens(user, db)

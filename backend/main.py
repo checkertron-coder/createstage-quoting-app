@@ -266,6 +266,20 @@ def auto_seed():
             if bc.max_uses is None or bc.max_uses > 1:
                 bc.max_uses = 1
 
+        # Backfill used_by_email for codes that were used before P65 added the column
+        unlocked_used = db.query(models.InviteCode).filter(
+            models.InviteCode.uses > 0,
+            models.InviteCode.used_by_email.is_(None),
+        ).all()
+        for code in unlocked_used:
+            first_user = db.query(models.User).filter(
+                models.User.invite_code_used == code.code,
+            ).first()
+            if first_user:
+                code.used_by_email = first_user.email
+                logger.info("[SEED] Backfilled used_by_email for %s → %s",
+                            code.code, first_user.email)
+
         db.commit()
     finally:
         db.close()

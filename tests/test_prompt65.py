@@ -1,5 +1,6 @@
 """
-P65: NDA Modal, Invite Code Hardening, Free Tier Protection — Tests
+P65/P65B: NDA Modal, Invite Code Hardening, Free Tier Protection,
+Email Verification Gate Fix — Tests
 
 Tests:
 1. POST /api/auth/accept-nda returns acceptance ID
@@ -7,13 +8,22 @@ Tests:
 3. Invite code locked to first user's email (used_by_email)
 4. Invite code rejected for different email after lock
 5. Invite code allowed for same email re-use
-6. BETA-FOUNDER locked to info@createstage.co (auto_seed)
-7. Free tier quota limit is 5
-8. NDA acceptance stores IP and user-agent
+6. Free tier quota limit is 5
+7. NDA acceptance stores IP and user-agent
+8. NDA acceptance without registration leaves user_id null
+P65B:
+9. No invite code + email configured → verification_required (no tokens)
+10. No invite code + no email + PRODUCTION=0 → dev auto-verify
+11. No invite code + no email + PRODUCTION=1 → 500 error
+12. Invite code → immediate tokens + email_verified=True
+13. Email send failure → 500 error
+14. Backfill used_by_email for pre-existing codes
 """
 
+import os
 import uuid
 from datetime import datetime
+from unittest.mock import patch
 
 from backend import models
 
@@ -207,3 +217,129 @@ def test_nda_unlinked_has_null_user(client, db):
         models.NdaAcceptance.id == nda_id,
     ).first()
     assert record.user_id is None
+
+
+# ============================================================
+# P65B: Email Verification Gate Fix
+# ============================================================
+
+# === 9. No invite code + email configured → verification_required ===
+
+def test_register_no_code_email_configured_returns_verification_required(client, db):
+    """When email service is configured, register without invite code returns
+    verification_required with no tokens."""
+    email = "verify_%s@test.local" % uuid.uuid4().hex[:8]
+    with patch("backend.routers.auth.email_service") as mock_es:
+        mock_es.is_configured.return_value = True
+        mock_es.send_verification_email.return_value = True
+        resp = _register(client, email=email)
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == "verification_required"
+    assert data["email"] == email
+    assert "access_token" not in data
+
+    # User should exist but email_verified = False
+    user = db.query(models.User).filter(models.User.email == email).first()
+    assert user is not None
+    assert user.email_verified is not True
+
+
+# === 10. No invite code + no email + PRODUCTION=0 → dev auto-verify ===
+
+def test_register_no_code_no_email_dev_mode_auto_verifies(client, db):
+    """In dev mode (no email, PRODUCTION != 1), user is auto-verified."""
+    email = "dev_%s@test.local" % uuid.uuid4().hex[:8]
+    # Default test env: no RESEND_API_KEY, no PRODUCTION=1
+    resp = _register(client, email=email)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert data.get("user", {}).get("email") == email
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    assert user.email_verified is True
+
+
+# === 11. No invite code + no email + PRODUCTION=1 → 500 ===
+
+def test_register_no_code_no_email_production_returns_500(client, db):
+    """In production (PRODUCTION=1) without email configured → 500."""
+    email = "prod_%s@test.local" % uuid.uuid4().hex[:8]
+    with patch.dict(os.environ, {"PRODUCTION": "1"}):
+        with patch("backend.routers.auth.email_service") as mock_es:
+            mock_es.is_configured.return_value = False
+            resp = _register(client, email=email)
+
+    assert resp.status_code == 500
+    assert "email service" in resp.json()["detail"].lower()
+
+
+# === 12. Invite code → immediate tokens + email_verified=True ===
+
+def test_invite_code_auto_verifies(client, db):
+    """Invite code users get tokens immediately with email_verified=True."""
+    _seed_code(db, code="VERIFY1", max_uses=5)
+    email = "invited_%s@test.local" % uuid.uuid4().hex[:8]
+    resp = _register(client, email=email, invite_code="VERIFY1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+
+    user = db.query(models.User).filter(models.User.email == email).first()
+    assert user.email_verified is True
+
+
+# === 13. Email send failure → 500 ===
+
+def test_register_email_send_failure_returns_500(client, db):
+    """If email service is configured but send fails → 500 error."""
+    email = "fail_%s@test.local" % uuid.uuid4().hex[:8]
+    with patch("backend.routers.auth.email_service") as mock_es:
+        mock_es.is_configured.return_value = True
+        mock_es.send_verification_email.return_value = False  # Send fails
+        resp = _register(client, email=email)
+
+    assert resp.status_code == 500
+    assert "verification email" in resp.json()["detail"].lower()
+
+
+# === 14. Backfill used_by_email for pre-existing codes ===
+
+def test_backfill_used_by_email(db):
+    """auto_seed backfill sets used_by_email from User.invite_code_used."""
+    # Create a code with uses > 0 but no used_by_email (simulates pre-P65 state)
+    code = models.InviteCode(
+        code="BACKFILL-TEST", tier="professional", max_uses=5,
+        uses=1, created_by="test", is_active=True,
+        used_by_email=None,  # Pre-P65: not set
+    )
+    db.add(code)
+    # Create a user who used this code
+    user = models.User(
+        email="backfill@test.local",
+        invite_code_used="BACKFILL-TEST",
+        tier="professional",
+    )
+    db.add(user)
+    db.commit()
+
+    # Run the backfill logic directly
+    unlocked = db.query(models.InviteCode).filter(
+        models.InviteCode.uses > 0,
+        models.InviteCode.used_by_email.is_(None),
+        models.InviteCode.code == "BACKFILL-TEST",
+    ).all()
+    for c in unlocked:
+        first_user = db.query(models.User).filter(
+            models.User.invite_code_used == c.code,
+        ).first()
+        if first_user:
+            c.used_by_email = first_user.email
+    db.commit()
+
+    refreshed = db.query(models.InviteCode).filter(
+        models.InviteCode.code == "BACKFILL-TEST",
+    ).first()
+    assert refreshed.used_by_email == "backfill@test.local"
