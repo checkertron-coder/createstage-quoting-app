@@ -145,3 +145,16 @@ Verify `https://createquote.app/health` returns `{"status": "ok"}` after Railway
 1. `cd ~/brain && git pull origin master`
 2. Write session summary to `agents/cc-createquote/sessions/2026-03-23-p65c.md` covering: what changed, current registration flow state, tier limits, invite codes active
 3. `git add -A && git commit -m "P65C: NDA invite-only + email verify + tier limits" && git push origin master`
+
+---
+
+## ADDENDUM — Starter Tier Price Change: $49 → $79
+
+The Starter tier price is being raised from $49/month to $79/month.
+
+**What needs to change:**
+- Landing page pricing copy: Starter shows $79/mo (not $49)
+- The Stripe Starter product price in the live Stripe dashboard needs to be updated to $79/mo — create a new Price object for the Starter product at $79/mo, get the new Price ID, and update the `STRIPE_PRICE_STARTER` environment variable in Railway
+- Update any hardcoded $49 references in frontend copy or backend config
+
+Note: Existing Starter subscribers (if any) are not affected — Stripe handles grandfathering automatically on price changes. New subscribers after this deploy will be charged $79/mo.
