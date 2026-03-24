@@ -68,8 +68,69 @@ const QuoteFlow = {
             <div id="quote-step-results" class="quote-step" style="display:none"></div>
         `;
         this._initPhotoUpload();
-        // Restore last quote if user navigated away and came back
-        this._tryRestoreLastQuote();
+        // Restore active session first, then completed quote
+        this._tryRestoreSession();
+    },
+
+    async _tryRestoreSession() {
+        // 1. Try active (in-progress) session
+        if (await this._tryRestoreActiveSession()) return;
+        // 2. Try completed quote
+        await this._tryRestoreLastQuote();
+    },
+
+    async _tryRestoreActiveSession() {
+        try {
+            const savedId = localStorage.getItem('cq_active_session_id');
+            if (!savedId) return false;
+
+            const status = await API.getSessionStatus(savedId);
+
+            // Error or gone — clear and fall through
+            if (!status || status.status === 'error') {
+                localStorage.removeItem('cq_active_session_id');
+                return false;
+            }
+            // Completed — let the quote restore path handle it
+            if (status.status === 'completed' || status.stage === 'complete') {
+                localStorage.removeItem('cq_active_session_id');
+                return false;
+            }
+            // Processing — resume polling
+            if (status.status === 'processing') {
+                this.sessionId = savedId;
+                this._currentJobType = status.job_type || '';
+                this._showStep('processing');
+                this._showProcessing('Still analyzing your job...');
+                await this._pollForIntakeResult(savedId);
+                return true;
+            }
+            // Active — restore clarify step
+            if (status.status === 'active' && status.next_questions && status.next_questions.length > 0) {
+                this.sessionId = savedId;
+                this._currentJobType = status.job_type || '';
+                await this._handleIntakeResult(status);
+                return true;
+            }
+            // Active but no questions (calculate stage) — let user continue pipeline
+            if (status.status === 'active' && status.stage === 'calculate') {
+                this.sessionId = savedId;
+                this._currentJobType = status.job_type || '';
+                this.extractedFields = status.extracted_fields || {};
+                this._showStep('processing');
+                this._showProcessing('Resuming your quote...');
+                await this._runPipeline();
+                return true;
+            }
+
+            // Unknown state — clear
+            localStorage.removeItem('cq_active_session_id');
+            return false;
+        } catch (e) {
+            // Any error (404, 403, network) — clear silently
+            localStorage.removeItem('cq_active_session_id');
+            return false;
+        }
     },
 
     async _tryRestoreLastQuote() {
@@ -227,6 +288,7 @@ const QuoteFlow = {
             const data = await API.startSession(description, jobType, this.sessionPhotoUrls);
             this.sessionId = data.session_id;
             this._currentJobType = data.job_type || jobType || '';
+            try { localStorage.setItem('cq_active_session_id', data.session_id); } catch (e) {}
 
             // Async intake: backend returns immediately, AI runs in background
             if (data.status === 'processing') {
@@ -616,6 +678,7 @@ const QuoteFlow = {
             this.pricedQuote = result.priced_quote;
             // Persist quote ID so user can return after navigating away
             try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
+            try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
             this._renderResults(result);
             this._showStep('results');
             // Track quote completion in Plausible
@@ -1521,6 +1584,7 @@ const QuoteFlow = {
         this._currentJobType = '';
         this.currentStep = 'describe';
         try { localStorage.removeItem('cq_last_quote_id'); } catch (e) {}
+        try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
         this.renderQuoteView();
     },
 
