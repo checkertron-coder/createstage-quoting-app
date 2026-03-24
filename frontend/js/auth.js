@@ -112,7 +112,7 @@ const Auth = {
             banner.id = 'upgrade-banner';
             banner.className = 'upgrade-banner';
             banner.innerHTML = `
-                <span>You're on the Free plan &mdash; 1 preview quote included.</span>
+                <span>You're on the Free plan &mdash; 5 preview quotes included.</span>
                 <a href="#" onclick="Auth.startCheckout('professional');return false;">Subscribe to unlock full quotes &rarr;</a>
             `;
             document.body.insertBefore(banner, document.body.firstChild);
@@ -657,8 +657,8 @@ const Auth = {
         }
         if (!termsChecked) return this.showError('auth-error', 'You must agree to the Terms of Service to continue.');
 
-        // Show NDA modal if not yet accepted this session
-        if (!this._ndaAcceptanceId) {
+        // NDA modal only for beta testers (invite code present)
+        if (inviteCode && !this._ndaAcceptanceId) {
             this._showNdaModal(email);
             return;
         }

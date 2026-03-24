@@ -442,22 +442,15 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
 
     _ensure_stripe_customer(user, db)
 
-    # Invite code users are trusted — auto-verify and issue tokens immediately
-    if invite_code_record:
-        user.email_verified = True
-        db.commit()
-        logger.info("[REGISTER] invite-code path — auto-verified email=%s code=%s",
-                     body.email, invite_code_record.code)
-        tokens = _issue_tokens(user, db)
-        return {**tokens, "user": _user_to_response(user)}
-
-    # Standard registration — require email verification before granting access
+    # ALL registration paths require email verification — no exceptions
     is_prod = os.environ.get("PRODUCTION") == "1"
     email_configured = email_service.is_configured()
+    has_invite = invite_code_record is not None
     logger.info(
-        "[REGISTER] email gate — email=%s email_configured=%s PRODUCTION=%s "
-        "RESEND_API_KEY_present=%s",
-        body.email, email_configured, os.environ.get("PRODUCTION", "unset"),
+        "[REGISTER] email gate — email=%s has_invite=%s email_configured=%s "
+        "PRODUCTION=%s RESEND_API_KEY_present=%s",
+        body.email, has_invite, email_configured,
+        os.environ.get("PRODUCTION", "unset"),
         bool(os.environ.get("RESEND_API_KEY", "").strip()),
     )
 
@@ -469,7 +462,7 @@ def register(request: Request, body: RegisterRequest, db: Session = Depends(get_
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to send verification email. Please try again.",
             )
-        logger.info("[REGISTER] verification email sent to %s", body.email)
+        logger.info("[REGISTER] verification email sent to %s (invite=%s)", body.email, has_invite)
         return {"message": "verification_required", "email": user.email}
 
     # Email NOT configured
@@ -769,7 +762,7 @@ async def upload_logo(
 # Quota limits per tier
 TIER_QUOTE_LIMITS = {
     "free": 5,            # 5 preview quotes
-    "starter": 3,         # 3 per month
+    "starter": 5,         # 5 per month
     "professional": 25,   # 25 per month
     "shop": None,         # unlimited
 }

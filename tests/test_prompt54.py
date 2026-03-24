@@ -225,23 +225,23 @@ def test_free_tier_limit(client, db):
     assert "5-quote limit" in resp.json()["detail"]
 
 
-# === 10. Tier enforcement: starter limited to 3 ===
+# === 10. Tier enforcement: starter limited to 5 (P65C: raised from 3) ===
 
 def test_starter_tier_limit(client, db):
-    """Starter tier user gets 403 after 3 quotes."""
+    """Starter tier user gets 403 after 5 quotes."""
     headers = _auth_headers(client, "starter-limit@test.com")
     user = db.query(models.User).filter(
         models.User.email == "starter-limit@test.com"
     ).first()
     user.tier = "starter"
-    user.quotes_this_month = 3
+    user.quotes_this_month = 5
     db.commit()
 
     resp = client.post("/api/session/start", json={
         "description": "test gate",
     }, headers=headers)
     assert resp.status_code == 403
-    assert "3-quote limit" in resp.json()["detail"]
+    assert "5-quote limit" in resp.json()["detail"]
 
 
 # === 11. Tier enforcement: professional limited to 25 ===
