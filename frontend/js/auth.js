@@ -499,6 +499,7 @@ const Auth = {
             const data = await API.login(email, password);
             this.currentUser = data.user;
             await this._checkDemoStatus();
+            App._setupNav();
             App.showView('quote');
         } catch (e) {
             if (e.message && e.message.toLowerCase().includes('not verified')) {
@@ -788,6 +789,7 @@ const Auth = {
 
         try {
             this.currentUser = await API.updateProfile(data);
+            App._setupNav();
             App.showView('quote');
         } catch (e) {
             this.showError('profile-error', e.message);
