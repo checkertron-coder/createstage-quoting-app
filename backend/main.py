@@ -258,37 +258,8 @@ def auto_seed():
                 created_by="system", expires_at=None,
             ))
 
-        # --- One-time test account reset (REMOVE these after next deploy) ---
-        _cleanup_emails = [
-            "projectionmaptheworld@gmail.com",
-            "burtonlmusic@gmail.com",
-            "burton@createstage.com",
-            "burton@createstage.co",
-            "ninetydias@gmail.com",
-        ]
-        for cleanup_email in _cleanup_emails:
-            test_user = db.query(models.User).filter(
-                models.User.email == cleanup_email,
-            ).first()
-            if test_user:
-                uid = test_user.id
-                # Delete associated data (FK-safe order)
-                db.query(models.AuthToken).filter(models.AuthToken.user_id == uid).delete()
-                db.query(models.EmailToken).filter(models.EmailToken.user_id == uid).delete()
-                db.query(models.QuoteSession).filter(models.QuoteSession.user_id == uid).delete()
-                db.query(models.Quote).filter(models.Quote.user_id == uid).delete()
-                db.query(models.NdaAcceptance).filter(models.NdaAcceptance.user_id == uid).delete()
-                db.query(models.ShopEquipment).filter(models.ShopEquipment.user_id == uid).delete()
-                db.query(models.BidAnalysis).filter(models.BidAnalysis.user_id == uid).delete()
-                # Reset any invite codes this account used
-                used_codes = db.query(models.InviteCode).filter(
-                    models.InviteCode.used_by_email == cleanup_email,
-                ).all()
-                for uc in used_codes:
-                    uc.uses = max(0, uc.uses - 1)
-                    uc.used_by_email = None
-                db.delete(test_user)
-                logger.info("[SEED] Cleaned up test account: %s", cleanup_email)
+        # Account cleanup removed — was wiping test accounts on every deploy.
+        # One-time wipe deployed in commit 819127a. No recurring cleanup needed.
 
         # Reset BETA-CHECKER explicitly (in case it was used by a cleaned account)
         checker = db.query(models.InviteCode).filter(
