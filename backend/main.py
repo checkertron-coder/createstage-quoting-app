@@ -266,6 +266,14 @@ def auto_seed():
         # Account cleanup removed — was wiping test accounts on every deploy.
         # One-time wipe deployed in commit 819127a. No recurring cleanup needed.
 
+        # P70: Delete stale BETA-CHECKER2 code (created in error)
+        checker2 = db.query(models.InviteCode).filter(
+            models.InviteCode.code == "BETA-CHECKER2",
+        ).first()
+        if checker2:
+            db.delete(checker2)
+            logger.info("[SEED] Deleted stale BETA-CHECKER2 invite code")
+
         # Reset BETA-CHECKER explicitly (in case it was used by a cleaned account)
         checker = db.query(models.InviteCode).filter(
             models.InviteCode.code == "BETA-CHECKER",

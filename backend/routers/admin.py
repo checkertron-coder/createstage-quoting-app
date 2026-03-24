@@ -114,6 +114,51 @@ def list_invite_codes(db: Session = Depends(get_db)):
     ]
 
 
+@router.delete("/invite-codes/{code}", dependencies=[Depends(_require_admin)])
+def delete_invite_code(
+    code: str,
+    db: Session = Depends(get_db),
+):
+    """Permanently delete an invite code."""
+    invite = db.query(models.InviteCode).filter(
+        models.InviteCode.code == code.strip().upper()
+    ).first()
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invite code not found: %s" % code,
+        )
+    db.delete(invite)
+    db.commit()
+    return {"deleted": code.strip().upper()}
+
+
+@router.patch("/invite-codes/{code}/reset", dependencies=[Depends(_require_admin)])
+def reset_invite_code(
+    code: str,
+    db: Session = Depends(get_db),
+):
+    """Reset uses to 0 and clear used_by_email for an invite code."""
+    invite = db.query(models.InviteCode).filter(
+        models.InviteCode.code == code.strip().upper()
+    ).first()
+    if not invite:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invite code not found: %s" % code,
+        )
+    invite.uses = 0
+    invite.used_by_email = None
+    db.commit()
+    db.refresh(invite)
+    return {
+        "code": invite.code,
+        "uses": invite.uses,
+        "used_by_email": invite.used_by_email,
+        "is_active": invite.is_active,
+    }
+
+
 # --- Demo Links ---
 
 class CreateDemoLinkRequest(BaseModel):
