@@ -135,3 +135,16 @@ As part of this deploy, delete the following user accounts from the production d
 For each email: delete the user record, any associated tokens (email tokens, refresh tokens), NDA acceptance records, and any quotes tied to that account. Also reset any invite codes used by these accounts — set `uses = 0` and `used_by_email = NULL` on any code that was redeemed by one of these emails.
 
 This cleanup should run as a one-time script executed during the deploy startup, guarded so it only runs if those accounts exist (idempotent).
+
+---
+
+## ADDENDUM — New Invite Code + Starter Tier Update
+
+**New invite code to create:**
+- `BETA-JEROMY` — professional tier, max_uses=1, used_by_email=NULL
+
+Add to the `auto_seed()` invite code list. Same pattern as all other BETA-* codes.
+
+**Starter tier quote limit:**
+Update `TIER_QUOTE_LIMITS["starter"]` from 3 → 10.
+Update landing page pricing copy to reflect: Starter = 10 quotes/month.
