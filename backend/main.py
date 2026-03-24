@@ -143,6 +143,11 @@ if os.path.exists(frontend_path):
     if os.path.exists(static_path):
         app.mount("/static", StaticFiles(directory=static_path), name="static")
 
+# Serve images (logo, favicon, etc.)
+images_path = os.path.join(os.path.dirname(__file__), "..", "images")
+if os.path.exists(images_path):
+    app.mount("/images", StaticFiles(directory=images_path), name="images")
+
     @app.get("/")
     def serve_landing():
         """Serve the public landing page."""
