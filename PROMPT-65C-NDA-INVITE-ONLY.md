@@ -63,20 +63,21 @@ Additionally, beta testers must confirm their email AFTER agreeing to the NDA. C
 
 ## 4. DECOMPOSITION
 
-**Chunk 1 — Frontend: gate NDA modal on invite code presence**
-In `auth.js`, the NDA modal currently fires for all registrations. Change the condition: only show the NDA modal if the invite code field contains a non-empty value when the user clicks "Create Account." If no invite code is entered, skip the modal entirely and proceed directly to form submission. The invite code field check should happen at the moment of submit, not on page load.
+**Chunk 1 — Frontend: NDA modal gating**
+The NDA modal should only be relevant to people who have an invite code — they're beta testers entering a legal relationship. Public users are just customers. The modal must only fire when the invite code field is non-empty at submit time. No invite code = no modal, straight to registration.
 
-**Chunk 2 — Backend: confirm email verification fires for invite code users**
-Currently invite code users are auto-verified (email_verified = True) and issued tokens immediately — this is the existing behavior. This must change: invite code users should receive a verification email and be held at the verification gate just like public users. The only difference is the NDA agreement happens first. Remove the auto-verify + immediate token issuance for invite code users. After invite code validation and NDA acceptance logging, send verification email and return `verification_required`.
+**Chunk 2 — Backend: unified email verification for ALL registration paths**
+Right now the two registration paths (invite code vs. no invite code) have different outcomes. Invite code users get immediate access. Non-invite-code users may or may not get an email gate. Both paths must end the same way: verification email sent, access blocked until the link is clicked. The invite code still grants professional tier and NDA logging still happens — but it no longer bypasses email verification. Figure out the right place in the registration flow to enforce this uniformly.
 
-**Chunk 3 — Backend: confirm email verification fires for non-invite-code users**
-This was the P65B fix. Confirm it is working — non-invite-code registrations must go through the email gate. If P65B's fix is in place and working, no change needed here. Just verify and document.
+**Chunk 3 — Data cleanup**
+The test accounts listed in the DATA CLEANUP section below need to be wiped from the production DB as part of startup. Any invite codes they consumed need to be reset. This must be idempotent — if the accounts don't exist, nothing happens.
 
 **Chunk 4 — Tests**
-- Invite code registration: NDA acceptance endpoint called, verification email sent, `verification_required` returned — NO immediate token
-- Non-invite-code registration: no NDA, verification email sent, `verification_required` returned
-- Both: clicking verification link → access granted
-- Existing BETA-FOUNDER user (already verified) → login still works
+Write tests that prove both flows work end to end:
+- Invite code path: NDA acceptance logged, email gate enforced, no immediate token issued
+- Non-invite-code path: no NDA, email gate enforced, no immediate token issued
+- Existing verified user login: unaffected
+- Data cleanup: test accounts gone, their invite codes reset
 
 ---
 
