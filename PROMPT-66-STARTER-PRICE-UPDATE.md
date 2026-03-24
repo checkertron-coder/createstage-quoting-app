@@ -83,15 +83,22 @@ No migrations needed for this prompt. Do not create any migration files.
 
 ---
 
+## CC Commit & Push
+After all changes are made and tests pass:
+1. Run `pytest tests/ -q` — confirm 0 failures before committing
+2. `git add frontend/index.html frontend/landing.html frontend/js/quote-flow.js`
+3. `git commit -m "P66: update Starter price display $49 → $79 across frontend"`
+4. `git push origin main`
+
 ## Deployment
-After CC finishes:
-1. Burton creates new Stripe price ($79/mo recurring) in Stripe dashboard
-2. Burton copies new price ID → Railway → `STRIPE_PRICE_STARTER`
+After CC pushes:
+1. Burton creates new Stripe price ($79/mo recurring) in Stripe dashboard → copy the new `price_` ID
+2. Burton updates Railway → Variables → `STRIPE_PRICE_STARTER` with the new price ID
 3. Railway redeploys automatically
 4. Test the full checkout flow with BETA-CHECKER account
 
 ## Brain Sync
-After successful deploy, update memory/2026-03-23.md:
-- P66 deployed: Starter price updated to $79/mo
-- New Stripe price ID set in Railway
-- Three frontend files updated: index.html, landing.html, quote-flow.js
+After successful deploy, CC adds a note to `CLAUDE.md` (or equivalent session log in repo root if it exists):
+- P66 complete: Starter price updated to $79/mo in index.html, landing.html, quote-flow.js
+- Stripe price ID rotation required: Burton creates new price in dashboard, updates STRIPE_PRICE_STARTER in Railway
+- 3 files changed, 0 logic changes, all tests passing
