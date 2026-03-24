@@ -119,3 +119,18 @@ Verify `https://createquote.app/health` returns `{"status": "ok"}` after Railway
 1. `cd ~/brain && git pull origin master`
 2. Write session summary to `agents/cc-createquote/sessions/2026-03-23-p65c-nda-flow.md` covering what changed and current registration flow state
 3. `git add -A && git commit -m "P65C: NDA invite-only + full email verify" && git push origin master`
+
+---
+
+## DATA CLEANUP — DELETE TEST ACCOUNTS
+
+As part of this deploy, delete the following user accounts from the production database. These were created during broken testing and must be wiped so the emails can be reused cleanly:
+
+- ninetydias@gmail.com
+- burtonlmusic@gmail.com
+- burton@createstage.com
+- burton@createstage.co
+
+For each email: delete the user record, any associated tokens (email tokens, refresh tokens), NDA acceptance records, and any quotes tied to that account. Also reset any invite codes used by these accounts — set `uses = 0` and `used_by_email = NULL` on any code that was redeemed by one of these emails.
+
+This cleanup should run as a one-time script executed during the deploy startup, guarded so it only runs if those accounts exist (idempotent).
