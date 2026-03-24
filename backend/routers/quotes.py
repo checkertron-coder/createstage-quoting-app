@@ -11,15 +11,56 @@ router = APIRouter(prefix="/quotes", tags=["quotes"])
 
 
 def generate_quote_number(db: Session) -> str:
+    """Generate a unique quote number in CS-YYYY-XXXX format.
+
+    Finds the highest existing sequence number for the current year and
+    increments from there. Verifies uniqueness before returning.
+    """
+    from sqlalchemy import func as sa_func
+
+    year = datetime.utcnow().year
+    prefix = "CS-%d-" % year
+
     try:
-        count = db.query(models.Quote).count()
-        year = datetime.utcnow().year
-        return f"CS-{year}-{str(count + 1).zfill(4)}"
+        # Find the highest sequence number for this year
+        latest = (
+            db.query(models.Quote.quote_number)
+            .filter(models.Quote.quote_number.like(prefix + "%"))
+            .order_by(models.Quote.quote_number.desc())
+            .first()
+        )
+
+        if latest and latest[0]:
+            # Extract the numeric suffix from e.g. "CS-2026-0130"
+            try:
+                last_seq = int(latest[0].split("-")[-1])
+            except (ValueError, IndexError):
+                last_seq = 0
+        else:
+            last_seq = 0
+
+        # Also check total count as a floor (handles cross-year gaps)
+        total_count = db.query(models.Quote).count()
+        next_seq = max(last_seq + 1, total_count + 1)
+
+        # Verify uniqueness — loop until we find a free number
+        for _ in range(1000):
+            candidate = "CS-%d-%s" % (year, str(next_seq).zfill(4))
+            exists = db.query(models.Quote.id).filter(
+                models.Quote.quote_number == candidate,
+            ).first()
+            if not exists:
+                return candidate
+            next_seq += 1
+
+        # Exhausted loop — fall back to timestamp
+        now = datetime.utcnow()
+        return "CS-%d-%s" % (now.year, now.strftime("%m%d%H%M%S"))
+
     except Exception:
         db.rollback()
-        # Fallback: timestamp-based quote number if DB schema is outdated
         now = datetime.utcnow()
-        return f"CS-{now.year}-{now.strftime('%m%d%H%M%S')}"
+        return "CS-%d-%s" % (now.year, now.strftime("%m%d%H%M%S"))
 
 
 def get_process_rate(process_type, db: Session, fallback_rate: float = 125.0) -> float:
