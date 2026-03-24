@@ -98,7 +98,14 @@ After CC pushes:
 4. Test the full checkout flow with BETA-CHECKER account
 
 ## Brain Sync
-After successful deploy, CC adds a note to `CLAUDE.md` (or equivalent session log in repo root if it exists):
-- P66 complete: Starter price updated to $79/mo in index.html, landing.html, quote-flow.js
-- Stripe price ID rotation required: Burton creates new price in dashboard, updates STRIPE_PRICE_STARTER in Railway
-- 3 files changed, 0 logic changes, all tests passing
+After pushing code, write a session summary to the shared brain vault:
+
+1. `cd ~/brain && git pull origin main`
+2. Create `agents/cc-createquote/sessions/YYYY-MM-DD-HHMM.md` with:
+   - What was accomplished (Starter price $49 → $79 in 3 frontend files)
+   - Files changed: frontend/index.html, frontend/landing.html, frontend/js/quote-flow.js
+   - Decisions: Stripe price ID rotation required — Burton creates new $79/mo price, updates STRIPE_PRICE_STARTER in Railway
+   - Test result: all tests passing
+   - Next steps: Burton creates Stripe price, updates Railway env var
+3. `git add -A && git commit -m "cc-createquote session: P66 Starter price update $49→$79"`
+4. `git push origin main`
