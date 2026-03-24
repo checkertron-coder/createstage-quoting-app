@@ -258,12 +258,9 @@ def auto_seed():
                 created_by="system", expires_at=None,
             ))
 
-        # --- Data cleanup: remove test accounts (idempotent) ---
+        # --- One-time test account reset (add emails here temporarily, remove after deploy) ---
         _cleanup_emails = [
-            "ninetydias@gmail.com",
-            "burtonlmusic@gmail.com",
-            "burton@createstage.com",
-            "burton@createstage.co",
+            "projectionmaptheworld@gmail.com",
         ]
         for cleanup_email in _cleanup_emails:
             test_user = db.query(models.User).filter(
