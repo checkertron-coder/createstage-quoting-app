@@ -831,7 +831,7 @@ const QuoteFlow = {
                     <div class="grand-total${isPreview ? ' preview-total-locked' : ''}">
                         <span>${isPreview ? 'ESTIMATED TOTAL' : 'ESTIMATED RANGE'}</span>
                         <span id="grand-total-amount">${isPreview
-                            ? '<a href="#" onclick="Auth.startCheckout(\'professional\');return false;" class="upgrade-total-link">Upgrade to See Your Full Estimate</a>'
+                            ? '<a href="#" onclick="Auth.showUpgradeOptions();return false;" class="upgrade-total-link">Upgrade to See Your Full Estimate</a>'
                             : this._fmt(pq.total)}</span>
                     </div>
                 </div>
@@ -1707,7 +1707,7 @@ const QuoteFlow = {
     },
 
     _previewGate() {
-        Auth.startCheckout('professional');
+        Auth.showUpgradeOptions();
     },
 
     _renderPreviewCTA() {
@@ -1715,7 +1715,7 @@ const QuoteFlow = {
             <div class="preview-upgrade-cta">
                 <h3>Want the full quote?</h3>
                 <p>Subscribe to unlock exact pricing, complete cut lists, build instructions, and professional PDF downloads.</p>
-                <a href="#" class="btn btn-primary" onclick="Auth.startCheckout('professional');return false;">Subscribe &mdash; Starting at $79/mo</a>
+                <a href="#" class="btn btn-primary" onclick="Auth.showUpgradeOptions();return false;">Subscribe &mdash; Starting at $79/mo</a>
             </div>
         `;
     },

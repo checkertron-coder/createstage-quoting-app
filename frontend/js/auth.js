@@ -113,7 +113,7 @@ const Auth = {
             banner.className = 'upgrade-banner';
             banner.innerHTML = `
                 <span>You're on the Free plan &mdash; 5 preview quotes included.</span>
-                <a href="#" onclick="Auth.startCheckout('professional');return false;">Subscribe to unlock full quotes &rarr;</a>
+                <a href="#" onclick="Auth.showUpgradeOptions();return false;">Subscribe to unlock full quotes &rarr;</a>
             `;
             document.body.insertBefore(banner, document.body.firstChild);
         } else if (subStatus === 'past_due') {
@@ -466,8 +466,41 @@ const Auth = {
     },
 
     showUpgradeOptions() {
-        // Start checkout directly — Stripe is the only upgrade path
-        Auth.startCheckout('professional');
+        // Show tier picker modal
+        let overlay = document.getElementById('upgrade-overlay');
+        if (overlay) overlay.remove();
+        overlay = document.createElement('div');
+        overlay.id = 'upgrade-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        overlay.innerHTML = `
+            <div style="background:#1a1a2e;border-radius:12px;padding:32px;max-width:700px;width:90%;color:#e0e0e0;">
+                <h2 style="text-align:center;margin:0 0 8px;color:#fff;">Choose Your Plan</h2>
+                <p style="text-align:center;margin:0 0 24px;color:#aaa;">Pick the plan that fits your shop.</p>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+                    <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:1px solid #333;">
+                        <h3 style="margin:0 0 4px;color:#fff;">Starter</h3>
+                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$79<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">10 quotes/mo<br>1 user</p>
+                        <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('starter');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
+                    </div>
+                    <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:2px solid #4fc3f7;">
+                        <h3 style="margin:0 0 4px;color:#fff;">Professional</h3>
+                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$149<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">Unlimited quotes<br>3 users</p>
+                        <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('professional');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
+                    </div>
+                    <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:1px solid #333;">
+                        <h3 style="margin:0 0 4px;color:#fff;">Shop</h3>
+                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$349<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">Unlimited everything<br>API access</p>
+                        <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('shop');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
+                    </div>
+                </div>
+                <p style="text-align:center;margin:16px 0 0;"><a href="#" onclick="document.getElementById('upgrade-overlay').remove();return false;" style="color:#aaa;">Cancel</a></p>
+            </div>
+        `;
+        document.body.appendChild(overlay);
     },
 
     togglePassword(inputId, btn) {
