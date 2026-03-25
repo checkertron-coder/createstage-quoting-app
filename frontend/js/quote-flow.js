@@ -752,9 +752,9 @@ const QuoteFlow = {
      * Returns the final status response. Throws on error or timeout.
      */
     async _pollForStageComplete(sessionId, progressMsg) {
-        const MAX_POLLS = 150;  // 2s x 150 = 5 minutes max
+        const TIMEOUT_MS = 5 * 60 * 1000;  // 5 minutes wall-clock time
         const startTime = Date.now();
-        for (let i = 0; i < MAX_POLLS; i++) {
+        while (Date.now() - startTime < TIMEOUT_MS) {
             await new Promise(r => setTimeout(r, 2000));
             try {
                 const status = await API.getSessionStatus(sessionId);
@@ -766,7 +766,6 @@ const QuoteFlow = {
                     } else if (status.pipeline_stage === 'price') {
                         msg = 'Building quote...';
                     }
-                    // After 30s, show elapsed time so user knows it's still alive
                     if (elapsed > 30) {
                         msg += ` (${elapsed}s)`;
                     }
@@ -779,7 +778,6 @@ const QuoteFlow = {
                 // Done — status is "active" or "complete"
                 return status;
             } catch (e) {
-                // Re-throw user-facing errors (from error status above)
                 if (e.message && !e.message.includes('fetch')) throw e;
                 console.error('Poll error:', e);
             }
