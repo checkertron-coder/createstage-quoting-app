@@ -1005,8 +1005,8 @@ const QuoteFlow = {
                 <div class="${isPreview ? 'preview-limit-4 preview-blur-prices' : ''}">
                 ${this._renderSection('Materials', this._renderMaterialsTable(pq))}
                 </div>
-                <div class="${isPreview ? 'preview-limit-2 preview-blur-prices' : ''}">
-                ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq))}
+                <div class="${isPreview ? 'preview-limit-4' : ''}">
+                ${this._renderSection('Hardware & Parts', this._renderHardwareTable(pq, isPreview))}
                 </div>
                 ${pq.consumables && pq.consumables.length ? `
                 <div class="${isPreview ? 'preview-limit-2 preview-blur-prices' : ''}">
@@ -1068,10 +1068,14 @@ const QuoteFlow = {
                     `}
 
                     <div class="grand-total${isPreview ? ' preview-total-locked' : ''}">
-                        <span>${isPreview ? 'ESTIMATED TOTAL' : 'ESTIMATED RANGE'}</span>
-                        <span id="grand-total-amount">${isPreview
-                            ? '<a href="#" onclick="Auth.showUpgradeOptions();return false;" class="upgrade-total-link">Upgrade to See Your Full Estimate</a>'
-                            : this._fmt(pq.total)}</span>
+                        ${isPreview ? `
+                        <span>ESTIMATED RANGE</span>
+                        <span class="ballpark-range" id="grand-total-amount">${this._fmtRange(pq.total)}</span>
+                        <span class="ballpark-subtext">Upgrade to <a href="#" onclick="Auth.showUpgradeOptions();return false;">CreateQuote Starter</a> for your exact quote</span>
+                        ` : `
+                        <span>ESTIMATED RANGE</span>
+                        <span id="grand-total-amount">${this._fmt(pq.total)}</span>
+                        `}
                     </div>
                 </div>
 
@@ -1214,9 +1218,36 @@ const QuoteFlow = {
         `;
     },
 
-    _renderHardwareTable(pq) {
+    _renderHardwareTable(pq, isPreview) {
         const items = pq.hardware || [];
         if (!items.length) return '<p class="empty-section">No hardware</p>';
+
+        // P72: Free tier — show 4 items max, no dollar values, upgrade prompt
+        if (isPreview) {
+            const visible = items.slice(0, 4);
+            const remaining = items.length - visible.length;
+            return `
+                <table class="data-table">
+                    <thead><tr><th>Item</th><th>Qty</th></tr></thead>
+                    <tbody>
+                        ${visible.map(h => `
+                            <tr>
+                                <td>${h.description || ''}</td>
+                                <td>${h.quantity || 1}</td>
+                            </tr>
+                        `).join('')}
+                        ${remaining > 0 ? `
+                        <tr class="preview-upgrade-row">
+                            <td colspan="2" style="text-align:center;padding:12px;color:var(--text-secondary);font-style:italic;">
+                                + ${remaining} more item${remaining > 1 ? 's' : ''} &mdash;
+                                <a href="#" onclick="Auth.showUpgradeOptions();return false;" style="color:var(--accent,#f97316);font-weight:600;">Upgrade to see full parts list</a>
+                            </td>
+                        </tr>` : ''}
+                    </tbody>
+                </table>
+            `;
+        }
+
         return `
             <table class="data-table">
                 <thead><tr><th>Item</th><th>Supplier</th><th>Qty</th><th class="r">Unit</th><th class="r">Total</th></tr></thead>
@@ -1939,9 +1970,10 @@ const QuoteFlow = {
     },
 
     _fmtRange(total) {
+        // P72: Ballpark range — ×0.80 to ×1.25, rounded to nearest $50
         const t = parseFloat(total) || 0;
-        const lo = Math.round(t * 0.80 / 100) * 100;
-        const hi = Math.round(t * 1.20 / 100) * 100;
+        const lo = Math.round(t * 0.80 / 50) * 50;
+        const hi = Math.round(t * 1.25 / 50) * 50;
         return '$' + lo.toLocaleString() + ' \u2013 $' + hi.toLocaleString();
     },
 

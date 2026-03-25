@@ -1212,43 +1212,71 @@ def generate_client_pdf(
     pdf.ln(6)
 
     # ── SECTION 3: Price Summary ──
-    # Distribute markup into category totals so client never sees "Markup" line
-    pdf.section_header("PRICE SUMMARY")
-    pdf.set_font("Helvetica", "", 10)
+    is_preview = user_profile.get("is_preview", False)
 
-    markup_pct = priced_quote.get("selected_markup_pct") or 0
-    multiplier = 1 + markup_pct / 100.0
+    if is_preview:
+        # Free tier: show ballpark range, no category breakdowns
+        pdf.section_header("ESTIMATED PRICE RANGE")
+        pdf.set_font("Helvetica", "", 10)
 
-    mat_hw_sub = round(
-        (priced_quote.get("material_subtotal", 0)
-         + priced_quote.get("hardware_subtotal", 0)
-         + priced_quote.get("consumable_subtotal", 0)
-         + priced_quote.get("shop_stock_subtotal", 0)) * multiplier, 2
-    )
-    labor_sub = round(priced_quote.get("labor_subtotal", 0) * multiplier, 2)
-    fin_sub = round(priced_quote.get("finishing_subtotal", 0) * multiplier, 2)
+        total = priced_quote.get("total", 0)
+        lower = round(total * 0.80 / 50) * 50
+        upper = round(total * 1.25 / 50) * 50
 
-    totals = [
-        ("Materials & Hardware", mat_hw_sub),
-        ("Labor", labor_sub),
-        ("Finishing", fin_sub),
-    ]
-    for label, amount in totals:
-        if amount > 0:
-            pdf.cell(130, 7, "  %s" % label)
-            pdf.cell(60, 7, _fmt(amount), align="R")
-            pdf.ln()
+        pdf.ln(2)
+        pdf.set_fill_color(45, 55, 72)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(190, 12, "  %s  -  %s" % (_fmt(lower), _fmt(upper)),
+                 fill=True, align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(190, 5,
+                 "Upgrade to CreateQuote Starter for your exact quote with full breakdown.",
+                 align="C")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(10)
+    else:
+        # Paid tier: full category breakdowns + exact total
+        # Distribute markup into category totals so client never sees "Markup" line
+        pdf.section_header("PRICE SUMMARY")
+        pdf.set_font("Helvetica", "", 10)
 
-    # Grand total (already includes markup)
-    total = priced_quote.get("total", 0)
-    pdf.ln(2)
-    pdf.set_fill_color(45, 55, 72)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(130, 12, "  PROJECT TOTAL", fill=True)
-    pdf.cell(60, 12, "%s  " % _fmt(total), fill=True, align="R")
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(10)
+        markup_pct = priced_quote.get("selected_markup_pct") or 0
+        multiplier = 1 + markup_pct / 100.0
+
+        mat_hw_sub = round(
+            (priced_quote.get("material_subtotal", 0)
+             + priced_quote.get("hardware_subtotal", 0)
+             + priced_quote.get("consumable_subtotal", 0)
+             + priced_quote.get("shop_stock_subtotal", 0)) * multiplier, 2
+        )
+        labor_sub = round(priced_quote.get("labor_subtotal", 0) * multiplier, 2)
+        fin_sub = round(priced_quote.get("finishing_subtotal", 0) * multiplier, 2)
+
+        totals = [
+            ("Materials & Hardware", mat_hw_sub),
+            ("Labor", labor_sub),
+            ("Finishing", fin_sub),
+        ]
+        for label, amount in totals:
+            if amount > 0:
+                pdf.cell(130, 7, "  %s" % label)
+                pdf.cell(60, 7, _fmt(amount), align="R")
+                pdf.ln()
+
+        # Grand total (already includes markup)
+        total = priced_quote.get("total", 0)
+        pdf.ln(2)
+        pdf.set_fill_color(45, 55, 72)
+        pdf.set_text_color(255, 255, 255)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(130, 12, "  PROJECT TOTAL", fill=True)
+        pdf.cell(60, 12, "%s  " % _fmt(total), fill=True, align="R")
+        pdf.set_text_color(0, 0, 0)
+        pdf.ln(10)
 
     # ── SECTION 4: What's Included / Excluded ──
     assumptions = priced_quote.get("assumptions", [])

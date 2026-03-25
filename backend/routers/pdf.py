@@ -93,6 +93,10 @@ def download_pdf(
         outputs["quote_number"] = quote.quote_number
 
     # Build user profile dict
+    tier = getattr(current_user, "tier", "free") or "free"
+    sub_status = getattr(current_user, "subscription_status", "free") or "free"
+    is_preview = tier == "free" and sub_status != "active"
+
     user_profile = {
         "shop_name": current_user.shop_name,
         "shop_address": current_user.shop_address,
@@ -101,6 +105,7 @@ def download_pdf(
         "logo_url": current_user.logo_url,
         "deposit_labor_pct": getattr(current_user, "deposit_labor_pct", 50) or 50,
         "deposit_materials_pct": getattr(current_user, "deposit_materials_pct", 100) or 100,
+        "is_preview": is_preview,
     }
 
     inputs = quote.inputs_json or {}
