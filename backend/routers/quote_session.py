@@ -515,6 +515,7 @@ def get_session_status(
             "job_type": session.job_type,
             "stage": session.stage,
             "status": "processing",
+            "pipeline_stage": session.stage,
         }
 
     current_params = dict(session.params_json or {})
@@ -541,7 +542,7 @@ def get_session_status(
     photo_extracted_fields = {k: v for k, v in current_params.items()
                               if k.startswith("photo_") and k != "photo_observations"}
 
-    return {
+    response = {
         "session_id": session_id,
         "job_type": session.job_type,
         "stage": session.stage,
@@ -556,6 +557,23 @@ def get_session_status(
         "created_at": session.created_at.isoformat() if session.created_at else None,
         "updated_at": session.updated_at.isoformat() if session.updated_at else None,
     }
+
+    # P71: Include quote data when pipeline is complete (for async polling)
+    if session.stage == "output" and session.status == "complete":
+        quote = db.query(models.Quote).filter(
+            models.Quote.session_id == session_id,
+        ).first()
+        if quote:
+            response["quote_id"] = quote.id
+            response["quote_number"] = quote.quote_number
+            response["priced_quote"] = quote.outputs_json
+
+    # P71: Include stage error for failed pipeline stages
+    stage_error = current_params.get("_stage_error")
+    if stage_error:
+        response["stage_error"] = stage_error
+
+    return response
 
 
 @router.post("/{session_id}/calculate")
@@ -596,6 +614,17 @@ def calculate_materials(
             detail=f"No calculator registered for job type: {job_type}",
         )
 
+    # P71: Async path — return immediately, run calculator in background thread
+    use_async = ai_is_configured()
+    if use_async:
+        session.status = "processing"
+        session.stage = "calculate"
+        session.updated_at = datetime.utcnow()
+        db.commit()
+        _run_calculate_background(session_id, current_user.id)
+        return {"session_id": session_id, "status": "processing", "stage": "calculate"}
+
+    # --- Sync path (tests / no API key) ---
     # Inject shop equipment context into params for AI prompts
     from ..shop_context import build_shop_context_block
     shop_ctx = build_shop_context_block(current_user.id, db)
@@ -624,6 +653,74 @@ def calculate_materials(
         "calculator_used": type(calculator).__name__,
         "material_list": material_list,
     }
+
+
+def _run_calculate_background(session_id, user_id):
+    """P71: Spawn a daemon thread to run Stage 3 calculator in background."""
+
+    def _worker():
+        from ..database import SessionLocal
+        from ..shop_context import build_shop_context_block
+        from sqlalchemy.orm.attributes import flag_modified
+        bg_db = SessionLocal()
+        try:
+            session = bg_db.query(models.QuoteSession).filter(
+                models.QuoteSession.id == session_id,
+            ).first()
+            if not session:
+                logger.error("BG calculate: session %s not found", session_id)
+                return
+
+            user = bg_db.query(models.User).filter(
+                models.User.id == user_id,
+            ).first()
+
+            current_params = dict(session.params_json or {})
+            job_type = session.job_type
+
+            # Inject shop context
+            if user:
+                shop_ctx = build_shop_context_block(user.id, bg_db)
+                if shop_ctx:
+                    current_params["_shop_context"] = shop_ctx
+
+            # Run calculator
+            calculator = get_calculator(job_type)
+            material_list = calculator.calculate(current_params)
+
+            # Store results
+            current_params["_material_list"] = material_list
+            current_params.pop("_stage_error", None)
+            session.params_json = current_params
+            session.stage = "estimate"
+            session.status = "active"
+            session.updated_at = datetime.utcnow()
+            flag_modified(session, "params_json")
+            bg_db.commit()
+
+            logger.info("BG CALCULATE DONE: session=%s, job_type=%s", session_id, job_type)
+
+        except Exception as e:
+            logger.error("BG calculate failed for session %s: %s: %s",
+                         session_id, type(e).__name__, e)
+            try:
+                session = bg_db.query(models.QuoteSession).filter(
+                    models.QuoteSession.id == session_id,
+                ).first()
+                if session:
+                    params = dict(session.params_json or {})
+                    params["_stage_error"] = "Calculate failed: %s" % str(e)
+                    session.params_json = params
+                    session.status = "error"
+                    flag_modified(session, "params_json")
+                    bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            bg_db.close()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
 
 
 @router.post("/{session_id}/estimate")
@@ -674,6 +771,17 @@ def estimate_labor(
             session, current_params, material_list, current_user, db,
         )
 
+    # P71: Async path — return immediately, run estimation in background thread
+    use_async = ai_is_configured()
+    if use_async:
+        session.status = "processing"
+        # stage is already "estimate" from calculate
+        session.updated_at = datetime.utcnow()
+        db.commit()
+        _run_estimate_background(session_id, current_user.id)
+        return {"session_id": session_id, "status": "processing", "stage": "estimate"}
+
+    # --- Sync path (tests / no API key) ---
     # Build QuoteParams for the estimator
     quote_params = engine.get_quote_params(
         job_type=session.job_type,
@@ -855,6 +963,183 @@ def estimate_labor(
     }
 
 
+def _run_estimate_background(session_id, user_id):
+    """P71: Spawn a daemon thread to run Stage 4 labor estimation in background."""
+
+    def _worker():
+        from ..database import SessionLocal
+        from ..labor_estimator import LaborEstimator
+        from ..historical_validator import HistoricalValidator
+        from ..finishing import FinishingBuilder
+        from ..calculators.ai_cut_list import AICutListGenerator
+        from sqlalchemy.orm.attributes import flag_modified
+        bg_db = SessionLocal()
+        try:
+            session = bg_db.query(models.QuoteSession).filter(
+                models.QuoteSession.id == session_id,
+            ).first()
+            if not session:
+                logger.error("BG estimate: session %s not found", session_id)
+                return
+
+            user = bg_db.query(models.User).filter(
+                models.User.id == user_id,
+            ).first()
+
+            current_params = dict(session.params_json or {})
+            material_list = current_params.get("_material_list", {})
+
+            # Build QuoteParams for the estimator
+            quote_params = engine.get_quote_params(
+                job_type=session.job_type,
+                answered_fields={k: v for k, v in current_params.items()
+                                 if not k.startswith("_")},
+                user_id=user_id,
+                session_id=session_id,
+                photos=session.photo_urls or [],
+            )
+
+            # Get user rates
+            user_rates = {
+                "rate_inshop": (user.rate_inshop if user else None) or 125.00,
+                "rate_onsite": (user.rate_onsite if user else None) or 145.00,
+            }
+
+            estimator = LaborEstimator()
+            fields = quote_params.get("fields", {})
+            finish_type = fields.get("finish", fields.get("finish_type", ""))
+
+            # Fallback: extract finish from description if field is missing
+            if not finish_type:
+                desc_lower = str(fields.get("description", "")).lower()
+                if "powder" in desc_lower and "coat" in desc_lower:
+                    finish_type = "powder_coat"
+                elif "clear coat" in desc_lower or "clearcoat" in desc_lower:
+                    finish_type = "clearcoat"
+                elif "paint" in desc_lower and "powder" not in desc_lower:
+                    finish_type = "paint"
+                elif "galvaniz" in desc_lower:
+                    finish_type = "galvanized"
+                elif "anodiz" in desc_lower:
+                    finish_type = "anodized"
+                elif "patina" in desc_lower or "blacken" in desc_lower:
+                    finish_type = "patina"
+                elif "brush" in desc_lower or "polish" in desc_lower:
+                    finish_type = "brushed"
+                else:
+                    finish_type = "raw"
+
+            logger.info("BG ESTIMATE: job_type=%s, finish=%s", session.job_type, finish_type)
+
+            try:
+                labor_estimate = estimator.estimate(material_list, quote_params, user_rates)
+                validator = HistoricalValidator()
+                labor_estimate = validator.validate(labor_estimate, session.job_type, bg_db)
+                finishing_builder = FinishingBuilder()
+                finishing = finishing_builder.build(
+                    finish_type=finish_type,
+                    total_sq_ft=material_list.get("total_sq_ft", 0),
+                    labor_processes=labor_estimate.get("processes", []),
+                )
+            except Exception as est_err:
+                logger.warning("BG estimate: Labor estimation failed, using fallback: %s", est_err)
+                labor_estimate = estimator._fallback_estimate(
+                    material_list, quote_params, user_rates)
+                finishing_builder = FinishingBuilder()
+                finishing = finishing_builder.build(
+                    finish_type=finish_type,
+                    total_sq_ft=material_list.get("total_sq_ft", 0),
+                    labor_processes=labor_estimate.get("processes", []),
+                )
+
+            # Generate build instructions
+            build_instructions = None
+            build_instructions_error = None
+            try:
+                ai_gen = AICutListGenerator()
+                build_fields = {k: v for k, v in current_params.items()
+                                if not k.startswith("_")}
+                if current_params.get("_shop_context"):
+                    build_fields["_shop_context"] = current_params["_shop_context"]
+                enforced_dims = None
+                if session.job_type == "cantilever_gate":
+                    enforced_dims = {}
+                    cw = build_fields.get("clear_width", "")
+                    ht = build_fields.get("height", "")
+                    if cw:
+                        try:
+                            cw_val = float(str(cw).split()[0])
+                            enforced_dims["opening_width"] = "%s ft" % cw
+                            enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
+                            enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
+                            enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
+                        except (ValueError, IndexError):
+                            pass
+                    if ht:
+                        try:
+                            ht_val = float(str(ht).split()[0])
+                            enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
+                        except (ValueError, IndexError):
+                            pass
+
+                detailed_cuts = material_list.get("cut_list", material_list.get("items", []))
+                build_instructions = ai_gen.generate_build_instructions(
+                    session.job_type,
+                    build_fields,
+                    detailed_cuts,
+                    enforced_dimensions=enforced_dims,
+                )
+                if not build_instructions:
+                    build_instructions_error = "AI returned empty response"
+            except Exception as bi_err:
+                logger.warning("BG estimate: Build instructions failed: %s", bi_err)
+                build_instructions_error = str(bi_err)
+
+            # Store all results in session
+            current_params["_labor_estimate"] = labor_estimate
+            current_params["_finishing"] = finishing
+            if build_instructions:
+                current_params["_build_instructions"] = build_instructions
+                current_params.pop("_build_instructions_error", None)
+            else:
+                current_params["_build_instructions_error"] = (
+                    build_instructions_error or "generation failed"
+                )
+            current_params["_detailed_cut_list"] = material_list.get(
+                "cut_list", material_list.get("items", []))
+            current_params.pop("_stage_error", None)
+            session.params_json = current_params
+            session.stage = "price"
+            session.status = "active"
+            session.updated_at = datetime.utcnow()
+            flag_modified(session, "params_json")
+            bg_db.commit()
+
+            logger.info("BG ESTIMATE DONE: session=%s, job_type=%s", session_id, session.job_type)
+
+        except Exception as e:
+            logger.error("BG estimate failed for session %s: %s: %s",
+                         session_id, type(e).__name__, e)
+            try:
+                session = bg_db.query(models.QuoteSession).filter(
+                    models.QuoteSession.id == session_id,
+                ).first()
+                if session:
+                    params = dict(session.params_json or {})
+                    params["_stage_error"] = "Estimate failed: %s" % str(e)
+                    session.params_json = params
+                    session.status = "error"
+                    flag_modified(session, "params_json")
+                    bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            bg_db.close()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
+
+
 @router.post("/{session_id}/price")
 def price_quote(
     session_id: str,
@@ -904,6 +1189,17 @@ def price_quote(
     if not finishing:
         raise HTTPException(status_code=400, detail="No finishing found. Run /estimate first.")
 
+    # P71: Async path — return immediately, run pricing in background thread
+    use_async = ai_is_configured()
+    if use_async:
+        session.status = "processing"
+        # stage is already "price" from estimate
+        session.updated_at = datetime.utcnow()
+        db.commit()
+        _run_price_background(session_id, current_user.id)
+        return {"session_id": session_id, "status": "processing", "stage": "price"}
+
+    # --- Sync path (tests / no API key) ---
     # Build session_data for PricingEngine
     fields = {k: v for k, v in current_params.items() if not k.startswith("_")}
     session_data = {
@@ -1038,6 +1334,166 @@ def price_quote(
             status_code=500,
             detail=f"Quote creation failed: {str(e)}. Session is intact — retry /price.",
         )
+
+
+def _run_price_background(session_id, user_id):
+    """P71: Spawn a daemon thread to run Stage 5 pricing in background."""
+
+    def _worker():
+        from ..database import SessionLocal
+        from ..pricing_engine import PricingEngine
+        from .quotes import generate_quote_number
+        from sqlalchemy.orm.attributes import flag_modified
+        bg_db = SessionLocal()
+        try:
+            session = bg_db.query(models.QuoteSession).filter(
+                models.QuoteSession.id == session_id,
+            ).first()
+            if not session:
+                logger.error("BG price: session %s not found", session_id)
+                return
+
+            user = bg_db.query(models.User).filter(
+                models.User.id == user_id,
+            ).first()
+
+            current_params = dict(session.params_json or {})
+            material_list = current_params.get("_material_list", {})
+            labor_estimate = current_params.get("_labor_estimate", {})
+            finishing = current_params.get("_finishing", {})
+
+            # Build session_data for PricingEngine
+            fields = {k: v for k, v in current_params.items()
+                      if not k.startswith("_")}
+            session_data = {
+                "session_id": session_id,
+                "job_type": session.job_type,
+                "fields": fields,
+                "material_list": material_list,
+                "labor_estimate": labor_estimate,
+                "finishing": finishing,
+                "detailed_cut_list": current_params.get("_detailed_cut_list", []),
+                "build_instructions": current_params.get("_build_instructions", []),
+            }
+
+            # Build user dict for PricingEngine
+            user_dict = {
+                "id": user.id if user else user_id,
+                "shop_name": user.shop_name if user else None,
+                "markup_default": (user.markup_default if user else None) or 15,
+                "rate_inshop": (user.rate_inshop if user else None) or 125.00,
+                "rate_onsite": (user.rate_onsite if user else None) or 145.00,
+            }
+
+            # Run pricing engine
+            pricing_engine = PricingEngine()
+            priced_quote = pricing_engine.build_priced_quote(session_data, user_dict)
+
+            # Pass build instructions error flag
+            bi_error = current_params.get("_build_instructions_error")
+            if bi_error and not priced_quote.get("build_instructions"):
+                priced_quote["_build_instructions_error"] = bi_error
+
+            # Validation layer
+            try:
+                build_text = build_instructions_to_text(
+                    current_params.get("_build_instructions", [])
+                )
+                validation_warnings = []
+                for context in ("vinegar_bath_cleanup", "decorative_stock_prep",
+                                "decorative_assembly"):
+                    found = check_banned_terms(build_text, context)
+                    for term in found:
+                        validation_warnings.append(
+                            "[ERROR] Banned term '%s' found in build instructions (context: %s)"
+                            % (term, context)
+                        )
+                vr = validate_full_output(
+                    job_type=session.job_type,
+                    cut_list_items=current_params.get("_detailed_cut_list", []),
+                    labor_processes=current_params.get("_labor_estimate", {}).get("processes", []),
+                    build_instructions=build_text,
+                    dimensions={k: v for k, v in fields.items()
+                                if isinstance(v, (int, float))},
+                )
+                for msg in vr.errors:
+                    validation_warnings.append("[ERROR] %s" % msg)
+                for msg in vr.warnings:
+                    validation_warnings.append("[WARNING] %s" % msg)
+                for msg in vr.info:
+                    validation_warnings.append("[INFO] %s" % msg)
+                if validation_warnings:
+                    priced_quote["validation_warnings"] = validation_warnings
+            except Exception:
+                logger.exception("BG price: Validation layer failed")
+
+            # Build QuoteParams snapshot (inputs)
+            quote_params = engine.get_quote_params(
+                job_type=session.job_type,
+                answered_fields=fields,
+                user_id=user_id,
+                session_id=session_id,
+                photos=session.photo_urls or [],
+            )
+
+            # Generate quote number and create Quote record
+            quote_number = generate_quote_number(bg_db)
+            quote = models.Quote(
+                quote_number=quote_number,
+                job_type=session.job_type,
+                user_id=user_id,
+                session_id=session_id,
+                inputs_json=quote_params,
+                outputs_json=priced_quote,
+                selected_markup_pct=priced_quote.get("selected_markup_pct", 15),
+                subtotal=priced_quote.get("subtotal", 0),
+                total=priced_quote.get("total", 0),
+                project_description=fields.get("description", ""),
+            )
+            bg_db.add(quote)
+            bg_db.flush()
+
+            priced_quote["quote_id"] = quote.id
+            quote.outputs_json = priced_quote
+
+            # Transition session
+            session.stage = "output"
+            session.status = "complete"
+            session.updated_at = datetime.utcnow()
+            # Increment quote counter
+            if user:
+                user.quotes_this_month = (user.quotes_this_month or 0) + 1
+
+            current_params.pop("_stage_error", None)
+            session.params_json = current_params
+            flag_modified(session, "params_json")
+            bg_db.commit()
+
+            logger.info("BG PRICE DONE: session=%s, quote_id=%d, quote_number=%s",
+                         session_id, quote.id, quote_number)
+
+        except Exception as e:
+            logger.error("BG price failed for session %s: %s: %s",
+                         session_id, type(e).__name__, e)
+            try:
+                bg_db.rollback()
+                session = bg_db.query(models.QuoteSession).filter(
+                    models.QuoteSession.id == session_id,
+                ).first()
+                if session:
+                    params = dict(session.params_json or {})
+                    params["_stage_error"] = "Price failed: %s" % str(e)
+                    session.params_json = params
+                    session.status = "error"
+                    flag_modified(session, "params_json")
+                    bg_db.commit()
+            except Exception:
+                pass
+        finally:
+            bg_db.close()
+
+    thread = threading.Thread(target=_worker, daemon=True)
+    thread.start()
 
 
 @router.post("/{session_id}/review")

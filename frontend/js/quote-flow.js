@@ -96,11 +96,20 @@ const QuoteFlow = {
                 localStorage.removeItem('cq_active_session_id');
                 return false;
             }
-            // Processing — resume polling
+            // Processing — resume polling (P71: check which stage is processing)
             if (status.status === 'processing') {
                 this.sessionId = savedId;
                 this._currentJobType = status.job_type || '';
                 this._showStep('processing');
+
+                // P71: Pipeline stages (calculate/estimate/price) use stage-aware polling
+                const pipelineStage = status.pipeline_stage || status.stage;
+                if (pipelineStage === 'calculate' || pipelineStage === 'estimate' || pipelineStage === 'price') {
+                    await this._resumePipelineFromStage(savedId, pipelineStage);
+                    return true;
+                }
+
+                // Default: intake stage polling
                 this._showProcessing('Still analyzing your job...');
                 await this._pollForIntakeResult(savedId);
                 return true;
@@ -120,6 +129,31 @@ const QuoteFlow = {
                 this._showStep('processing');
                 this._showProcessing('Resuming your quote...');
                 await this._runPipeline();
+                return true;
+            }
+            // P71: Active in estimate/price stage — continue pipeline from that stage
+            if (status.status === 'active' && (status.stage === 'estimate' || status.stage === 'price')) {
+                this.sessionId = savedId;
+                this._currentJobType = status.job_type || '';
+                this._showStep('processing');
+                // Stage tells us what to run NEXT (not what's currently running)
+                await this._continuePipelineFromStage(savedId, status.stage);
+                return true;
+            }
+            // P71: Complete session — show results directly
+            if (status.status === 'complete' && status.stage === 'output' && status.quote_id) {
+                this.sessionId = savedId;
+                this._currentJobType = status.job_type || '';
+                this.quoteId = status.quote_id;
+                this.pricedQuote = status.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(status.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults({
+                    quote_id: status.quote_id,
+                    quote_number: status.quote_number,
+                    priced_quote: status.priced_quote,
+                });
+                this._showStep('results');
                 return true;
             }
 
@@ -649,15 +683,20 @@ const QuoteFlow = {
         this._showStep('processing');
 
         try {
+            // Stage 3: Calculate materials
             this._showProcessing('Calculating materials...');
             const calcResult = await API.calculate(this.sessionId);
+
+            // P71: If async, poll until calculate completes
+            if (calcResult.status === 'processing') {
+                await this._pollForStageComplete(this.sessionId, 'Calculating materials...');
+            }
 
             // Scope readiness check — backend may ask for more info
             if (calcResult.status === 'needs_more_info' && calcResult.additional_questions) {
                 this._showStep('questions');
                 this.allQuestions = calcResult.additional_questions;
                 this._renderQuestions(calcResult.additional_questions);
-                // Prepend notice above rendered questions
                 const container = document.getElementById('questions-container');
                 if (container) {
                     container.insertAdjacentHTML('afterbegin',
@@ -665,14 +704,34 @@ const QuoteFlow = {
                         + 'border-radius:8px;margin-bottom:16px;border:1px solid #ffc107">'
                         + '<strong>More details needed for an accurate quote.</strong></div>');
                 }
-                return; // User answers, then clicks "Continue" which re-runs pipeline
+                return;
             }
 
+            // Stage 4: Estimate labor
             this._showProcessing('Estimating labor...');
-            await API.estimate(this.sessionId);
+            const estResult = await API.estimate(this.sessionId);
 
+            // P71: If async, poll until estimate completes
+            if (estResult.status === 'processing') {
+                await this._pollForStageComplete(this.sessionId, 'Estimating labor...');
+            }
+
+            // Stage 5: Price quote
             this._showProcessing('Building quote...');
-            const result = await API.price(this.sessionId);
+            const priceResult = await API.price(this.sessionId);
+
+            let result;
+            // P71: If async, poll until price completes — status endpoint returns quote data
+            if (priceResult.status === 'processing') {
+                const finalStatus = await this._pollForStageComplete(this.sessionId, 'Building quote...');
+                result = {
+                    quote_id: finalStatus.quote_id,
+                    quote_number: finalStatus.quote_number,
+                    priced_quote: finalStatus.priced_quote,
+                };
+            } else {
+                result = priceResult;
+            }
 
             this.quoteId = result.quote_id;
             this.pricedQuote = result.priced_quote;
@@ -682,6 +741,186 @@ const QuoteFlow = {
             this._renderResults(result);
             this._showStep('results');
             // Track quote completion in Plausible
+            if (window.plausible) plausible('quote_completed');
+        } catch (e) {
+            this._showError(e.message);
+        }
+    },
+
+    /**
+     * P71: Poll GET /session/{id}/status until status is no longer "processing".
+     * Returns the final status response. Throws on error or timeout.
+     */
+    async _pollForStageComplete(sessionId, progressMsg) {
+        const MAX_POLLS = 90;  // 2s x 90 = 3 minutes max
+        for (let i = 0; i < MAX_POLLS; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+                const status = await API.getSessionStatus(sessionId);
+                if (status.status === 'processing') {
+                    // Update progress message if stage changed
+                    if (status.pipeline_stage === 'estimate') {
+                        this._showProcessing(progressMsg || 'Estimating labor...');
+                    } else if (status.pipeline_stage === 'price') {
+                        this._showProcessing(progressMsg || 'Building quote...');
+                    }
+                    continue;
+                }
+                if (status.status === 'error') {
+                    throw new Error(status.stage_error || 'Quote processing failed. Please try again.');
+                }
+                // Done — status is "active" or "complete"
+                return status;
+            } catch (e) {
+                // Re-throw user-facing errors (from error status above)
+                if (e.message && !e.message.includes('fetch')) throw e;
+                console.error('Poll error:', e);
+            }
+        }
+        throw new Error('Quote processing timed out. Please try again.');
+    },
+
+    /**
+     * P71: Resume pipeline from a given stage after page restore.
+     * Polls current stage to completion, then runs remaining stages.
+     */
+    async _resumePipelineFromStage(sessionId, stage) {
+        try {
+            const stageLabels = {
+                calculate: 'Calculating materials...',
+                estimate: 'Estimating labor...',
+                price: 'Building quote...',
+            };
+
+            // Poll current stage to completion
+            this._showProcessing(stageLabels[stage] || 'Processing...');
+            const status = await this._pollForStageComplete(sessionId, stageLabels[stage]);
+
+            // If price stage just completed, we have the result
+            if (stage === 'price' && status.quote_id) {
+                this.quoteId = status.quote_id;
+                this.pricedQuote = status.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(status.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults({
+                    quote_id: status.quote_id,
+                    quote_number: status.quote_number,
+                    priced_quote: status.priced_quote,
+                });
+                this._showStep('results');
+                return;
+            }
+
+            // Continue pipeline from the next stage
+            if (stage === 'calculate') {
+                // Estimate next
+                this._showProcessing('Estimating labor...');
+                const estResult = await API.estimate(sessionId);
+                if (estResult.status === 'processing') {
+                    await this._pollForStageComplete(sessionId, 'Estimating labor...');
+                }
+                // Then price
+                this._showProcessing('Building quote...');
+                const priceResult = await API.price(sessionId);
+                let result;
+                if (priceResult.status === 'processing') {
+                    const finalStatus = await this._pollForStageComplete(sessionId, 'Building quote...');
+                    result = {
+                        quote_id: finalStatus.quote_id,
+                        quote_number: finalStatus.quote_number,
+                        priced_quote: finalStatus.priced_quote,
+                    };
+                } else {
+                    result = priceResult;
+                }
+                this.quoteId = result.quote_id;
+                this.pricedQuote = result.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults(result);
+                this._showStep('results');
+            } else if (stage === 'estimate') {
+                // Price next
+                this._showProcessing('Building quote...');
+                const priceResult = await API.price(sessionId);
+                let result;
+                if (priceResult.status === 'processing') {
+                    const finalStatus = await this._pollForStageComplete(sessionId, 'Building quote...');
+                    result = {
+                        quote_id: finalStatus.quote_id,
+                        quote_number: finalStatus.quote_number,
+                        priced_quote: finalStatus.priced_quote,
+                    };
+                } else {
+                    result = priceResult;
+                }
+                this.quoteId = result.quote_id;
+                this.pricedQuote = result.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults(result);
+                this._showStep('results');
+            }
+            if (window.plausible) plausible('quote_completed');
+        } catch (e) {
+            this._showError(e.message);
+        }
+    },
+
+    /**
+     * P71: Continue pipeline from a given stage (session is active, stage is ready).
+     * Unlike _resumePipelineFromStage, this calls the API endpoints directly.
+     */
+    async _continuePipelineFromStage(sessionId, stage) {
+        try {
+            if (stage === 'estimate') {
+                // Run estimate, then price
+                this._showProcessing('Estimating labor...');
+                const estResult = await API.estimate(sessionId);
+                if (estResult.status === 'processing') {
+                    await this._pollForStageComplete(sessionId, 'Estimating labor...');
+                }
+                this._showProcessing('Building quote...');
+                const priceResult = await API.price(sessionId);
+                let result;
+                if (priceResult.status === 'processing') {
+                    const finalStatus = await this._pollForStageComplete(sessionId, 'Building quote...');
+                    result = {
+                        quote_id: finalStatus.quote_id,
+                        quote_number: finalStatus.quote_number,
+                        priced_quote: finalStatus.priced_quote,
+                    };
+                } else {
+                    result = priceResult;
+                }
+                this.quoteId = result.quote_id;
+                this.pricedQuote = result.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults(result);
+                this._showStep('results');
+            } else if (stage === 'price') {
+                // Run price only
+                this._showProcessing('Building quote...');
+                const priceResult = await API.price(sessionId);
+                let result;
+                if (priceResult.status === 'processing') {
+                    const finalStatus = await this._pollForStageComplete(sessionId, 'Building quote...');
+                    result = {
+                        quote_id: finalStatus.quote_id,
+                        quote_number: finalStatus.quote_number,
+                        priced_quote: finalStatus.priced_quote,
+                    };
+                } else {
+                    result = priceResult;
+                }
+                this.quoteId = result.quote_id;
+                this.pricedQuote = result.priced_quote;
+                try { localStorage.setItem('cq_last_quote_id', String(result.quote_id)); } catch (e) {}
+                try { localStorage.removeItem('cq_active_session_id'); } catch (e) {}
+                this._renderResults(result);
+                this._showStep('results');
+            }
             if (window.plausible) plausible('quote_completed');
         } catch (e) {
             this._showError(e.message);
