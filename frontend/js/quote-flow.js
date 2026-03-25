@@ -752,18 +752,25 @@ const QuoteFlow = {
      * Returns the final status response. Throws on error or timeout.
      */
     async _pollForStageComplete(sessionId, progressMsg) {
-        const MAX_POLLS = 90;  // 2s x 90 = 3 minutes max
+        const MAX_POLLS = 150;  // 2s x 150 = 5 minutes max
+        const startTime = Date.now();
         for (let i = 0; i < MAX_POLLS; i++) {
             await new Promise(r => setTimeout(r, 2000));
             try {
                 const status = await API.getSessionStatus(sessionId);
                 if (status.status === 'processing') {
-                    // Update progress message if stage changed
+                    const elapsed = Math.round((Date.now() - startTime) / 1000);
+                    let msg = progressMsg || 'Processing...';
                     if (status.pipeline_stage === 'estimate') {
-                        this._showProcessing(progressMsg || 'Estimating labor...');
+                        msg = 'Estimating labor...';
                     } else if (status.pipeline_stage === 'price') {
-                        this._showProcessing(progressMsg || 'Building quote...');
+                        msg = 'Building quote...';
                     }
+                    // After 30s, show elapsed time so user knows it's still alive
+                    if (elapsed > 30) {
+                        msg += ` (${elapsed}s)`;
+                    }
+                    this._showProcessing(msg);
                     continue;
                 }
                 if (status.status === 'error') {
@@ -777,7 +784,7 @@ const QuoteFlow = {
                 console.error('Poll error:', e);
             }
         }
-        throw new Error('Quote processing timed out. Please try again.');
+        throw new Error('Quote processing timed out after 5 minutes. Please try again.');
     },
 
     /**
