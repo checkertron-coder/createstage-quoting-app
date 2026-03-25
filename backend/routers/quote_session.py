@@ -1031,18 +1031,78 @@ def _run_estimate_background(session_id, user_id):
 
             logger.info("BG ESTIMATE: job_type=%s, finish=%s", session.job_type, finish_type)
 
-            try:
-                labor_estimate = estimator.estimate(material_list, quote_params, user_rates)
-                validator = HistoricalValidator()
-                labor_estimate = validator.validate(labor_estimate, session.job_type, bg_db)
-                finishing_builder = FinishingBuilder()
-                finishing = finishing_builder.build(
-                    finish_type=finish_type,
-                    total_sq_ft=material_list.get("total_sq_ft", 0),
-                    labor_processes=labor_estimate.get("processes", []),
-                )
-            except Exception as est_err:
-                logger.warning("BG estimate: Labor estimation failed, using fallback: %s", est_err)
+            # --- Run labor estimation and build instructions IN PARALLEL ---
+            # These two AI calls are independent: labor uses material_list +
+            # quote_params, build instructions use fields + cut_list.
+            # Running them concurrently cuts ~30-60s off the estimate stage.
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            def _do_labor():
+                """Labor estimation + historical validation + finishing."""
+                try:
+                    le = estimator.estimate(material_list, quote_params, user_rates)
+                    validator = HistoricalValidator()
+                    le = validator.validate(le, session.job_type, bg_db)
+                    fb = FinishingBuilder()
+                    fin = fb.build(
+                        finish_type=finish_type,
+                        total_sq_ft=material_list.get("total_sq_ft", 0),
+                        labor_processes=le.get("processes", []),
+                    )
+                    return le, fin, None
+                except Exception as err:
+                    return None, None, err
+
+            def _do_build_instructions():
+                """Build instructions generation."""
+                try:
+                    ai_gen = AICutListGenerator()
+                    bf = {k: v for k, v in current_params.items()
+                          if not k.startswith("_")}
+                    if current_params.get("_shop_context"):
+                        bf["_shop_context"] = current_params["_shop_context"]
+                    ed = None
+                    if session.job_type == "cantilever_gate":
+                        ed = {}
+                        cw = bf.get("clear_width", "")
+                        ht = bf.get("height", "")
+                        if cw:
+                            try:
+                                cw_val = float(str(cw).split()[0])
+                                ed["opening_width"] = "%s ft" % cw
+                                ed["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
+                                ed["post_spacing"] = "%s ft (matches opening width)" % cw
+                                ed["post_embed_depth"] = "42 inches (Chicago frost line)"
+                            except (ValueError, IndexError):
+                                pass
+                        if ht:
+                            try:
+                                ht_val = float(str(ht).split()[0])
+                                ed["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
+                            except (ValueError, IndexError):
+                                pass
+
+                    detailed_cuts = material_list.get("cut_list", material_list.get("items", []))
+                    bi = ai_gen.generate_build_instructions(
+                        session.job_type, bf, detailed_cuts,
+                        enforced_dimensions=ed,
+                    )
+                    if not bi:
+                        return None, "AI returned empty response"
+                    return bi, None
+                except Exception as err:
+                    logger.warning("BG estimate: Build instructions failed: %s", err)
+                    return None, str(err)
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                labor_future = pool.submit(_do_labor)
+                build_future = pool.submit(_do_build_instructions)
+
+            labor_estimate_raw, finishing, labor_err = labor_future.result()
+            build_instructions, build_instructions_error = build_future.result()
+
+            if labor_err:
+                logger.warning("BG estimate: Labor estimation failed, using fallback: %s", labor_err)
                 labor_estimate = estimator._fallback_estimate(
                     material_list, quote_params, user_rates)
                 finishing_builder = FinishingBuilder()
@@ -1051,49 +1111,8 @@ def _run_estimate_background(session_id, user_id):
                     total_sq_ft=material_list.get("total_sq_ft", 0),
                     labor_processes=labor_estimate.get("processes", []),
                 )
-
-            # Generate build instructions
-            build_instructions = None
-            build_instructions_error = None
-            try:
-                ai_gen = AICutListGenerator()
-                build_fields = {k: v for k, v in current_params.items()
-                                if not k.startswith("_")}
-                if current_params.get("_shop_context"):
-                    build_fields["_shop_context"] = current_params["_shop_context"]
-                enforced_dims = None
-                if session.job_type == "cantilever_gate":
-                    enforced_dims = {}
-                    cw = build_fields.get("clear_width", "")
-                    ht = build_fields.get("height", "")
-                    if cw:
-                        try:
-                            cw_val = float(str(cw).split()[0])
-                            enforced_dims["opening_width"] = "%s ft" % cw
-                            enforced_dims["gate_length"] = "%.1f ft (opening x 1.5)" % (cw_val * 1.5)
-                            enforced_dims["post_spacing"] = "%s ft (matches opening width)" % cw
-                            enforced_dims["post_embed_depth"] = "42 inches (Chicago frost line)"
-                        except (ValueError, IndexError):
-                            pass
-                    if ht:
-                        try:
-                            ht_val = float(str(ht).split()[0])
-                            enforced_dims["gate_height"] = "%s ft (%.0f inches)" % (ht, ht_val * 12)
-                        except (ValueError, IndexError):
-                            pass
-
-                detailed_cuts = material_list.get("cut_list", material_list.get("items", []))
-                build_instructions = ai_gen.generate_build_instructions(
-                    session.job_type,
-                    build_fields,
-                    detailed_cuts,
-                    enforced_dimensions=enforced_dims,
-                )
-                if not build_instructions:
-                    build_instructions_error = "AI returned empty response"
-            except Exception as bi_err:
-                logger.warning("BG estimate: Build instructions failed: %s", bi_err)
-                build_instructions_error = str(bi_err)
+            else:
+                labor_estimate = labor_estimate_raw
 
             # Store all results in session
             current_params["_labor_estimate"] = labor_estimate
