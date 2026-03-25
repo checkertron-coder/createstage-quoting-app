@@ -1,5 +1,5 @@
 """
-Admin endpoints — invite code + demo link management.
+Admin endpoints — invite code + demo link management + account diagnostics.
 
 Protected by ADMIN_SECRET env var (simple shared secret for now).
 """
@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import models
+from ..auth import hash_password
 from ..database import get_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -216,3 +217,54 @@ def list_demo_links(db: Session = Depends(get_db)):
         }
         for dl in links
     ]
+
+
+# --- Account Diagnostics ---
+
+@router.get("/users", dependencies=[Depends(_require_admin)])
+def list_users(db: Session = Depends(get_db)):
+    """List all user accounts with auth diagnostics (no secrets exposed)."""
+    users = db.query(models.User).order_by(models.User.id).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "has_password": bool(u.password_hash),
+            "hash_prefix": u.password_hash[:7] if u.password_hash else None,
+            "hash_len": len(u.password_hash) if u.password_hash else 0,
+            "email_verified": getattr(u, "email_verified", None),
+            "tier": u.tier,
+            "subscription_status": getattr(u, "subscription_status", None),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+class ForcePasswordRequest(BaseModel):
+    email: str
+    new_password: str
+
+
+@router.post("/force-password", dependencies=[Depends(_require_admin)])
+def force_password(
+    request: ForcePasswordRequest,
+    db: Session = Depends(get_db),
+):
+    """Force-set a user's password. Also sets email_verified=True."""
+    from sqlalchemy import func
+    user = db.query(models.User).filter(
+        func.lower(models.User.email) == request.email.strip().lower()
+    ).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found: %s" % request.email)
+
+    user.password_hash = hash_password(request.new_password)
+    user.email_verified = True
+    db.commit()
+    return {
+        "email": user.email,
+        "password_reset": True,
+        "email_verified": True,
+        "hash_prefix": user.password_hash[:7],
+    }
