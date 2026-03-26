@@ -622,6 +622,7 @@ def adjust_line_items(
         outputs.get("material_subtotal", 0)
         + outputs.get("hardware_subtotal", 0)
         + outputs.get("consumable_subtotal", 0)
+        + outputs.get("shop_stock_subtotal", 0)
         + outputs.get("labor_subtotal", 0)
         + outputs.get("finishing_subtotal", 0),
         2,
