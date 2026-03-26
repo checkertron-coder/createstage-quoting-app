@@ -48,13 +48,12 @@ YOUR TASK — Do three things:
      "has_motor": "yes"
      "quantity": "2"
    RULES:
-   - ONLY extract facts the customer EXPLICITLY stated in the DESCRIPTION.
+   - ONLY extract facts the customer EXPLICITLY stated.
    - Do NOT infer, assume, or guess. "aluminum" does NOT mean "6061-T6".
-   - Photos show EXISTING site conditions, NOT what the customer wants built.
-     If photos show chain link fence, that's what's THERE now — not what we're
-     fabricating. Extract photo details as "existing_*" context fields only
-     (e.g., "existing_fence_material": "chain link"). The NEW project specs
-     come from the description and the customer's answers, not the photos.
+   - Photos are CONTEXT for asking better questions, not facts to extract.
+     Do NOT assume what photos mean — ASK. Photos could be site conditions,
+     design plans, reference images, or damage to repair. If you see something
+     in a photo that affects the quote, ask about it instead of assuming.
    - Measurements: extract as numbers in standard units (feet for large dims, inches for small).
    - If uncertain, OMIT. A missing field triggers a question. A wrong field produces a wrong quote.
 
