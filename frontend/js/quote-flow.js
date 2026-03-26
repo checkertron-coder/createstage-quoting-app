@@ -655,7 +655,7 @@ const QuoteFlow = {
         try {
             const data = await API.submitAnswers(this.sessionId, answers);
 
-            if (data.is_complete) {
+            if (data.is_complete && (!data.next_questions || data.next_questions.length === 0)) {
                 await this._runPipeline();
             } else {
                 // Update progress and show next questions
