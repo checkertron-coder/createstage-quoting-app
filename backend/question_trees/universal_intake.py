@@ -114,7 +114,7 @@ FOLLOWUP_PROMPT = """\
 You are a quoting tool inside a metal fab shop. A fabricator is describing a \
 project and you are gathering the details needed to build an accurate quote. \
 Talk like a shop foreman — direct, practical, no fluff.
-
+{calculator_requirements_block}
 ORIGINAL DESCRIPTION:
 \"\"\"{description}\"\"\"
 {photo_observations_block}
@@ -129,18 +129,16 @@ YOUR TASK — Based on the new answers above, do three things:
 1. UPDATED KNOWN FACTS: Return ALL known facts (previous + newly answered).
    Merge the new answers into the existing facts. Use the same snake_case field IDs.
 
-2. FOLLOW-UP QUESTIONS: Generate 0-10 additional questions if needed.
+2. FOLLOW-UP QUESTIONS: For each calculator requirement above that the customer
+   has NOT explicitly answered, generate a question. Also ask about any other
+   details that would change the quote by >5%.
    - Do NOT re-ask anything already answered.
-   - Only ask if the answer would change the quote by >5%.
-   - Consider whether the new answers reveal sub-questions (e.g., if they chose
-     "powder coat", ask about color; if "full install", ask about site conditions).
+   - "2x2 tube" does NOT answer "frame_gauge" — if the customer didn't say the
+     gauge, ask. "Pickets" does NOT answer "picket_material" or "picket_spacing".
    - For multi-component projects, each component needs its own dimensions and specs.
-   - Return an empty array [] if no more questions are needed.
-   - MANDATORY CATEGORIES to cover (ask if not yet known): dimensions, material/gauge,
-     finish, installation scope, indoor/outdoor, quantity, internal structure/frame approach.
 
-3. READINESS: Re-evaluate. With the new answers, can you generate a quote
-   within ±15% of reality?
+3. READINESS: You may ONLY return "ready" if every calculator requirement above
+   has a specific answer in known_facts. If any are missing, return "needs_questions".
 
 Return ONLY valid JSON:
 {{
@@ -310,35 +308,33 @@ def generate_followup_questions(description, known_facts, qa_history,
             "\nPHOTO OBSERVATIONS:\n\"\"\"%s\"\"\"\n" % photo_observations
         )
 
-    prompt = FOLLOWUP_PROMPT.format(
-        description=description,
-        known_facts_block=known_facts_block,
-        qa_history_block=qa_history_block,
-        photo_observations_block=photo_observations_block,
-    )
-
-    # Inject calculator-required fields — these are fields the calculator
-    # NEEDS for an accurate quote. Stronger than generic hints.
+    # Build calculator requirements block — goes at TOP of prompt
     calc_fields = _get_calculator_required_fields(job_type)
     if calc_fields:
-        calc_context = (
+        calculator_requirements_block = (
             "\nCALCULATOR REQUIREMENTS for %s:\n"
-            "The quote calculator REQUIRES answers to these fields. Check the "
-            "known facts above — some may already be covered under different "
-            "names (e.g., 'gate_opening' covers 'clear_width'). For any NOT "
-            "yet covered, you MUST ask about them. Do NOT return "
-            "readiness=\"ready\" until all of these are addressed:\n\n%s\n"
+            "The quote calculator NEEDS specific answers to these fields. "
+            "Read these FIRST, then check the known facts below to see which "
+            "ones the customer has NOT yet explicitly answered:\n\n%s\n"
         ) % (job_type.replace("_", " ").title(), calc_fields)
-        prompt = prompt + calc_context
         logger.info(
             "Followup: injected %d calculator requirements for job_type=%s",
             calc_fields.count("\n- ") + 1, job_type,
         )
     else:
+        calculator_requirements_block = ""
         logger.warning(
             "Followup: NO calculator requirements injected (job_type=%r)",
             job_type,
         )
+
+    prompt = FOLLOWUP_PROMPT.format(
+        description=description,
+        known_facts_block=known_facts_block,
+        qa_history_block=qa_history_block,
+        photo_observations_block=photo_observations_block,
+        calculator_requirements_block=calculator_requirements_block,
+    )
 
     try:
         text = call_deep(prompt, temperature=0.2, timeout=60)
