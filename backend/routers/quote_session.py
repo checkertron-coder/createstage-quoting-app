@@ -432,6 +432,56 @@ def answer_questions(
     questions = followup_result.get("questions", [])
     readiness = followup_result.get("readiness", "ready")
 
+    # --- Deterministic gap-fill: inject tree questions for missing calculator fields ---
+    # Opus may declare "ready" while required fields are unanswered. The system
+    # checks and injects questions directly from the question tree — no AI needed.
+    if session.job_type:
+        try:
+            from ..question_trees.engine import load_tree
+            tree = load_tree(session.job_type)
+            required_ids = tree.get("required_fields", [])
+            tree_qs = {q["id"]: q for q in tree.get("questions", [])
+                       if q.get("id")}
+
+            # Fields already covered: exact key match OR AI already asking about it
+            covered = set(known_facts.keys())
+            already_asking = set(q.get("id", "") for q in questions)
+
+            # Also do loose match: if known_facts has a key containing the
+            # required field name as a substring, count it as covered
+            # e.g., "gate_opening" loosely covers "clear_width" won't match,
+            # but "height" covers "height", "finish" covers "finish"
+            for req_id in required_ids:
+                if req_id in covered or req_id in already_asking:
+                    continue
+                # Check if any known fact key or value mentions this field
+                # Skip fields where the concept is clearly answered
+                concept_covered = False
+                for k, v in known_facts.items():
+                    # Exact substring match on key
+                    if req_id in k or k in req_id:
+                        concept_covered = True
+                        break
+                if concept_covered:
+                    continue
+
+                # This required field is genuinely missing — inject from tree
+                tree_q = tree_qs.get(req_id)
+                if tree_q:
+                    q_copy = dict(tree_q)
+                    q_copy["source"] = "calculator_requirement"
+                    questions.append(q_copy)
+
+            if questions:
+                readiness = "needs_questions"
+                logger.info(
+                    "Gap-fill: injected %d tree questions for %s (total now %d)",
+                    len(questions) - len(followup_result.get("questions", [])),
+                    session.job_type, len(questions),
+                )
+        except Exception as e:
+            logger.warning("Gap-fill failed: %s", e)
+
     # Build completion
     completion = build_completion_from_readiness(readiness, known_facts, questions)
 
