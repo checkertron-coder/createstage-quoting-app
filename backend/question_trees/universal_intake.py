@@ -54,12 +54,21 @@ YOUR TASK — Do three things:
 
    MANDATORY CATEGORIES (ask if not already known):
    - Overall dimensions (length, width, height) of every component
-   - Material type and thickness/gauge
-   - Finish method (powder coat, paint, galvanized, raw, etc.)
-   - Installation scope (shop pickup, delivery only, full install)
-   - Indoor vs outdoor use
+   - Material type AND component-level profiles — "mild steel" answers the alloy,
+     not the profiles. For fences/gates/railings: picket size (e.g., 1/2" vs 3/4"
+     square bar), rail type, post size are SEPARATE questions from material type.
+     For automotive: year/make/model is non-negotiable for fitment.
+   - Finish method (powder coat, paint, galvanized, raw, etc.) AND weld finish
+     expectations (exposed welds OK vs ground smooth vs furniture-grade)
+   - Installation scope (shop pickup, delivery only, full install) AND if install:
+     mounting method (surface mount, core drill, embed in concrete, weld to existing)
+   - Code compliance — ADA, pool code, egress, DOT, PE stamp. Ask if the context
+     suggests it (commercial space, pool proximity, public access, road use).
+   - Motorization/automation — for gates: manual vs electric operator is a second BOM
    - Quantity
    - Internal structure/frame approach (e.g., tube frame vs angle iron, welded vs bolted)
+   - Decorative elements — for ornamental work: scrolls, spear tips, collars, twisted
+     pickets can 2-3x the labor. Don't assume plain unless told.
 
    QUESTION FORMAT — each question is a JSON object:
    {{
@@ -127,8 +136,12 @@ YOUR TASK — Based on the new answers above, do three things:
    - Consider whether the new answers reveal sub-questions (e.g., if they chose
      "powder coat", ask about color; if "full install", ask about site conditions).
    - Return an empty array [] if no more questions are needed.
-   - MANDATORY CATEGORIES to cover (ask if not yet known): dimensions, material/gauge,
-     finish, installation scope, indoor/outdoor, quantity, internal structure/frame approach.
+   - MANDATORY CATEGORIES to cover (ask if not yet known): dimensions,
+     material type AND component profiles (picket size, rail type, post size, pipe diameter),
+     finish method AND weld finish expectations, installation scope AND mounting method,
+     code compliance (ADA/pool/egress/DOT if context suggests it),
+     motorization/automation for gates, quantity, internal structure/frame approach,
+     decorative elements for ornamental work.
 
 3. READINESS: Re-evaluate. With the new answers, can you generate a quote
    within ±15% of reality?
