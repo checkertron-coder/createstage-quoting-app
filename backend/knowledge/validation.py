@@ -300,7 +300,7 @@ VALID_PROFILES = {
     "hss_4x4_0.25", "hss_6x4_0.25",
     # Sheet / plate
     "sheet_11ga", "sheet_14ga", "sheet_16ga",
-    "plate_0.25", "plate_0.375", "plate_0.5",
+    "plate_0.1875", "plate_0.25", "plate_0.375", "plate_0.5", "plate_0.75", "plate_1.0",
     # Expanded metal
     "expanded_metal_10ga", "expanded_metal_13ga", "expanded_metal_16ga",
     # Aluminum tube — 6061-T6 (P38)

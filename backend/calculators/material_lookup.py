@@ -122,6 +122,14 @@ PRICE_PER_SQFT = {
     "sheet_11ga": 2.65,             # ~$85/sheet for 4x8
     "sheet_14ga": 2.03,             # ~$65/sheet for 4x8
     "sheet_16ga": 1.56,             # ~$50/sheet for 4x8
+    # Steel plate — A36 hot-rolled, priced per sqft from 4'x8' sheets
+    # Source: Chicago-area service centers (2025-2026), mid-range + 10% buffer
+    "plate_0.1875": 6.50,           # 3/16" plate — 7.65 lbs/sqft × $0.85/lb
+    "plate_0.25": 9.00,             # 1/4" plate — 10.2 lbs/sqft × $0.88/lb (~$288/sheet)
+    "plate_0.375": 11.50,           # 3/8" plate — 15.3 lbs/sqft × $0.75/lb (~$368/sheet)
+    "plate_0.5": 14.50,             # 1/2" plate — 20.4 lbs/sqft × $0.71/lb (~$464/sheet)
+    "plate_0.75": 21.00,            # 3/4" plate — 30.6 lbs/sqft × $0.69/lb (~$672/sheet)
+    "plate_1.0": 27.50,             # 1" plate — 40.8 lbs/sqft × $0.67/lb (~$880/sheet)
     # Aluminum sheet — 5052-H32 / 6061-T6, standard 4'x8' or 4'x10'
     "al_sheet_0.040": 4.50,         # 0.040" (~18ga equiv)
     "al_sheet_0.063": 5.80,         # 0.063" (~16ga equiv)

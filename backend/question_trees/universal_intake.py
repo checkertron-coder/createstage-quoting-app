@@ -53,7 +53,9 @@ YOUR TASK — Do three things:
    - Measurements: extract as numbers in standard units (feet for large dims, inches for small).
    - If uncertain, OMIT. A missing field triggers a question. A wrong field produces a wrong quote.
 
-2. QUESTIONS: Generate 5-10 questions ranked by impact on quote accuracy.
+2. QUESTIONS: Generate questions ranked by impact on quote accuracy — as many
+   as the project needs. Simple single-component jobs might need 5-8. Complex
+   multi-component projects (gate + fence, stair + railing) might need 15-20.
    Each question targets information that would change the quote by >5% if wrong.
 
    MANDATORY CATEGORIES (ask if not already known):
@@ -125,12 +127,13 @@ YOUR TASK — Based on the new answers above, do three things:
 1. UPDATED KNOWN FACTS: Return ALL known facts (previous + newly answered).
    Merge the new answers into the existing facts. Use the same snake_case field IDs.
 
-2. FOLLOW-UP QUESTIONS: Generate 0-5 additional questions if needed.
+2. FOLLOW-UP QUESTIONS: Generate additional questions for anything still unclear.
+   Return [] only when every component has full specs.
    - Do NOT re-ask anything already answered.
    - Only ask if the answer would change the quote by >5%.
    - Consider whether the new answers reveal sub-questions (e.g., if they chose
      "powder coat", ask about color; if "full install", ask about site conditions).
-   - Return an empty array [] if no more questions are needed.
+   - For multi-component projects, each component needs its own dimensions and specs.
    - MANDATORY CATEGORIES to cover (ask if not yet known): dimensions, material/gauge,
      finish, installation scope, indoor/outdoor, quantity, internal structure/frame approach.
 

@@ -570,7 +570,7 @@ const QuoteFlow = {
             const required = q.required ? '<span class="required-badge">Required</span>' : '';
 
             return `
-                <div class="question-card" data-qid="${q.id}">
+                <div class="question-card" data-qid="${q.id}" data-required="${q.required ? 'true' : 'false'}">
                     <div class="q-header">
                         <label class="q-label">${q.text}</label>
                         ${required}
@@ -647,6 +647,25 @@ const QuoteFlow = {
     async submitAnswers() {
         const answers = this._collectAnswers();
         if (Object.keys(answers).length === 0) return;
+
+        // Validate required fields before submitting
+        const container = document.getElementById('questions-container');
+        const missing = [];
+        if (container) {
+            container.querySelectorAll('.question-card[data-required="true"]').forEach(card => {
+                const qid = card.dataset.qid;
+                card.classList.remove('missing-required');
+                if (!answers[qid] || !answers[qid].trim()) {
+                    missing.push(qid);
+                    card.classList.add('missing-required');
+                }
+            });
+        }
+        if (missing.length > 0) {
+            const first = container.querySelector('.missing-required');
+            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
 
         const btn = document.getElementById('btn-submit-answers');
         btn.disabled = true;

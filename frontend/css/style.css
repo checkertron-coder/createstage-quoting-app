@@ -564,6 +564,9 @@ body {
     border: 1px solid var(--border); border-radius: var(--radius);
     padding: 16px; margin-bottom: 12px;
 }
+.question-card.missing-required {
+    border-color: #dc2626; background: #fef2f2;
+}
 .q-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .q-label { font-weight: 600; font-size: 0.95rem; }
 .required-badge {
