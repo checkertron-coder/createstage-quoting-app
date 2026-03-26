@@ -151,13 +151,13 @@ Return ONLY valid JSON:
 # Question tree hints — load per-job-type questions as AI context
 # ---------------------------------------------------------------------------
 
-def _get_tree_question_hints(job_type):
+def _get_calculator_required_fields(job_type):
     # type: (str) -> str
-    """Load question tree for job_type and return a compact summary for AI context.
+    """Load REQUIRED fields from the question tree for this job type.
 
-    Returns a multi-line string of questions with their options, or "" if
-    no tree exists for the job type. This is CONTEXT, not a script — Opus
-    uses its judgment about which questions are relevant.
+    Returns a multi-line string of only the required field questions with
+    their options. These are fields the calculator NEEDS to produce an
+    accurate quote. Returns "" if no tree exists.
     """
     if not job_type:
         return ""
@@ -167,13 +167,21 @@ def _get_tree_question_hints(job_type):
             return ""
         with open(tree_path) as f:
             tree = json.load(f)
-        hints = []
+        required_ids = set(tree.get("required_fields", []))
+        if not required_ids:
+            return ""
+        # Build lookup of questions by ID
+        questions_by_id = {}
         for q in tree.get("questions", []):
             qid = q.get("id", "")
-            text = q.get("text", "")
-            if not qid or not text:
-                continue
-            line = "- %s: %s" % (qid, text)
+            if qid:
+                questions_by_id[qid] = q
+        lines = []
+        for field_id in tree.get("required_fields", []):
+            q = questions_by_id.get(field_id, {})
+            text = q.get("text", field_id.replace("_", " ").title() + "?")
+            hint = q.get("hint", "")
+            line = "- %s: %s" % (field_id, text)
             qtype = q.get("type", "")
             options = q.get("options", [])
             if qtype == "choice" and options:
@@ -182,8 +190,10 @@ def _get_tree_question_hints(job_type):
                 unit = q.get("unit", "")
                 if unit:
                     line += " (%s)" % unit
-            hints.append(line)
-        return "\n".join(hints) if hints else ""
+            if hint:
+                line += "\n  Why: %s" % hint
+            lines.append(line)
+        return "\n".join(lines) if lines else ""
     except Exception:
         return ""
 
@@ -303,16 +313,19 @@ def generate_followup_questions(description, known_facts, qa_history,
         photo_observations_block=photo_observations_block,
     )
 
-    # Inject question tree hints as domain context (not a script)
-    tree_hints = _get_tree_question_hints(job_type)
-    if tree_hints:
-        tree_context = (
-            "\nDOMAIN QUESTIONS for %s:\n"
-            "These questions are known to be important for this job type. "
-            "Ask about any that haven't been answered yet. Use the options "
-            "shown as multiple-choice when available:\n\n%s\n"
-        ) % (job_type.replace("_", " ").title(), tree_hints)
-        prompt = prompt + tree_context
+    # Inject calculator-required fields — these are fields the calculator
+    # NEEDS for an accurate quote. Stronger than generic hints.
+    calc_fields = _get_calculator_required_fields(job_type)
+    if calc_fields:
+        calc_context = (
+            "\nCALCULATOR REQUIREMENTS for %s:\n"
+            "The quote calculator REQUIRES answers to these fields. Check the "
+            "known facts above — some may already be covered under different "
+            "names (e.g., 'gate_opening' covers 'clear_width'). For any NOT "
+            "yet covered, you MUST ask about them. Do NOT return "
+            "readiness=\"ready\" until all of these are addressed:\n\n%s\n"
+        ) % (job_type.replace("_", " ").title(), calc_fields)
+        prompt = prompt + calc_context
 
     try:
         text = call_deep(prompt, temperature=0.2, timeout=60)

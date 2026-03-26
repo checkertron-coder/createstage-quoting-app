@@ -197,41 +197,41 @@ def test_opus_bom_prompt_no_fields_still_works():
     assert "cantilever_gate" in prompt_text
 
 
-# ── Bug D: Question tree hints ──
+# ── Bug D: Calculator-required fields in followup ──
 
-def test_tree_hints_ornamental_fence():
-    """ornamental_fence tree should include picket_material in hints."""
-    from backend.question_trees.universal_intake import _get_tree_question_hints
-    hints = _get_tree_question_hints("ornamental_fence")
-    assert hints  # non-empty
-    assert "picket_material" in hints
-
-
-def test_tree_hints_cantilever_gate():
-    """cantilever_gate tree should include clear_width and has_motor."""
-    from backend.question_trees.universal_intake import _get_tree_question_hints
-    hints = _get_tree_question_hints("cantilever_gate")
-    assert hints
-    assert "clear_width" in hints
-    assert "has_motor" in hints
+def test_calc_required_fields_ornamental_fence():
+    """ornamental_fence required fields should include picket_spacing."""
+    from backend.question_trees.universal_intake import _get_calculator_required_fields
+    fields = _get_calculator_required_fields("ornamental_fence")
+    assert fields  # non-empty
+    assert "picket_spacing" in fields
 
 
-def test_tree_hints_unknown_type():
+def test_calc_required_fields_cantilever_gate():
+    """cantilever_gate required fields should include clear_width and picket_spacing."""
+    from backend.question_trees.universal_intake import _get_calculator_required_fields
+    fields = _get_calculator_required_fields("cantilever_gate")
+    assert fields
+    assert "clear_width" in fields
+    assert "picket_spacing" in fields
+
+
+def test_calc_required_fields_unknown_type():
     """Unknown job type returns empty string."""
-    from backend.question_trees.universal_intake import _get_tree_question_hints
-    hints = _get_tree_question_hints("nonexistent_job_type_xyz")
-    assert hints == ""
+    from backend.question_trees.universal_intake import _get_calculator_required_fields
+    fields = _get_calculator_required_fields("nonexistent_job_type_xyz")
+    assert fields == ""
 
 
-def test_tree_hints_empty_string():
+def test_calc_required_fields_empty_string():
     """Empty string job type returns empty."""
-    from backend.question_trees.universal_intake import _get_tree_question_hints
-    assert _get_tree_question_hints("") == ""
-    assert _get_tree_question_hints(None) == ""
+    from backend.question_trees.universal_intake import _get_calculator_required_fields
+    assert _get_calculator_required_fields("") == ""
+    assert _get_calculator_required_fields(None) == ""
 
 
-def test_followup_prompt_includes_tree_context():
-    """When job_type is provided, followup prompt should include tree hints."""
+def test_followup_prompt_includes_calc_requirements():
+    """When job_type is provided, followup prompt should include calculator requirements."""
     captured_prompt = {}
 
     def mock_call_deep(prompt, **kwargs):
@@ -251,13 +251,13 @@ def test_followup_prompt_includes_tree_context():
             )
 
     prompt_text = captured_prompt["text"]
-    assert "DOMAIN QUESTIONS" in prompt_text
-    assert "picket_material" in prompt_text
+    assert "CALCULATOR REQUIREMENTS" in prompt_text
+    assert "picket_spacing" in prompt_text
     assert "Ornamental Fence" in prompt_text
 
 
-def test_followup_prompt_no_tree_without_job_type():
-    """Without job_type, followup prompt should NOT include tree hints."""
+def test_followup_prompt_no_calc_requirements_without_job_type():
+    """Without job_type, followup prompt should NOT include calculator requirements."""
     captured_prompt = {}
 
     def mock_call_deep(prompt, **kwargs):
@@ -277,4 +277,4 @@ def test_followup_prompt_no_tree_without_job_type():
             )
 
     prompt_text = captured_prompt["text"]
-    assert "DOMAIN QUESTIONS" not in prompt_text
+    assert "CALCULATOR REQUIREMENTS" not in prompt_text
