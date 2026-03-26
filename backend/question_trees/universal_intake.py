@@ -330,6 +330,15 @@ def generate_followup_questions(description, known_facts, qa_history,
             "readiness=\"ready\" until all of these are addressed:\n\n%s\n"
         ) % (job_type.replace("_", " ").title(), calc_fields)
         prompt = prompt + calc_context
+        logger.info(
+            "Followup: injected %d calculator requirements for job_type=%s",
+            calc_fields.count("\n- ") + 1, job_type,
+        )
+    else:
+        logger.warning(
+            "Followup: NO calculator requirements injected (job_type=%r)",
+            job_type,
+        )
 
     try:
         text = call_deep(prompt, temperature=0.2, timeout=60)

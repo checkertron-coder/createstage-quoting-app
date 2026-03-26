@@ -428,8 +428,8 @@ const QuoteFlow = {
         const keys = Object.keys(allConfirmed);
         if (keys.length === 0) return;
 
-        // Disable Edit buttons while questions are being answered
-        const hasActiveQuestions = allQuestions.length > 0;
+        // Edit buttons always enabled — user must be able to correct any field
+        const hasActiveQuestions = false;
 
         const header = document.createElement('div');
         header.className = 'confirmed-header';
