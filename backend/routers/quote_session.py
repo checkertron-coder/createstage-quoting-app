@@ -421,6 +421,7 @@ def answer_questions(
         known_facts=known_facts,
         qa_history=qa_history,
         photo_observations=photo_observations_text,
+        job_type=session.job_type or "",
     )
 
     # Update known facts from AI response (AI may have merged/refined)
@@ -1752,6 +1753,10 @@ def _estimate_from_opus_package(session, current_params, material_list, current_
     rate_inshop = current_user.rate_inshop or 125.00
     rate_onsite = current_user.rate_onsite or 145.00
 
+    # Don't charge labor for coating when finish is raw
+    FINISH_LABOR_KEYS = ("clearcoat", "paint", "finish_prep")
+    is_raw_finish = (opus_finishing or "raw").lower() in ("raw", "none", "")
+
     processes = []
     for proc_name, entry in opus_labor.items():
         if isinstance(entry, dict):
@@ -1759,6 +1764,8 @@ def _estimate_from_opus_package(session, current_params, material_list, current_
         else:
             h = round(float(entry or 0), 2)
         if h <= 0:
+            continue
+        if is_raw_finish and proc_name in FINISH_LABOR_KEYS:
             continue
         rate = rate_onsite if proc_name == "site_install" else rate_inshop
         processes.append({

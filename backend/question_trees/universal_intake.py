@@ -14,11 +14,15 @@ The frontend response shapes are IDENTICAL to the tree-based system:
 
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 
 from ..claude_client import call_deep, is_configured
 
 logger = logging.getLogger(__name__)
+
+# Directory where question tree JSON files live
+_TREE_DATA_DIR = Path(__file__).parent / "data"
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +160,47 @@ Return ONLY valid JSON:
 
 
 # ---------------------------------------------------------------------------
+# Question tree hints — load per-job-type questions as AI context
+# ---------------------------------------------------------------------------
+
+def _get_tree_question_hints(job_type):
+    # type: (str) -> str
+    """Load question tree for job_type and return a compact summary for AI context.
+
+    Returns a multi-line string of questions with their options, or "" if
+    no tree exists for the job type. This is CONTEXT, not a script — Opus
+    uses its judgment about which questions are relevant.
+    """
+    if not job_type:
+        return ""
+    try:
+        tree_path = _TREE_DATA_DIR / ("%s.json" % job_type)
+        if not tree_path.exists():
+            return ""
+        with open(tree_path) as f:
+            tree = json.load(f)
+        hints = []
+        for q in tree.get("questions", []):
+            qid = q.get("id", "")
+            text = q.get("text", "")
+            if not qid or not text:
+                continue
+            line = "- %s: %s" % (qid, text)
+            qtype = q.get("type", "")
+            options = q.get("options", [])
+            if qtype == "choice" and options:
+                line += " [%s]" % ", ".join(str(o) for o in options[:6])
+            elif qtype == "measurement":
+                unit = q.get("unit", "")
+                if unit:
+                    line += " (%s)" % unit
+            hints.append(line)
+        return "\n".join(hints) if hints else ""
+    except Exception:
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -219,8 +264,8 @@ def generate_intake_questions(description, photo_observations=""):
 
 
 def generate_followup_questions(description, known_facts, qa_history,
-                                 photo_observations=""):
-    # type: (str, dict, list, str) -> dict
+                                 photo_observations="", job_type=""):
+    # type: (str, dict, list, str, str) -> dict
     """
     Subsequent AI calls — given accumulated Q&A, generate follow-up questions.
 
@@ -229,6 +274,8 @@ def generate_followup_questions(description, known_facts, qa_history,
         known_facts: current dict of known facts
         qa_history: list of {"question": str, "answer": str} dicts
         photo_observations: photo analysis text (if any)
+        job_type: detected job type (e.g., "ornamental_fence") — used to load
+            question tree hints as AI context
 
     Returns same shape as generate_intake_questions().
     """
@@ -267,6 +314,17 @@ def generate_followup_questions(description, known_facts, qa_history,
         qa_history_block=qa_history_block,
         photo_observations_block=photo_observations_block,
     )
+
+    # Inject question tree hints as domain context (not a script)
+    tree_hints = _get_tree_question_hints(job_type)
+    if tree_hints:
+        tree_context = (
+            "\nDOMAIN QUESTIONS for %s:\n"
+            "These questions are known to be important for this job type. "
+            "Ask about any that haven't been answered yet. Use the options "
+            "shown as multiple-choice when available:\n\n%s\n"
+        ) % (job_type.replace("_", " ").title(), tree_hints)
+        prompt = prompt + tree_context
 
     try:
         text = call_deep(prompt, temperature=0.2, timeout=60)

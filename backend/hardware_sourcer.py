@@ -838,13 +838,15 @@ class HardwareSourcer:
 
         return items
 
-    def opus_estimate_bom(self, description, cut_list, material_type, job_type):
-        # type: (str, list, str, str) -> dict
+    def opus_estimate_bom(self, description, cut_list, material_type, job_type,
+                          fields=None):
+        # type: (str, list, str, str, dict) -> dict
         """
         Use Opus AI to estimate a complete BOM (hardware + consumables).
 
-        Sends description + cut list summary to Opus and asks for hardware items
-        and consumables as JSON. Falls back to None on failure.
+        Sends description + cut list summary + user preferences to Opus and
+        asks for hardware items and consumables as JSON. Falls back to None
+        on failure.
 
         Returns {"hardware": [...], "consumables": [...]} or None.
         """
@@ -863,6 +865,27 @@ class HardwareSourcer:
             qty = item.get("quantity", 1)
             cut_summary.append("  - %s (qty %d)" % (desc, qty))
 
+        # Build user preferences from intake Q&A answers
+        user_prefs = []
+        if fields:
+            for key, value in sorted(fields.items()):
+                if key.startswith("_") or key == "description":
+                    continue
+                val_str = str(value).strip()
+                if val_str and val_str.lower() not in ("", "unknown", "not sure"):
+                    user_prefs.append("  - %s: %s" % (
+                        key.replace("_", " "), val_str))
+
+        prefs_section = ""
+        if user_prefs:
+            prefs_section = (
+                "\nUSER SPECIFICATIONS (from intake Q&A — these OVERRIDE assumptions):\n"
+                + "\n".join(user_prefs)
+                + "\n\nCRITICAL: If the user specified preferences about components "
+                "(e.g., \"top rollers only\", \"no motor\", \"manual gate\"), "
+                "do NOT include contradicting hardware.\n"
+            )
+
         prompt = """You are an expert metal fabrication hardware estimator.
 
 JOB TYPE: %s
@@ -870,7 +893,7 @@ MATERIAL: %s
 
 DESCRIPTION:
 %s
-
+%s
 CUT LIST SUMMARY:
 %s
 
@@ -904,6 +927,7 @@ Return ONLY valid JSON:
             job_type,
             material_type,
             description[:600],
+            prefs_section,
             "\n".join(cut_summary) if cut_summary else "  (no cut list)",
         )
 

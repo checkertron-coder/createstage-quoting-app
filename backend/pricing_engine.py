@@ -95,6 +95,7 @@ class PricingEngine:
             if opus_labor:
                 labor_processes = self._build_labor_from_opus(
                     opus_labor, labor_processes, user,
+                    finish_method=opus_finishing_method or "raw",
                 )
         else:
             # Legacy path — rebuild finishing from fields (no Opus to trust)
@@ -160,6 +161,7 @@ class PricingEngine:
                     material_list.get("items", []),
                     detected_material,
                     job_type,
+                    fields=fields,
                 )
                 if opus_bom:
                     if opus_bom.get("hardware"):
@@ -191,6 +193,14 @@ class PricingEngine:
         consumables = tier_result["consumables"]
         shop_stock = tier_result["shop_stock"]
 
+        if shop_stock:
+            logger.info(
+                "Shop stock: %d items, items=%s",
+                len(shop_stock),
+                [(s.get("description", "?"), s.get("line_total", 0))
+                 for s in shop_stock[:5]],
+            )
+
         # --- Calculate subtotals ---
         materials = material_list.get("items", [])
         if not opus_labor:
@@ -208,6 +218,28 @@ class PricingEngine:
             labor_subtotal + finishing_subtotal + shop_stock_subtotal,
             2,
         )
+
+        # Cross-validate subtotal integrity
+        expected_subtotal = round(
+            material_subtotal + hardware_subtotal + consumable_subtotal +
+            shop_stock_subtotal + labor_subtotal + finishing_subtotal, 2
+        )
+        if abs(subtotal - expected_subtotal) > 0.01:
+            logger.error(
+                "SUBTOTAL MISMATCH: computed=%s expected=%s "
+                "(mat=%s hw=%s con=%s ss=%s labor=%s fin=%s)",
+                subtotal, expected_subtotal,
+                material_subtotal, hardware_subtotal,
+                consumable_subtotal, shop_stock_subtotal,
+                labor_subtotal, finishing_subtotal,
+            )
+            subtotal = expected_subtotal
+
+        if shop_stock:
+            logger.info(
+                "Shop stock subtotal=$%.2f included in subtotal=$%.2f",
+                shop_stock_subtotal, subtotal,
+            )
 
         # --- Markup options ---
         markup_default = user.get("markup_default", 15)
@@ -334,10 +366,19 @@ class PricingEngine:
         """finishing.total — already computed by FinishingBuilder."""
         return round(finishing.get("total", 0), 2)
 
-    def _build_labor_from_opus(self, opus_labor, existing_processes, user):
-        """Convert Opus labor_hours dict to LaborProcess list."""
+    # Labor processes that only apply when a coating finish is selected
+    _FINISH_LABOR_KEYS = ("clearcoat", "paint", "finish_prep")
+
+    def _build_labor_from_opus(self, opus_labor, existing_processes, user,
+                               finish_method="raw"):
+        """Convert Opus labor_hours dict to LaborProcess list.
+
+        When finish_method is raw/none, clearcoat/paint/finish_prep hours
+        are dropped — you don't pay labor for coating you're not doing.
+        """
         rate_inshop = user.get("rate_inshop", 125.00)
         rate_onsite = user.get("rate_onsite", 145.00)
+        is_raw = (finish_method or "raw").lower() in ("raw", "none", "")
         processes = []
         for process_name, entry in opus_labor.items():
             if isinstance(entry, dict):
@@ -345,6 +386,8 @@ class PricingEngine:
             else:
                 h = round(float(entry or 0), 2)
             if h <= 0:
+                continue
+            if is_raw and process_name in self._FINISH_LABOR_KEYS:
                 continue
             rate = rate_onsite if process_name == "site_install" else rate_inshop
             processes.append({
