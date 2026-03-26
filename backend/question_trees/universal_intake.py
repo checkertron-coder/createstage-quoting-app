@@ -48,8 +48,13 @@ YOUR TASK — Do three things:
      "has_motor": "yes"
      "quantity": "2"
    RULES:
-   - ONLY extract facts the customer EXPLICITLY stated.
+   - ONLY extract facts the customer EXPLICITLY stated in the DESCRIPTION.
    - Do NOT infer, assume, or guess. "aluminum" does NOT mean "6061-T6".
+   - Photos show EXISTING site conditions, NOT what the customer wants built.
+     If photos show chain link fence, that's what's THERE now — not what we're
+     fabricating. Extract photo details as "existing_*" context fields only
+     (e.g., "existing_fence_material": "chain link"). The NEW project specs
+     come from the description and the customer's answers, not the photos.
    - Measurements: extract as numbers in standard units (feet for large dims, inches for small).
    - If uncertain, OMIT. A missing field triggers a question. A wrong field produces a wrong quote.
 
@@ -430,6 +435,27 @@ def build_extracted_fields_from_known(known_facts):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _sanitize_known_facts(known_facts):
+    # type: (dict) -> dict
+    """Convert all known_facts values to strings.
+
+    AI may return JSON booleans (true/false) which become Python True/False.
+    Calculators expect string values and crash with 'bool is not iterable'
+    when doing 'if "Yes" in field_value'.
+    """
+    if not isinstance(known_facts, dict):
+        return known_facts
+    sanitized = {}
+    for k, v in known_facts.items():
+        if isinstance(v, bool):
+            sanitized[k] = "Yes" if v else "No"
+        elif v is None:
+            sanitized[k] = ""
+        else:
+            sanitized[k] = str(v)
+    return sanitized
+
+
 def _parse_ai_response(text):
     # type: (str) -> Optional[dict]
     """Parse AI response text into a dict. Handles markdown code blocks."""
@@ -444,6 +470,11 @@ def _parse_ai_response(text):
     try:
         parsed = json.loads(cleaned)
         if isinstance(parsed, dict):
+            # Sanitize known_facts to prevent bool-in-string crashes
+            if "known_facts" in parsed:
+                parsed["known_facts"] = _sanitize_known_facts(
+                    parsed["known_facts"]
+                )
             return parsed
         logger.warning("Universal intake: AI response is not a dict: %s", type(parsed))
         return None
