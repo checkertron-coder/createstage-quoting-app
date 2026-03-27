@@ -49,6 +49,15 @@ body {
     font-weight: 700;
     color: var(--hero-text);
     text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.brand-logo {
+    height: 32px;
+    width: 32px;
+    border-radius: 6px;
+    object-fit: cover;
 }
 .landing-nav .nav-links {
     display: flex;
