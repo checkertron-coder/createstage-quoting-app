@@ -438,8 +438,9 @@ def answer_questions(
     # missing — even if the AI added it to known_facts as an assumption.
     if session.job_type:
         try:
-            from ..question_trees.engine import load_tree
-            tree = load_tree(session.job_type)
+            from ..question_trees.engine import QuestionTreeEngine
+            _engine = QuestionTreeEngine()
+            tree = _engine.load_tree(session.job_type)
             required_ids = tree.get("required_fields", [])
             tree_qs = {q["id"]: q for q in tree.get("questions", [])
                        if q.get("id")}
@@ -488,13 +489,33 @@ def answer_questions(
                 if loosely_covered:
                     continue
 
-                # This required field is genuinely missing — inject from tree
+                # Skip branch-dependent questions if parent answer doesn't activate them
                 tree_q = tree_qs.get(req_id)
-                if tree_q:
-                    q_copy = dict(tree_q)
-                    q_copy["source"] = "calculator_requirement"
-                    questions.append(q_copy)
-                    injected += 1
+                if not tree_q:
+                    continue
+                depends_on = tree_q.get("depends_on")
+                if depends_on:
+                    parent_val = known_facts.get(depends_on, "")
+                    parent_q = tree_qs.get(depends_on, {})
+                    branches = parent_q.get("branches", {})
+                    # If parent is answered and this field isn't in an active branch, skip
+                    if parent_val and branches:
+                        branch_activated = False
+                        for branch_key, branch_fields in branches.items():
+                            if branch_key.lower() in str(parent_val).lower():
+                                if req_id in branch_fields:
+                                    branch_activated = True
+                                    break
+                        if not branch_activated:
+                            continue
+                    elif parent_val and not branches:
+                        # depends_on exists but no branches — always show
+                        pass
+
+                q_copy = dict(tree_q)
+                q_copy["source"] = "calculator_requirement"
+                questions.append(q_copy)
+                injected += 1
 
             if injected > 0:
                 readiness = "needs_questions"
