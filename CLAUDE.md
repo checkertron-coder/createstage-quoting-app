@@ -32,6 +32,7 @@ Every prompt and every implementation follows this framework. No exceptions.
 - ❌ Sweeping changes (10+ files) in a single session — compound errors, impossible to untangle (blast radius)
 - ❌ Agent running 5+ minutes without human review — stop, check, then continue
 - ❌ One massive AGENTS.md — "when everything is marked important, nothing is, and the file rots instantly" (Nate/Anthropic)
+- ❌ **Adding rules to the intake followup prompt** — proven 3/26: 10+ iterations of additions (calculator requirements, stricter readiness, explicit matching rules) all made intake WORSE. Opus bundled questions, dropped answers, declared ready early. More instructions = more noise. The P50 prompt (simple, 0-5 questions, ±15% readiness) consistently outperformed every "improved" version. **The intake prompt is a no-touch zone. Gap-fill handles required fields deterministically in code. Do not add rules here.**
 
 ### Session Discipline (from Nate's 5 Agent Management Skills)
 - **Save point before every prompt session.** `git add . && git commit -m "pre-P{N} save point"` BEFORE running the prompt. Non-negotiable.
@@ -39,6 +40,12 @@ Every prompt and every implementation follows this framework. No exceptions.
 - **30-message rule.** After ~30 back-and-forth messages, summarize where you are and start fresh. Agent isn't getting dumber — it's running out of room.
 - **Screenshots over paragraphs.** A screenshot uses a fraction of the context that three paragraphs of description use. Use them for UI bugs.
 - **Progressive disclosure.** CLAUDE.md is the primary doc. FAB_KNOWLEDGE.md, DECISIONS.md, PROMPT-XX files are cross-linked supplements. Don't pile everything into one file.
+
+### Deployment Rules (learned the hard way — these cost real hours)
+- **Commit AND push before declaring done.** "Tests pass" is not done. Pushed to Railway and verified is done. Every single time.
+- **One prompt per session. Full stop.** Complete implementation → run tests → commit → push → give Burton a 3-line summary. Do NOT start planning the next prompt. Burton has Checker for that.
+- **Verify the fix actually deployed.** After pushing, wait 30 seconds and hit the live endpoint. Do not assume Railway picked it up. A fix that isn't deployed isn't a fix.
+- **Diagnose before you fix.** When a bug appears, trace the exact execution path first. Show which function calls which, what data flows through, where it breaks. Do NOT edit any files until the root cause is confirmed. Wrong-approach fixes are the #1 time sink in this codebase.
 
 ---
 
