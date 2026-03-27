@@ -533,6 +533,18 @@ const Auth = {
         });
     },
 
+    _checkPendingUpgrade() {
+        const params = new URLSearchParams(window.location.search);
+        const tier = params.get('upgrade');
+        if (tier) {
+            const period = params.get('period') || 'monthly';
+            history.replaceState(null, '', '/app');
+            this.startCheckout(tier, period);
+            return true;
+        }
+        return false;
+    },
+
     togglePassword(inputId, btn) {
         const input = document.getElementById(inputId);
         if (!input) return;
@@ -563,6 +575,8 @@ const Auth = {
             this.currentUser = data.user;
             await this._checkDemoStatus();
             App._setupNav();
+            // Check for pending upgrade from landing page
+            if (this._checkPendingUpgrade()) return;
             App.showView('quote');
         } catch (e) {
             if (e.message && e.message.toLowerCase().includes('not verified')) {
@@ -821,6 +835,9 @@ const Auth = {
             if (demoBanner) demoBanner.remove();
             // Track signup in Plausible
             if (window.plausible) plausible('signup');
+            // Check for pending upgrade from landing page
+            App._setupNav();
+            if (this._checkPendingUpgrade()) return;
             App.showView('profile');
         } catch (e) {
             this.showError('auth-error', e.message);

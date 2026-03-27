@@ -189,11 +189,9 @@
         }
 
         function handlePricingClick(tier) {
-            var token = localStorage.getItem('access_token');
-            if (!token) return true; // Not logged in — follow href to /app#register
-            // Logged in — redirect into app where full checkout infrastructure exists
+            // Always pass tier + billing period to the app page
             window.location.href = '/app?upgrade=' + encodeURIComponent(tier) + '&period=' + currentBillingPeriod;
-            return false; // Prevent default href
+            return false;
         }
         </script>
     </section>
