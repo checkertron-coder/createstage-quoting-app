@@ -486,14 +486,22 @@ def answer_questions(
                     continue
                 depends_on = tree_q.get("depends_on")
                 if depends_on:
-                    parent_val = known_facts.get(depends_on, "")
+                    parent_val = str(known_facts.get(depends_on, "")).lower()
                     parent_q = tree_qs.get(depends_on, {})
                     branches = parent_q.get("branches", {})
                     # If parent is answered and this field isn't in an active branch, skip
                     if parent_val and branches:
                         branch_activated = False
                         for branch_key, branch_fields in branches.items():
-                            if branch_key.lower() in str(parent_val).lower():
+                            # Keyword overlap: if ANY significant word from the branch
+                            # key appears in the parent answer, consider it a match.
+                            # "Pickets (vertical bars)" matches "Vertical pickets"
+                            key_words = set(
+                                w for w in branch_key.lower().split()
+                                if len(w) > 3 and w not in ("with", "from", "that", "this")
+                            )
+                            answer_words = set(parent_val.split())
+                            if key_words & answer_words:
                                 if req_id in branch_fields:
                                     branch_activated = True
                                     break
