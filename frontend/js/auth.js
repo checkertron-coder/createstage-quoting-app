@@ -539,7 +539,13 @@ const Auth = {
         if (tier) {
             const period = params.get('period') || 'monthly';
             history.replaceState(null, '', '/app');
-            this.startCheckout(tier, period);
+            // Show the full tier picker modal so user can see all options
+            this._selectedBillingPeriod = period;
+            this.showUpgradeOptions();
+            // Pre-select the billing period from the landing page
+            if (period === 'annual') {
+                setTimeout(() => this._setModalBilling('annual'), 100);
+            }
             return true;
         }
         return false;
