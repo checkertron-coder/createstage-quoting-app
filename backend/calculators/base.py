@@ -515,7 +515,13 @@ class BaseCalculator(ABC):
         """
         Try to generate a full fabrication package from the user's description.
         Returns parsed package dict or None on failure.
+
+        Before calling AI, resolves any customer-specified profiles into
+        exact profile keys so Opus uses the right materials.
         """
+        # Resolve customer-specified profiles universally (all job types)
+        self._resolve_customer_profiles(fields)
+
         try:
             from .ai_cut_list import AICutListGenerator
             generator = AICutListGenerator()
@@ -523,6 +529,57 @@ class BaseCalculator(ABC):
         except Exception as e:
             logger.warning("Full package failed for %s: %s", job_type, e)
             return None
+
+    def _resolve_customer_profiles(self, fields):
+        """
+        Resolve customer-specified material choices into exact profile keys.
+        Runs BEFORE any AI call so Opus gets constrained profile keys.
+        Universal — works for any job type with these fields.
+        """
+        import re
+
+        # Picket material → profile key
+        picket_material = str(fields.get("picket_material", "")).strip()
+        if picket_material and "_picket_profile_key" not in fields:
+            profile = self._resolve_bar_profile(picket_material)
+            if profile:
+                fields["_picket_profile_key"] = profile
+
+        # Frame gauge → ensure it's captured for AI
+        frame_gauge = str(fields.get("frame_gauge", "")).strip()
+        if frame_gauge and "_frame_gauge_value" not in fields:
+            # Extract the gauge number: "11 gauge (0.120\")" → "11ga"
+            match = re.search(r'(\d+)\s*gauge', frame_gauge.lower())
+            if match:
+                fields["_frame_gauge_value"] = "%sga" % match.group(1)
+
+    @staticmethod
+    def _resolve_bar_profile(material_text):
+        """Resolve a text description like '5/8\" square bar' to a profile key."""
+        text = material_text.lower()
+        # Fraction-based matching
+        PROFILES = {
+            ("1/2", "square"): "sq_bar_0.5",
+            ("5/8", "square"): "sq_bar_0.625",
+            ("3/4", "square"): "sq_bar_0.75",
+            ("1", "square"): "sq_bar_1.0",
+            ("1/2", "round"): "round_bar_0.5",
+            ("5/8", "round"): "round_bar_0.625",
+            ("3/4", "round"): "round_bar_0.75",
+        }
+        for (frac, shape), profile in PROFILES.items():
+            if frac in text and shape in text:
+                return profile
+        # Default: if "square" or "round" with a fraction
+        import re
+        frac_match = re.search(r'(\d+/\d+)', text)
+        if frac_match:
+            frac = frac_match.group(1)
+            is_round = "round" in text
+            for (f, s), p in PROFILES.items():
+                if f == frac and (s == "round") == is_round:
+                    return p
+        return ""
 
     def _build_from_full_package(self, job_type: str, package: dict,
                                   fields: dict) -> dict:
