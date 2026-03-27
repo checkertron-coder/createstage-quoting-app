@@ -1961,17 +1961,17 @@ const QuoteFlow = {
                 idx = (idx + 1) % msgs.length;
                 flavorEl.textContent = msgs[idx];
                 flavorEl.classList.add('flavor-visible');
-            }, 400);
+            }, 600);
         };
 
-        // Show first message after 2 seconds
+        // Show first message after 3 seconds
         setTimeout(() => {
             flavorEl.textContent = msgs[idx];
             flavorEl.classList.add('flavor-visible');
-        }, 2000);
+        }, 3000);
 
-        // Rotate every 8 seconds
-        this._loadingInterval = setInterval(showNext, 8000);
+        // Rotate every 12 seconds — enough time to read each one
+        this._loadingInterval = setInterval(showNext, 12000);
     },
 
     _showError(msg) {
