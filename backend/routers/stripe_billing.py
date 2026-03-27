@@ -24,6 +24,7 @@ router = APIRouter(prefix="/stripe", tags=["stripe"])
 
 class CreateCheckoutRequest(BaseModel):
     tier: str  # 'starter' | 'professional' | 'shop'
+    billing_period: Optional[str] = "monthly"  # 'monthly' | 'annual'
     success_url: Optional[str] = None
     cancel_url: Optional[str] = None
 
@@ -72,10 +73,14 @@ def create_checkout(
     cancel_url = request.cancel_url or "/app?checkout=cancelled"
 
     # Log what we're sending to Stripe for diagnostics
-    price_id = stripe_service.TIER_TO_PRICE_ID.get(request.tier, "")
+    billing_period = request.billing_period or "monthly"
+    if billing_period == "annual":
+        price_id = stripe_service.TIER_TO_ANNUAL_PRICE_ID.get(request.tier, "")
+    else:
+        price_id = stripe_service.TIER_TO_PRICE_ID.get(request.tier, "")
     logger.info(
-        "Checkout: user=%d tier=%s price_id=%s customer=%s success=%s",
-        current_user.id, request.tier, price_id or "MISSING", customer_id, success_url,
+        "Checkout: user=%d tier=%s period=%s price_id=%s customer=%s",
+        current_user.id, request.tier, billing_period, price_id or "MISSING", customer_id,
     )
 
     try:
@@ -84,6 +89,7 @@ def create_checkout(
             tier=request.tier,
             success_url=success_url,
             cancel_url=cancel_url,
+            billing_period=billing_period,
         )
     except ValueError as e:
         raise HTTPException(
@@ -105,6 +111,7 @@ def create_checkout(
                     tier=request.tier,
                     success_url=success_url,
                     cancel_url=cancel_url,
+                    billing_period=billing_period,
                 )
             except Exception as retry_err:
                 logger.error("Stripe retry failed: %s: %s", type(retry_err).__name__, retry_err)

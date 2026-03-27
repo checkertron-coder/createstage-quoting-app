@@ -32,8 +32,22 @@ TIER_TO_PRICE_ID = {
     "shop": STRIPE_PRICE_SHOP,
 }
 
+# Annual price IDs
+STRIPE_PRICE_STARTER_ANNUAL = os.environ.get("STRIPE_PRICE_STARTER_ANNUAL", "")
+STRIPE_PRICE_PROFESSIONAL_ANNUAL = os.environ.get("STRIPE_PRICE_PROFESSIONAL_ANNUAL", "")
+STRIPE_PRICE_SHOP_ANNUAL = os.environ.get("STRIPE_PRICE_SHOP_ANNUAL", "")
+
+TIER_TO_ANNUAL_PRICE_ID = {
+    "starter": STRIPE_PRICE_STARTER_ANNUAL,
+    "professional": STRIPE_PRICE_PROFESSIONAL_ANNUAL,
+    "shop": STRIPE_PRICE_SHOP_ANNUAL,
+}
+
 PRICE_ID_TO_TIER = {}
 for _tier, _price_id in TIER_TO_PRICE_ID.items():
+    if _price_id:
+        PRICE_ID_TO_TIER[_price_id] = _tier
+for _tier, _price_id in TIER_TO_ANNUAL_PRICE_ID.items():
     if _price_id:
         PRICE_ID_TO_TIER[_price_id] = _tier
 
@@ -67,13 +81,21 @@ def create_checkout_session(
     tier: str,
     success_url: str,
     cancel_url: str,
+    billing_period: str = "monthly",
 ) -> str:
     """
     Create a Stripe Checkout Session for a subscription.
 
     Returns the checkout session URL to redirect the user to.
     """
-    price_id = TIER_TO_PRICE_ID.get(tier)
+    if billing_period == "annual":
+        price_id = TIER_TO_ANNUAL_PRICE_ID.get(tier)
+        if not price_id:
+            logger.warning("No annual price ID for tier %s — falling back to monthly", tier)
+            price_id = TIER_TO_PRICE_ID.get(tier)
+    else:
+        price_id = TIER_TO_PRICE_ID.get(tier)
+
     if not price_id:
         raise ValueError("No Stripe Price ID configured for tier: %s" % tier)
 
