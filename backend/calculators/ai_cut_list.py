@@ -676,6 +676,19 @@ Return ONLY valid JSON — an array of objects:
                 except (ValueError, IndexError):
                     pass
 
+            # Picket profile constraint — customer chose a specific picket material
+            picket_key = fields.get("_picket_profile_key", "")
+            picket_material_text = fields.get("picket_material", "")
+            if picket_key:
+                blocks.append(
+                    "PICKET PROFILE (customer-specified — use EXACTLY):\n"
+                    "  Profile key: %s\n"
+                    "  Customer chose: %s\n"
+                    "  Use this profile for ALL pickets (gate and fence). "
+                    "Do NOT substitute round bar for square bar or vice versa."
+                    % (picket_key, picket_material_text or picket_key)
+                )
+
             # Gate mounting context
             bottom_guide = str(fields.get("bottom_guide", ""))
             if "No bottom guide" in bottom_guide or "top-hung" in bottom_guide.lower():

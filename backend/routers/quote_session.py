@@ -464,8 +464,14 @@ def answer_questions(
             initial_known = dict(current_params.get("_initial_known_facts",
                                  current_params.get("_known_facts", {})))
 
-            # What the AI is already asking about in this round
+            # What the AI is already asking about in this round (by ID and by text)
             already_asking = set(q.get("id", "") for q in questions)
+            # Also check question text to prevent duplicates with different IDs
+            already_asking_text = set()
+            for q in questions:
+                txt = q.get("text", "").lower()[:40]
+                if txt:
+                    already_asking_text.add(txt)
 
             injected = 0
             for req_id in required_ids:
@@ -511,9 +517,15 @@ def answer_questions(
                         # depends_on exists but no branches — always show
                         pass
 
+                # Check for text-based duplicates (AI asked same thing with different ID)
+                tree_text = tree_q.get("text", "").lower()[:40]
+                if tree_text and tree_text in already_asking_text:
+                    continue
+
                 q_copy = dict(tree_q)
                 q_copy["source"] = "calculator_requirement"
                 questions.append(q_copy)
+                already_asking_text.add(tree_text)
                 injected += 1
 
             if injected > 0:

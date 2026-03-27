@@ -163,6 +163,14 @@ class CantileverGateCalculator(BaseCalculator):
         post_size = fields.get("post_size", "4\" x 4\" square tube")
         fields["_post_profile_key"] = self._lookup_post(post_size)
 
+        # Inject picket profile key so AI uses the EXACT profile the customer chose
+        infill_type = str(fields.get("infill_type", "Pickets")).strip()
+        if "picket" in infill_type.lower() or "bar" in infill_type.lower():
+            resolved_picket = _resolve_picket_profile(fields, infill_type)
+            fields["_picket_profile_key"] = resolved_picket
+            logger.info("Resolved picket profile: %s (from picket_material=%s)",
+                        resolved_picket, fields.get("picket_material", ""))
+
         # Try full Opus package first (cut list + build + hardware + labor)
         if self._has_description(fields):
             package = self._try_full_package("cantilever_gate", fields)
