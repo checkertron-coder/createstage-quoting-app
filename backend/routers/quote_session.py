@@ -474,19 +474,12 @@ def answer_questions(
                 # Check if this exact field ID was explicitly answered
                 if req_id in explicit_answers:
                     continue
-                # Loose match: user answered something that contains this field name
-                loosely_covered = False
+                # Exact key match only — no substring matching.
+                # "material" must NOT cover "picket_material" or "frame_material".
                 all_user_keys = set(request.answers.keys()) | set(
                     current_params.get("_known_facts", {}).keys()
                 )
-                for k in all_user_keys:
-                    if req_id == k or (req_id in k and len(req_id) > 4):
-                        loosely_covered = True
-                        break
-                    if k in req_id and len(k) > 4:
-                        loosely_covered = True
-                        break
-                if loosely_covered:
+                if req_id in all_user_keys:
                     continue
 
                 # Skip branch-dependent questions if parent answer doesn't activate them
