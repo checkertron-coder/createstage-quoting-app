@@ -1421,6 +1421,13 @@ Return ONLY valid JSON — an array of step objects:
         # --- Gauge / thickness constraint ---
         gauge_constraint = self._detect_gauge_constraint(fields)
 
+        # --- Customer-specified profiles constraint ---
+        # If the customer answered specific questions about picket size, frame
+        # size, post size etc., Opus MUST use those exact profiles.
+        customer_specs = self._build_customer_profile_constraints(fields)
+        if customer_specs:
+            fields_text = customer_specs + "\n\n" + fields_text
+
         # --- Labor calibration from shop owner benchmarks ---
         from .labor_calculator import LABOR_CALIBRATION_NOTES
         labor_calibration = LABOR_CALIBRATION_NOTES
@@ -1560,6 +1567,43 @@ HARDWARE PRICING RULES:
         profiles_text, labor_calibration)
 
         return prompt
+
+    @staticmethod
+    def _build_customer_profile_constraints(fields):
+        # type: (dict) -> str
+        """Extract customer-specified profiles and build a constraint block.
+
+        When the customer explicitly chose picket size, frame gauge, post size,
+        etc., Opus MUST use those exact profiles — not guess independently.
+        """
+        specs = []
+        # Map field names to constraint descriptions
+        profile_fields = {
+            "picket_material": "PICKET MATERIAL/SIZE",
+            "picket_spacing": "PICKET SPACING",
+            "frame_material": "FRAME MATERIAL",
+            "frame_gauge": "FRAME GAUGE/THICKNESS",
+            "frame_size": "FRAME TUBE SIZE",
+            "post_size": "POST SIZE",
+            "Fence posts": "FENCE POST SIZE",
+            "top_rail_profile": "TOP RAIL PROFILE",
+            "infill_type": "INFILL TYPE",
+            "infill_style": "INFILL STYLE",
+            "railing_height": "RAILING HEIGHT",
+        }
+        for field_key, label in profile_fields.items():
+            val = fields.get(field_key, "")
+            if val and str(val).strip():
+                specs.append("  - %s: %s" % (label, val))
+
+        if not specs:
+            return ""
+
+        return (
+            "CUSTOMER-SPECIFIED PROFILES (MANDATORY — use these EXACT materials):\n"
+            "The customer explicitly chose these. Do NOT substitute or override:\n"
+            + "\n".join(specs)
+        )
 
     # 11 canonical labor processes
     _CANONICAL_PROCESSES = (
