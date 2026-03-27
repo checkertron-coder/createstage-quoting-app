@@ -373,6 +373,13 @@ def answer_questions(
         if not str(field_id).startswith("_"):
             known_facts[field_id] = value
 
+    # Track ALL explicit answer field IDs across rounds (persisted in session)
+    explicit_ids = set(current_params.get("_explicit_answer_ids", []))
+    for field_id in request.answers.keys():
+        if not str(field_id).startswith("_"):
+            explicit_ids.add(field_id)
+    current_params["_explicit_answer_ids"] = list(explicit_ids)
+
     # Build QA history entries from the answers
     # Match answer values to the questions that were asked
     messages = list(session.messages_json or [])
@@ -445,24 +452,8 @@ def answer_questions(
             tree_qs = {q["id"]: q for q in tree.get("questions", [])
                        if q.get("id")}
 
-            # Build set of fields the USER explicitly answered (from Q&A history
-            # and direct answer submissions — NOT from AI inference)
-            explicit_answers = set()
-            for qa in qa_history:
-                # The question text was matched to a field_id when stored
-                q_text = qa.get("question", "").lower()
-                # Also check if the question field_id was stored
-                for q in tree.get("questions", []):
-                    qid = q.get("id", "")
-                    # Match if the tree question text appears in the QA question
-                    if qid and q.get("text", "").lower()[:30] in q_text:
-                        explicit_answers.add(qid)
-            # Also count direct answer keys from all /answer submissions
-            for k in request.answers.keys():
-                explicit_answers.add(k)
-            # And keys from initial description extraction (round 0)
-            initial_known = dict(current_params.get("_initial_known_facts",
-                                 current_params.get("_known_facts", {})))
+            # Use persisted explicit answer IDs — tracks ALL rounds, not just current
+            explicit_answers = set(current_params.get("_explicit_answer_ids", []))
 
             # What the AI is already asking about in this round (by ID and by text)
             already_asking = set(q.get("id", "") for q in questions)
@@ -1824,18 +1815,23 @@ def update_customer_info(
     session.updated_at = datetime.utcnow()
     flag_modified(session, "params_json")
 
-    # Also update Quote record if it exists
-    quote = db.query(models.Quote).filter(
+    # Also update ALL Quote records for this session
+    quotes = db.query(models.Quote).filter(
         models.Quote.session_id == session_id,
-    ).first()
-    if quote and quote.outputs_json:
-        outputs = dict(quote.outputs_json)
-        outputs["_customer"] = customer_data
-        outputs["client_name"] = customer_data.get("name", "")
-        quote.outputs_json = outputs
-        flag_modified(quote, "outputs_json")
+    ).all()
+    updated_count = 0
+    for quote in quotes:
+        if quote.outputs_json:
+            outputs = dict(quote.outputs_json)
+            outputs["_customer"] = customer_data
+            outputs["client_name"] = customer_data.get("name", "")
+            quote.outputs_json = outputs
+            flag_modified(quote, "outputs_json")
+            updated_count += 1
 
     db.commit()
+    logger.info("Customer save: session=%s, name=%s, quotes_updated=%d",
+                session_id, customer_data.get("name", ""), updated_count)
 
     return {
         "session_id": session_id,
