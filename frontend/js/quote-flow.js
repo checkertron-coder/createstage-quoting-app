@@ -1932,6 +1932,14 @@ const QuoteFlow = {
     ],
 
     _showProcessing(msg) {
+        // If already showing processing, just update the status text — don't
+        // rebuild HTML or restart the sayings rotation
+        const existingMsg = document.getElementById('processing-msg');
+        if (existingMsg && this._loadingInterval) {
+            existingMsg.textContent = msg;
+            return;
+        }
+
         // Clear any existing rotation interval
         if (this._loadingInterval) {
             clearInterval(this._loadingInterval);
