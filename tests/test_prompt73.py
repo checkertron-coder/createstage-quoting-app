@@ -230,8 +230,8 @@ def test_calc_required_fields_empty_string():
     assert _get_calculator_required_fields(None) == ""
 
 
-def test_followup_prompt_includes_calc_requirements():
-    """When job_type is provided, followup prompt should include calculator requirements."""
+def test_followup_prompt_is_clean_p50():
+    """Followup prompt should be clean P50 style — no calculator requirements injected."""
     captured_prompt = {}
 
     def mock_call_deep(prompt, **kwargs):
@@ -251,30 +251,8 @@ def test_followup_prompt_includes_calc_requirements():
             )
 
     prompt_text = captured_prompt["text"]
-    assert "CALCULATOR REQUIREMENTS" in prompt_text
-    assert "picket_spacing" in prompt_text
-    assert "Ornamental Fence" in prompt_text
-
-
-def test_followup_prompt_no_calc_requirements_without_job_type():
-    """Without job_type, followup prompt should NOT include calculator requirements."""
-    captured_prompt = {}
-
-    def mock_call_deep(prompt, **kwargs):
-        captured_prompt["text"] = prompt
-        return '{"known_facts": {}, "questions": [], "readiness": "ready", "readiness_reason": "ok"}'
-
-    with patch("backend.question_trees.universal_intake.call_deep", mock_call_deep):
-        with patch("backend.question_trees.universal_intake.is_configured",
-                   return_value=True):
-            from backend.question_trees.universal_intake import generate_followup_questions
-            generate_followup_questions(
-                description="Build something",
-                known_facts={},
-                qa_history=[],
-                photo_observations="",
-                job_type="",
-            )
-
-    prompt_text = captured_prompt["text"]
+    # P50 prompt: clean, no calculator requirements injected
     assert "CALCULATOR REQUIREMENTS" not in prompt_text
+    # Should have the P50 mandatory categories
+    assert "MANDATORY CATEGORIES" in prompt_text
+    assert "0-5 additional questions" in prompt_text

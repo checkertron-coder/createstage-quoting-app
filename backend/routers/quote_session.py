@@ -433,8 +433,9 @@ def answer_questions(
     readiness = followup_result.get("readiness", "ready")
 
     # --- Deterministic gap-fill: inject tree questions for missing calculator fields ---
-    # Opus may declare "ready" while required fields are unanswered. The system
-    # checks and injects questions directly from the question tree — no AI needed.
+    # Check what the USER explicitly answered (not what the AI inferred).
+    # If the user never typed a value for "picket_material", that field is
+    # missing — even if the AI added it to known_facts as an assumption.
     if session.job_type:
         try:
             from ..question_trees.engine import load_tree
@@ -443,26 +444,48 @@ def answer_questions(
             tree_qs = {q["id"]: q for q in tree.get("questions", [])
                        if q.get("id")}
 
-            # Fields already covered: exact key match OR AI already asking about it
-            covered = set(known_facts.keys())
+            # Build set of fields the USER explicitly answered (from Q&A history
+            # and direct answer submissions — NOT from AI inference)
+            explicit_answers = set()
+            for qa in qa_history:
+                # The question text was matched to a field_id when stored
+                q_text = qa.get("question", "").lower()
+                # Also check if the question field_id was stored
+                for q in tree.get("questions", []):
+                    qid = q.get("id", "")
+                    # Match if the tree question text appears in the QA question
+                    if qid and q.get("text", "").lower()[:30] in q_text:
+                        explicit_answers.add(qid)
+            # Also count direct answer keys from all /answer submissions
+            for k in request.answers.keys():
+                explicit_answers.add(k)
+            # And keys from initial description extraction (round 0)
+            initial_known = dict(current_params.get("_initial_known_facts",
+                                 current_params.get("_known_facts", {})))
+
+            # What the AI is already asking about in this round
             already_asking = set(q.get("id", "") for q in questions)
 
-            # Also do loose match: if known_facts has a key containing the
-            # required field name as a substring, count it as covered
-            # e.g., "gate_opening" loosely covers "clear_width" won't match,
-            # but "height" covers "height", "finish" covers "finish"
+            injected = 0
             for req_id in required_ids:
-                if req_id in covered or req_id in already_asking:
+                if req_id in already_asking:
                     continue
-                # Check if any known fact key or value mentions this field
-                # Skip fields where the concept is clearly answered
-                concept_covered = False
-                for k, v in known_facts.items():
-                    # Exact substring match on key
-                    if req_id in k or k in req_id:
-                        concept_covered = True
+                # Check if this exact field ID was explicitly answered
+                if req_id in explicit_answers:
+                    continue
+                # Loose match: user answered something that contains this field name
+                loosely_covered = False
+                all_user_keys = set(request.answers.keys()) | set(
+                    current_params.get("_known_facts", {}).keys()
+                )
+                for k in all_user_keys:
+                    if req_id == k or (req_id in k and len(req_id) > 4):
+                        loosely_covered = True
                         break
-                if concept_covered:
+                    if k in req_id and len(k) > 4:
+                        loosely_covered = True
+                        break
+                if loosely_covered:
                     continue
 
                 # This required field is genuinely missing — inject from tree
@@ -471,13 +494,13 @@ def answer_questions(
                     q_copy = dict(tree_q)
                     q_copy["source"] = "calculator_requirement"
                     questions.append(q_copy)
+                    injected += 1
 
-            if questions:
+            if injected > 0:
                 readiness = "needs_questions"
                 logger.info(
                     "Gap-fill: injected %d tree questions for %s (total now %d)",
-                    len(questions) - len(followup_result.get("questions", [])),
-                    session.job_type, len(questions),
+                    injected, session.job_type, len(questions),
                 )
         except Exception as e:
             logger.warning("Gap-fill failed: %s", e)
