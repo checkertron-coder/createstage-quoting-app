@@ -337,6 +337,8 @@ const API = {
         const token = this._accessToken || localStorage.getItem('access_token');
         let url = `${this.base}/quotes/${quoteId}/pdf?token=${token}`;
         if (mode) url += `&mode=${mode}`;
+        // Cache-bust so updated customer name / adjusted hours reflect immediately
+        url += `&_t=${Date.now()}`;
         return url;
     },
 };
