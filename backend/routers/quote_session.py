@@ -471,15 +471,13 @@ def answer_questions(
             for req_id in required_ids:
                 if req_id in already_asking:
                     continue
-                # Check if this exact field ID was explicitly answered
+                # Check if this exact field ID was explicitly answered by the USER.
+                # Do NOT check known_facts — the AI adds inferred values there
+                # (e.g., "picket_material": "1x1 tube") that the user never typed.
                 if req_id in explicit_answers:
                     continue
-                # Exact key match only — no substring matching.
-                # "material" must NOT cover "picket_material" or "frame_material".
-                all_user_keys = set(request.answers.keys()) | set(
-                    current_params.get("_known_facts", {}).keys()
-                )
-                if req_id in all_user_keys:
+                # Also check current round's direct answers only
+                if req_id in request.answers:
                     continue
 
                 # Skip branch-dependent questions if parent answer doesn't activate them
