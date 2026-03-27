@@ -128,13 +128,15 @@ const Auth = {
         }
     },
 
-    async startCheckout(tier) {
+    async startCheckout(tier, billingPeriod) {
+        const period = billingPeriod || this._selectedBillingPeriod || 'monthly';
         try {
             const resp = await fetch('/api/stripe/create-checkout', {
                 method: 'POST',
                 headers: API.headers(),
                 body: JSON.stringify({
                     tier: tier,
+                    billing_period: period,
                     success_url: window.location.origin + '/app?checkout=success',
                     cancel_url: window.location.origin + '/app?checkout=cancelled',
                 }),
@@ -466,7 +468,8 @@ const Auth = {
     },
 
     showUpgradeOptions() {
-        // Show tier picker modal
+        // Show tier picker modal with monthly/annual toggle
+        this._selectedBillingPeriod = 'monthly';
         let overlay = document.getElementById('upgrade-overlay');
         if (overlay) overlay.remove();
         overlay = document.createElement('div');
@@ -476,23 +479,30 @@ const Auth = {
         overlay.innerHTML = `
             <div style="background:#1a1a2e;border-radius:12px;padding:32px;max-width:700px;width:90%;color:#e0e0e0;">
                 <h2 style="text-align:center;margin:0 0 8px;color:#fff;">Choose Your Plan</h2>
-                <p style="text-align:center;margin:0 0 24px;color:#aaa;">Pick the plan that fits your shop.</p>
+                <p style="text-align:center;margin:0 0 16px;color:#aaa;">Pick the plan that fits your shop.</p>
+                <div style="display:flex;justify-content:center;margin-bottom:24px;gap:0;" id="modal-billing-toggle">
+                    <button style="padding:8px 24px;font-weight:600;border:1px solid #4fc3f7;background:#4fc3f7;color:#fff;border-radius:6px 0 0 6px;cursor:pointer;" onclick="Auth._setModalBilling('monthly')">Monthly</button>
+                    <button style="padding:8px 24px;font-weight:600;border:1px solid #333;background:transparent;color:#aaa;border-radius:0 6px 6px 0;cursor:pointer;border-left:none;" onclick="Auth._setModalBilling('annual')">Annual</button>
+                </div>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
                     <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:1px solid #333;">
                         <h3 style="margin:0 0 4px;color:#fff;">Starter</h3>
-                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$79<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-price" data-monthly="$79" data-annual="$790" style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$79<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-savings" style="display:none;color:#22c55e;font-size:.8rem;font-weight:600;margin:4px 0;">Save $158</div>
                         <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">10 quotes/mo<br>1 user</p>
                         <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('starter');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
                     </div>
                     <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:2px solid #4fc3f7;">
                         <h3 style="margin:0 0 4px;color:#fff;">Professional</h3>
-                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$149<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-price" data-monthly="$149" data-annual="$1,490" style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$149<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-savings" style="display:none;color:#22c55e;font-size:.8rem;font-weight:600;margin:4px 0;">Save $298</div>
                         <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">Unlimited quotes<br>3 users</p>
                         <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('professional');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
                     </div>
                     <div style="background:#12122a;border-radius:8px;padding:20px;text-align:center;border:1px solid #333;">
                         <h3 style="margin:0 0 4px;color:#fff;">Shop</h3>
-                        <div style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$349<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-price" data-monthly="$349" data-annual="$3,490" style="font-size:1.6rem;font-weight:700;color:#4fc3f7;">$349<span style="font-size:.9rem;color:#aaa;">/mo</span></div>
+                        <div class="modal-savings" style="display:none;color:#22c55e;font-size:.8rem;font-weight:600;margin:4px 0;">Save $698</div>
                         <p style="font-size:.85rem;color:#aaa;margin:8px 0 16px;">Unlimited everything<br>API access</p>
                         <button class="btn btn-primary btn-sm" onclick="Auth.startCheckout('shop');document.getElementById('upgrade-overlay').remove();" style="width:100%;">Select</button>
                     </div>
@@ -501,6 +511,26 @@ const Auth = {
             </div>
         `;
         document.body.appendChild(overlay);
+    },
+
+    _setModalBilling(period) {
+        this._selectedBillingPeriod = period;
+        const btns = document.querySelectorAll('#modal-billing-toggle button');
+        if (period === 'monthly') {
+            btns[0].style.cssText = 'padding:8px 24px;font-weight:600;border:1px solid #4fc3f7;background:#4fc3f7;color:#fff;border-radius:6px 0 0 6px;cursor:pointer;';
+            btns[1].style.cssText = 'padding:8px 24px;font-weight:600;border:1px solid #333;background:transparent;color:#aaa;border-radius:0 6px 6px 0;cursor:pointer;border-left:none;';
+        } else {
+            btns[0].style.cssText = 'padding:8px 24px;font-weight:600;border:1px solid #333;background:transparent;color:#aaa;border-radius:6px 0 0 6px;cursor:pointer;';
+            btns[1].style.cssText = 'padding:8px 24px;font-weight:600;border:1px solid #4fc3f7;background:#4fc3f7;color:#fff;border-radius:0 6px 6px 0;cursor:pointer;border-left:1px solid #4fc3f7;';
+        }
+        document.querySelectorAll('.modal-price').forEach(el => {
+            const price = el.getAttribute('data-' + period);
+            const suffix = period === 'monthly' ? '/mo' : '/yr';
+            if (price) el.innerHTML = price + '<span style="font-size:.9rem;color:#aaa;">' + suffix + '</span>';
+        });
+        document.querySelectorAll('.modal-savings').forEach(el => {
+            el.style.display = period === 'annual' ? 'block' : 'none';
+        });
     },
 
     togglePassword(inputId, btn) {

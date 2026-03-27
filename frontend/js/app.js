@@ -61,8 +61,9 @@ const App = {
             // Handle upgrade redirect from landing page
             const upgradeTier = params.get('upgrade');
             if (upgradeTier) {
+                const period = params.get('period') || 'monthly';
                 history.replaceState(null, '', '/app');
-                Auth.startCheckout(upgradeTier);
+                Auth.startCheckout(upgradeTier, period);
             }
 
             // Check if user needs onboarding

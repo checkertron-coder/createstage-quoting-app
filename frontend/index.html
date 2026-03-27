@@ -117,10 +117,15 @@
         <p class="section-subtitle">
             No credit card required for beta testers with an invite code.
         </p>
+        <div class="billing-toggle" id="billing-toggle">
+            <button class="active" onclick="setBillingPeriod('monthly')">Monthly</button>
+            <button onclick="setBillingPeriod('annual')">Annual</button>
+        </div>
         <div class="pricing-grid">
-            <div class="price-card">
+            <div class="price-card" data-tier="starter">
                 <h3>Starter</h3>
-                <div class="price-amount">$79<span>/mo</span></div>
+                <div class="price-amount" data-monthly="$79" data-annual="$790" data-period-monthly="/mo" data-period-annual="/yr">$79<span>/mo</span></div>
+                <div class="price-savings" data-savings="Save $158">Save $158</div>
                 <p class="price-desc">For individual fabricators</p>
                 <ul class="price-features">
                     <li>5 quotes per month</li>
@@ -130,9 +135,10 @@
                 </ul>
                 <a href="/app#register" class="btn-price btn-price-outline" onclick="return handlePricingClick('starter')">Subscribe</a>
             </div>
-            <div class="price-card featured">
+            <div class="price-card featured" data-tier="professional">
                 <h3>Professional</h3>
-                <div class="price-amount">$149<span>/mo</span></div>
+                <div class="price-amount" data-monthly="$149" data-annual="$1,490" data-period-monthly="/mo" data-period-annual="/yr">$149<span>/mo</span></div>
+                <div class="price-savings" data-savings="Save $298">Save $298</div>
                 <p class="price-desc">For growing shops</p>
                 <ul class="price-features">
                     <li>25 quotes per month</li>
@@ -143,9 +149,10 @@
                 </ul>
                 <a href="/app#register" class="btn-price btn-price-primary" onclick="return handlePricingClick('professional')">Subscribe</a>
             </div>
-            <div class="price-card">
+            <div class="price-card" data-tier="shop">
                 <h3>Shop</h3>
-                <div class="price-amount">$349<span>/mo</span></div>
+                <div class="price-amount" data-monthly="$349" data-annual="$3,490" data-period-monthly="/mo" data-period-annual="/yr">$349<span>/mo</span></div>
+                <div class="price-savings" data-savings="Save $698">Save $698</div>
                 <p class="price-desc">For full-time production shops</p>
                 <ul class="price-features">
                     <li>Unlimited quotes</li>
@@ -158,11 +165,34 @@
             </div>
         </div>
         <script>
+        var currentBillingPeriod = 'monthly';
+
+        function setBillingPeriod(period) {
+            currentBillingPeriod = period;
+            var btns = document.querySelectorAll('#billing-toggle button');
+            btns.forEach(function(b) { b.classList.remove('active'); });
+            btns[period === 'monthly' ? 0 : 1].classList.add('active');
+
+            document.querySelectorAll('.price-amount').forEach(function(el) {
+                var price = el.getAttribute('data-' + period);
+                var suffix = el.getAttribute('data-period-' + period);
+                if (price) el.innerHTML = price + '<span>' + suffix + '</span>';
+            });
+
+            document.querySelectorAll('.price-savings').forEach(function(el) {
+                if (period === 'annual') {
+                    el.classList.add('visible');
+                } else {
+                    el.classList.remove('visible');
+                }
+            });
+        }
+
         function handlePricingClick(tier) {
             var token = localStorage.getItem('access_token');
             if (!token) return true; // Not logged in — follow href to /app#register
             // Logged in — redirect into app where full checkout infrastructure exists
-            window.location.href = '/app?upgrade=' + encodeURIComponent(tier);
+            window.location.href = '/app?upgrade=' + encodeURIComponent(tier) + '&period=' + currentBillingPeriod;
             return false; // Prevent default href
         }
         </script>
