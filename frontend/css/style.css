@@ -849,6 +849,8 @@ body {
 .hi-number { font-weight: 700; font-size: 0.9rem; }
 .hi-type { color: var(--text-secondary); font-size: 0.85rem; }
 .hi-meta { display: flex; align-items: center; gap: 12px; }
+.blurred-amount { filter: blur(6px); user-select: none; pointer-events: none; }
+.btn-upgrade-hint { color: var(--accent) !important; font-size: 0.75rem; }
 .hi-total { font-weight: 700; }
 .hi-date { color: var(--text-secondary); font-size: 0.8rem; }
 .hi-status { font-size: 0.75rem; padding: 2px 8px; border-radius: 4px; }

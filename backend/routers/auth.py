@@ -761,7 +761,7 @@ async def upload_logo(
 
 # Quota limits per tier
 TIER_QUOTE_LIMITS = {
-    "free": 5,            # 5 preview quotes
+    "free": 3,            # 3 preview quotes
     "starter": 5,         # 5 per month
     "professional": 25,   # 25 per month
     "shop": None,         # unlimited

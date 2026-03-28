@@ -2044,6 +2044,8 @@ const QuoteHistory = {
                 return;
             }
 
+            const isFree = !Auth.currentUser || !Auth.currentUser.tier || Auth.currentUser.tier === 'free';
+
             el.innerHTML = `
                 <div class="history-card">
                     <div class="history-header">
@@ -2058,12 +2060,18 @@ const QuoteHistory = {
                                     <span class="hi-type">${JOB_TYPES[q.job_type] || q.job_type || ''}</span>
                                 </div>
                                 <div class="hi-meta">
-                                    <span class="hi-total">${QuoteFlow._fmt(q.total)}</span>
+                                    ${isFree
+                                        ? '<span class="hi-total blurred-amount">$X,XXX</span>'
+                                        : '<span class="hi-total">' + QuoteFlow._fmt(q.total) + '</span>'
+                                    }
                                     <span class="hi-date">${q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}</span>
                                     <span class="hi-status badge-${q.status || 'draft'}">${q.status || 'draft'}</span>
                                 </div>
                                 <div class="hi-actions">
-                                    <button class="btn btn-ghost btn-xs" onclick="event.stopPropagation(); QuoteHistory.downloadPdf(${q.id})">PDF</button>
+                                    ${isFree
+                                        ? '<button class="btn btn-ghost btn-xs btn-upgrade-hint" onclick="event.stopPropagation(); Auth.showUpgradeOptions()">Upgrade for PDF</button>'
+                                        : '<button class="btn btn-ghost btn-xs" onclick="event.stopPropagation(); QuoteHistory.downloadPdf(' + q.id + ')">PDF</button>'
+                                    }
                                 </div>
                             </div>
                         `).join('')}

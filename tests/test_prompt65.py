@@ -159,8 +159,8 @@ def test_invite_code_allowed_same_email(client, db):
 
 # === 6. Free tier quota limit is 5 ===
 
-def test_free_tier_limit_is_five(client, db):
-    """Free tier at exactly 5 quotes → blocked. At 4 → allowed."""
+def test_free_tier_limit_is_three(client, db):
+    """Free tier at exactly 3 quotes → blocked. At 2 → allowed."""
     resp = _register(client)
     assert resp.status_code == 200
     token = resp.json()["access_token"]
@@ -170,20 +170,20 @@ def test_free_tier_limit_is_five(client, db):
         models.User.id == resp.json()["user_id"],
     ).first()
 
-    # At 4 quotes — should still be allowed (4 < 5)
-    user.quotes_this_month = 4
+    # At 2 quotes — should still be allowed (2 < 3)
+    user.quotes_this_month = 2
     db.commit()
     start_resp = client.post("/api/session/start", json={
-        "description": "test gate 4",
+        "description": "test gate 2",
     }, headers=headers)
     # Should NOT be 403 (might be 200 or other non-403)
     assert start_resp.status_code != 403
 
-    # At 5 quotes — should be blocked
-    user.quotes_this_month = 5
+    # At 3 quotes — should be blocked
+    user.quotes_this_month = 3
     db.commit()
     blocked_resp = client.post("/api/session/start", json={
-        "description": "test gate 5",
+        "description": "test gate 3",
     }, headers=headers)
     assert blocked_resp.status_code == 403
     assert "limit" in blocked_resp.json()["detail"].lower()
