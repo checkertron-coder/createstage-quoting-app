@@ -2044,7 +2044,9 @@ const QuoteHistory = {
                 return;
             }
 
-            const isFree = !Auth.currentUser || !Auth.currentUser.tier || Auth.currentUser.tier === 'free';
+            const user = Auth.currentUser;
+            const isFree = !user || !user.tier || user.tier === 'free' || user.tier === 'basic'
+                || (user.subscription_status !== 'active' && user.tier !== 'starter' && user.tier !== 'professional' && user.tier !== 'shop');
 
             el.innerHTML = `
                 <div class="history-card">
