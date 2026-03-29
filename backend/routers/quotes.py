@@ -528,10 +528,11 @@ def get_material_alternatives(
 
 
 class AdjustLineItemsRequest(BaseModel):
-    """Adjust labor hours, hardware quantities, or consumable quantities."""
+    """Adjust labor hours, hardware quantities, consumable quantities, or material quantities."""
     labor_adjustments: Optional[dict] = None      # {"process_name": new_hours, ...}
     hardware_adjustments: Optional[dict] = None    # {"item_index": new_qty, ...}
     consumable_adjustments: Optional[dict] = None  # {"item_index": new_qty, ...}
+    material_adjustments: Optional[dict] = None    # {"item_index": new_sticks_or_sheets, ...}
 
 
 @router.patch("/{quote_id}/adjust")
@@ -612,6 +613,34 @@ def adjust_line_items(
             outputs["consumables"] = consumables
             outputs["consumable_subtotal"] = round(
                 sum(c.get("line_total", 0) for c in consumables), 2
+            )
+
+    # --- Material quantity adjustments (sticks/sheets) ---
+    if request.material_adjustments:
+        summary = outputs.get("materials_summary", [])
+        # Filter same way frontend does (exclude concrete)
+        steel_rows = [s for s in summary if not s.get("is_concrete")]
+        for idx_str, new_qty in request.material_adjustments.items():
+            idx = int(idx_str)
+            new_qty = max(1, int(new_qty))
+            if 0 <= idx < len(steel_rows):
+                item = steel_rows[idx]
+                old_qty = item.get("sticks_needed") or item.get("sheets_needed") or 1
+                ratio = new_qty / old_qty
+                if item.get("is_area_sold"):
+                    item["sheets_needed"] = new_qty
+                else:
+                    item["sticks_needed"] = new_qty
+                    stock_len = item.get("stock_length_ft", 20)
+                    total_len = item.get("total_length_ft", 0)
+                    item["remainder_ft"] = round(new_qty * stock_len - total_len, 1)
+                item["total_cost"] = round((item.get("total_cost", 0) / (old_qty or 1)) * new_qty, 2)
+                item["weight_lbs"] = round((item.get("weight_lbs", 0) / (old_qty or 1)) * new_qty)
+                changed = True
+        if changed:
+            outputs["materials_summary"] = summary
+            outputs["material_subtotal"] = round(
+                sum(s.get("total_cost", 0) for s in summary), 2
             )
 
     if not changed:

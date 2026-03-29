@@ -1582,12 +1582,25 @@ const QuoteFlow = {
         const item = steelRows[idx];
         if (!item || item.is_area_sold) return;
 
-        // Update sticks count and recalculate cost
+        // Update sticks count and recalculate cost + weight
         const oldSticks = item.sticks_needed || 1;
         item.sticks_needed = newSticks;
         const ratio = newSticks / oldSticks;
         item.total_cost = Math.round((item.total_cost || 0) * ratio * 100) / 100;
+        item.weight_lbs = Math.round((item.weight_lbs || 0) * ratio);
         item.remainder_ft = Math.round((newSticks * (item.stock_length_ft || 20) - (item.total_length_ft || 0)) * 10) / 10;
+
+        // Update the row cells in-place
+        const input = document.querySelector(`[data-mat-idx="${idx}"]`);
+        if (input) {
+            const row = input.closest('tr');
+            if (row) {
+                const cells = row.querySelectorAll('td');
+                if (cells[3]) cells[3].textContent = item.remainder_ft > 0 ? item.remainder_ft.toFixed(1) + "'" : '-';
+                if (cells[4]) cells[4].textContent = item.weight_lbs > 0 ? Math.round(item.weight_lbs) + ' lbs' : '-';
+                if (cells[5]) cells[5].textContent = this._fmt(item.total_cost);
+            }
+        }
 
         // Recalculate material subtotal
         pq.material_subtotal = Math.round(
@@ -1610,6 +1623,18 @@ const QuoteFlow = {
         item.sheets_needed = newSheets;
         const ratio = newSheets / oldSheets;
         item.total_cost = Math.round((item.total_cost || 0) * ratio * 100) / 100;
+        item.weight_lbs = Math.round((item.weight_lbs || 0) * ratio);
+
+        // Update the row cells in-place
+        const input = document.querySelector(`[data-mat-idx="${idx}"]`);
+        if (input) {
+            const row = input.closest('tr');
+            if (row) {
+                const cells = row.querySelectorAll('td');
+                if (cells[4]) cells[4].textContent = item.weight_lbs > 0 ? Math.round(item.weight_lbs) + ' lbs' : '-';
+                if (cells[5]) cells[5].textContent = this._fmt(item.total_cost);
+            }
+        }
 
         // Recalculate material subtotal
         pq.material_subtotal = Math.round(
@@ -1705,6 +1730,7 @@ const QuoteFlow = {
             if (this._pendingAdjustments.labor) payload.labor_adjustments = this._pendingAdjustments.labor;
             if (this._pendingAdjustments.hardware) payload.hardware_adjustments = this._pendingAdjustments.hardware;
             if (this._pendingAdjustments.consumable) payload.consumable_adjustments = this._pendingAdjustments.consumable;
+            if (this._pendingAdjustments.material) payload.material_adjustments = this._pendingAdjustments.material;
             this._pendingAdjustments = {};
             API.adjustLineItems(this.quoteId, payload).catch(e => console.error('Adjust failed:', e));
         }, 800);
